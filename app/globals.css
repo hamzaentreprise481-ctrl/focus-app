@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Neutres - fond legerement plus froid qu'un blanc pur, sans deriver vers le creme */
+  --color-paper: #f8f8f7;
+  --color-surface: #ffffff;
+  --color-ink: #14161b;
+  --color-ink-soft: #4b4f58;
+  --color-muted: #8b8f99;
+  --color-border: #e6e4e0;
+  --color-border-strong: #d7d4cd;
+
+  /* Accent - bleu encre sobre, coherent avec un contexte scolaire/institutionnel */
+  --color-brand: #333f8a;
+  --color-brand-hover: #2a3573;
+  --color-brand-soft: #eef0fa;
+  --color-brand-ink: #232c63;
+
+  /* Statuts - volontairement desatures, pas de couleurs criardes */
+  --color-normal: #1f7a4d;
+  --color-normal-soft: #e4f5ec;
+  --color-watch: #9a5b12;
+  --color-watch-soft: #fbf0dd;
+  --color-attention: #b23b3b;
+  --color-attention-soft: #fbeaea;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.125rem;
+}
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-brand-soft);
+  color: var(--color-brand-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
