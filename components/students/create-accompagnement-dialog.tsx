@@ -31,7 +31,11 @@ export function CreateAccompagnementDialog({
         </Button>
       </DialogTrigger>
       <DialogContent
-        title={created ? "Accompagnement créé" : `Accompagnement pour ${studentFirstName}`}
+        title={
+          created
+            ? "Accompagnement créé"
+            : `Accompagnement pour ${studentFirstName}`
+        }
         description={
           created
             ? undefined
@@ -44,9 +48,10 @@ export function CreateAccompagnementDialog({
               <Check className="h-5 w-5" />
             </span>
             <p className="text-sm text-ink-soft">
-              Un plan d&rsquo;accompagnement de {actions.length} action{actions.length > 1 ? "s" : ""} a été
-              préparé pour {studentFirstName}. Dans une future version, il serait suivi jusqu&rsquo;à sa
-              réalisation.
+              Un plan d&rsquo;accompagnement de {actions.length} action
+              {actions.length > 1 ? "s" : ""} a été préparé pour{" "}
+              {studentFirstName}. Dans une future version, il serait suivi
+              jusqu&rsquo;à sa réalisation.
             </p>
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Fermer
@@ -61,7 +66,9 @@ export function CreateAccompagnementDialog({
                   className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-border px-3 py-2 text-sm"
                 >
                   <span className="text-ink">{action.label}</span>
-                  <span className="shrink-0 text-xs text-muted">{action.minutes} min</span>
+                  <span className="shrink-0 text-xs text-muted">
+                    {action.minutes} min
+                  </span>
                 </li>
               ))}
             </ul>

@@ -1,6 +1,6 @@
 import type { Evaluation, RawGrade } from "@/lib/types";
 
-const STORAGE_KEY = "focus-demo-overlay-v1";
+const storageKey = (teacherId: string) => `focus-demo-overlay-v2:${teacherId}`;
 
 /** Les données ajoutées pendant la démo (par-dessus le jeu de données mocké de base). */
 export interface DemoOverlay {
@@ -14,10 +14,10 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
-export function loadOverlay(): DemoOverlay {
+export function loadOverlay(teacherId: string): DemoOverlay {
   if (!isBrowser()) return EMPTY_OVERLAY;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey(teacherId));
     if (!raw) return EMPTY_OVERLAY;
     const parsed = JSON.parse(raw) as Partial<DemoOverlay>;
     return {
@@ -31,10 +31,10 @@ export function loadOverlay(): DemoOverlay {
   }
 }
 
-export function persistOverlay(overlay: DemoOverlay): void {
+export function persistOverlay(overlay: DemoOverlay, teacherId: string): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overlay));
+    window.localStorage.setItem(storageKey(teacherId), JSON.stringify(overlay));
   } catch {
     // Quota dépassé, navigation privée... la démo continue simplement sans
     // persistance plutôt que de bloquer l'enseignant.

@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans:
+    "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
 
   /* Neutres - fond legerement plus froid qu'un blanc pur, sans deriver vers le creme */
   --color-paper: #f7f8fa;
@@ -75,5 +77,182 @@ select {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Teacher chrome: labels remain visible on tablets and mobile. */
+.teacher-shell {
+  display: flex;
+  min-height: 100dvh;
+}
+.teacher-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: 216px;
+  height: 100dvh;
+  flex-shrink: 0;
+  background: white;
+  border-right: 1px solid var(--color-border);
+  padding: 28px 16px 16px;
+}
+.teacher-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 12px 38px;
+  font-weight: 600;
+  font-size: 17px;
+}
+.teacher-brand small {
+  display: block;
+  margin-top: 2px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--color-ink-soft);
+}
+.teacher-nav {
+  display: grid;
+  gap: 6px;
+}
+.teacher-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--color-ink-soft);
+  font-size: 14px;
+  text-align: left;
+}
+.teacher-nav-link:hover {
+  background: var(--color-paper);
+}
+.teacher-nav-link.is-active {
+  background: var(--color-brand-soft);
+  color: var(--color-brand-ink);
+  font-weight: 600;
+}
+.teacher-account {
+  margin-top: auto;
+}
+.teacher-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 10px 0;
+  margin-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+.teacher-main {
+  min-width: 0;
+  flex: 1;
+}
+.teacher-topline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 19px 32px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-ink-soft);
+}
+.welcome-area {
+  padding: 12px 0 8px;
+}
+.insights-disclosure summary {
+  list-style: none;
+}
+.insights-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.insights-disclosure[open] summary > svg {
+  transform: rotate(180deg);
+}
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  transform: translateY(-150%);
+  padding: 12px 20px;
+  border-radius: 8px;
+  background: var(--color-brand);
+  color: white;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+/* Sticky heads must share the bounded vertical AND horizontal scroll region. */
+.table-scroll {
+  max-height: min(65dvh, 680px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.table-scroll thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: white;
+  box-shadow: 0 1px 0 var(--color-border);
+}
+@media (max-width: 1100px) and (min-width: 701px) {
+  .teacher-sidebar {
+    width: 180px;
+    padding-inline: 10px;
+  }
+  .teacher-nav-link {
+    gap: 9px;
+    font-size: 13px;
+  }
+}
+@media (max-width: 700px) {
+  .teacher-shell {
+    flex-direction: column;
+  }
+  .teacher-sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    padding: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .teacher-brand {
+    margin: 0 0 16px;
+  }
+  .teacher-brand small {
+    display: none;
+  }
+  .teacher-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+  }
+  .teacher-nav-link {
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 3px;
+    font-size: 11px;
+  }
+  .teacher-account {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .teacher-account .teacher-nav-link {
+    flex-direction: row;
+    font-size: 12px;
+    padding: 6px;
+  }
+  .teacher-identity {
+    display: none;
+  }
+  .teacher-topline {
+    padding: 12px 20px;
+    font-size: 11px;
   }
 }

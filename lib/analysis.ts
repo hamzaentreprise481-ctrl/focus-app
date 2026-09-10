@@ -118,9 +118,9 @@ export const SKILL_LEVEL_LABEL: Record<SkillLevel, string> = {
 
 export const CONFIDENCE_LABEL: Record<ConfidenceLevel, string> = {
   aucune: "Données insuffisantes",
-  limitee: "Preuve limitée",
-  moderee: "Preuve modérée",
-  forte: "Preuve solide",
+  limitee: "Encore peu de recul",
+  moderee: "Signal à confirmer",
+  forte: "Signal fiable",
 };
 
 /** Suggestion de niveau à partir de la note, proposée à l'enseignant dans le
@@ -240,9 +240,9 @@ function buildNarrative(params: {
   const evoText = evolution !== null ? `${evolution > 0 ? "+" : ""}${round1(evolution)}` : "–";
   const confidenceNote =
     weakSkillConfidence === "forte"
-      ? " (preuve solide : résultats cohérents sur plusieurs évaluations)"
+      ? " (signal fiable : résultats cohérents sur plusieurs évaluations)"
       : weakSkillConfidence === "moderee"
-        ? " (preuve modérée pour l'instant, à confirmer)"
+        ? " (signal encore à confirmer)"
         : "";
 
   switch (pattern) {
