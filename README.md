@@ -31,14 +31,17 @@ Le Proxy actualise les cookies et contrôle les requêtes privées. La protectio
 
 ## Configuration extérieure nécessaire
 
-Projet Supabase FOCUS créé et vérifié actif : `focus-teacher`
-(`vhfroxffntrqmsrunllr`), région Paris (`eu-west-3`), organisation
-`hamzaboukhriss82-pixel's Org`. URL : `https://vhfroxffntrqmsrunllr.supabase.co`.
-Coût de création annoncé et confirmé : 0 par mois. Aucun compte professeur
-n'a encore été créé. La configuration locale est préparée dans `.env.local`
-(ignoré par Git). L'enregistrement des variables dans Vercel Preview reste
-bloqué par un refus d'accès 403 du connecteur ; la connexion en ligne n'est
-donc pas encore activée. Ne pas créer un deuxième projet pour résoudre ce blocage.
+Correction du 10 septembre 2026 : le propriétaire a identifié son projet
+Supabase FOCUS existant. Le projet préparé auparavant appartenait à une autre
+organisation ; ne pas réutiliser cette configuration.
+
+Le connecteur Supabase actuel n'a pas accès au projet désigné. Ses paramètres
+Auth et ses comptes restent à vérifier. Les variables Vercel Preview doivent
+être remplacées par l'URL et la clé publiable de ce projet, puis la Preview
+doit être redéployée. La connexion réelle n'est pas encore validée.
+Conserver les identifiants d'infrastructure et les adresses personnelles hors
+de cette documentation publique. Ne créer aucun autre projet et ne supprimer
+aucun projet sans accord explicite.
 
 Utiliser un projet Supabase réservé à FOCUS. Ne jamais réutiliser les ressources d’un autre produit.
 
