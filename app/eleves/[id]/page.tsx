@@ -3,7 +3,7 @@
 import { notFound, useParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Info } from "lucide-react";
-import { analyzeStudent } from "@/lib/analysis";
+import { analyzeStudent, CONFIDENCE_LABEL } from "@/lib/analysis";
 import { studentById } from "@/lib/data/students";
 import { classById } from "@/lib/data/class-info";
 import { useDemoData } from "@/lib/demo-data-context";
@@ -71,7 +71,9 @@ export default function StudentProfilePage() {
             {analysis.weakestSkill?.name ?? "Données insuffisantes"}
           </p>
           <p className="mt-1 text-xs text-muted">
-            {analysis.weakestSkill ? `${analysis.weakestSkill.percent}% de maîtrise estimée` : ""}
+            {analysis.weakestSkill
+              ? `${analysis.weakestSkill.percent}% de maîtrise estimée · ${CONFIDENCE_LABEL[analysis.weakestSkill.confidence]}`
+              : ""}
           </p>
         </div>
       </div>

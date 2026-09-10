@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Users, GraduationCap, ClipboardCheck, Settings } from "lucide-react";
+import { LayoutGrid, Users, GraduationCap, ClipboardCheck, Settings, ExternalLink } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { currentTeacher } from "@/lib/data/class-info";
 
@@ -20,7 +20,7 @@ export function Sidebar() {
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <aside className="flex h-full w-[68px] shrink-0 flex-col border-r border-border bg-surface lg:w-60">
+    <aside className="sticky top-0 flex h-screen w-[68px] shrink-0 flex-col border-r border-border bg-surface lg:w-60">
       <div className="flex h-16 items-center justify-center gap-2 px-2 lg:justify-start lg:px-5">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-brand text-[13px] font-semibold text-white">
           F
@@ -50,6 +50,14 @@ export function Sidebar() {
       </nav>
 
       <div className="space-y-0.5 border-t border-border px-2 py-3 lg:px-3">
+        <Link
+          href="/decouvrir"
+          title="Découvrir FOCUS"
+          className="mb-1 flex items-center justify-center gap-2.5 rounded-[var(--radius-sm)] px-2 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-paper hover:text-ink lg:justify-start lg:px-3 lg:py-2"
+        >
+          <ExternalLink className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+          <span className="hidden lg:inline">Découvrir FOCUS</span>
+        </Link>
         <Link
           href="/parametres"
           title="Paramètres"

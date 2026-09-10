@@ -250,13 +250,13 @@ export default function NouvelleEvaluationPage() {
 
           <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-border bg-surface">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-surface">
                 <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                  <th className="px-5 py-3 font-medium">Élève</th>
-                  <th className="px-4 py-3 font-medium">Absent</th>
-                  <th className="px-4 py-3 font-medium">Note / 20</th>
+                  <th scope="col" className="px-5 py-3 font-medium">Élève</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Absent</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Note / 20</th>
                   {selectedSkills.map((skillId) => (
-                    <th key={skillId} className="px-4 py-3 font-medium">
+                    <th scope="col" key={skillId} className="px-4 py-3 font-medium">
                       {skills.find((s) => s.id === skillId)?.name}
                     </th>
                   ))}
@@ -265,7 +265,7 @@ export default function NouvelleEvaluationPage() {
               <tbody>
                 {parsedRows.map(({ student, row, parsed }) => (
                   <tr key={student.id} className="border-b border-border last:border-0 align-top">
-                    <td className="px-5 py-2.5 font-medium text-ink">{student.name}</td>
+                    <th scope="row" className="px-5 py-2.5 text-left font-medium text-ink">{student.name}</th>
                     <td className="px-4 py-2.5">
                       <input
                         type="checkbox"

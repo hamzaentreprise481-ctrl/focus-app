@@ -4,19 +4,19 @@
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Neutres - fond legerement plus froid qu'un blanc pur, sans deriver vers le creme */
-  --color-paper: #f8f8f7;
+  --color-paper: #f7f8fa;
   --color-surface: #ffffff;
-  --color-ink: #14161b;
-  --color-ink-soft: #4b4f58;
-  --color-muted: #8b8f99;
-  --color-border: #e6e4e0;
-  --color-border-strong: #d7d4cd;
+  --color-ink: #121722;
+  --color-ink-soft: #4d5665;
+  --color-muted: #7b8492;
+  --color-border: #e3e7ec;
+  --color-border-strong: #cfd5dd;
 
   /* Accent - bleu encre sobre, coherent avec un contexte scolaire/institutionnel */
-  --color-brand: #333f8a;
-  --color-brand-hover: #2a3573;
-  --color-brand-soft: #eef0fa;
-  --color-brand-ink: #232c63;
+  --color-brand: #253c78;
+  --color-brand-hover: #1c3065;
+  --color-brand-soft: #edf2fb;
+  --color-brand-ink: #182d64;
 
   /* Statuts - volontairement desatures, pas de couleurs criardes */
   --color-normal: #1f7a4d;
@@ -28,7 +28,8 @@
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
-  --radius-lg: 1.125rem;
+  --radius-lg: 1rem;
+  --shadow-sm: 0 1px 2px rgb(18 23 34 / 0.04), 0 6px 20px rgb(18 23 34 / 0.03);
 }
 
 :root {
@@ -47,6 +48,13 @@ body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {

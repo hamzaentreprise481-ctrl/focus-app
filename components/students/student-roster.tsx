@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
-import type { StudentAnalysis } from "@/lib/analysis";
+import { CONFIDENCE_LABEL, type StudentAnalysis } from "@/lib/analysis";
 import type { StatusLevel } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Input } from "@/components/ui/input";
@@ -66,7 +66,9 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
           {FILTERS.map((f) => (
             <button
               key={f.value}
+              type="button"
               onClick={() => setFilter(f.value)}
+              aria-pressed={filter === f.value}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
                 filter === f.value
@@ -84,15 +86,15 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-[var(--radius-lg)] border border-border bg-surface">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-              <th className="px-5 py-3 font-medium">Nom</th>
-              <th className="px-4 py-3 font-medium">Moyenne</th>
-              <th className="px-4 py-3 font-medium">Progression</th>
-              <th className="px-4 py-3 font-medium">Compétence la plus fragile</th>
-              <th className="px-4 py-3 font-medium">Dernière évaluation</th>
-              <th className="px-4 py-3 font-medium">Statut</th>
+        <table className="w-full min-w-[780px] text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-surface">
+            <tr className="border-b border-border text-[11px] uppercase tracking-[0.06em] text-muted">
+              <th scope="col" className="px-5 py-3 font-medium">Nom</th>
+              <th scope="col" className="px-4 py-3 font-medium">Trajectoire</th>
+              <th scope="col" className="px-4 py-3 font-medium">Signal de compétence</th>
+              <th scope="col" className="px-4 py-3 font-medium">Niveau de preuve</th>
+              <th scope="col" className="px-4 py-3 font-medium">Dernière évaluation</th>
+              <th scope="col" className="px-4 py-3 font-medium">Statut</th>
             </tr>
           </thead>
           <tbody>
@@ -100,25 +102,28 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
               const last = [...a.timeline].reverse().find((t) => t.absent || t.score !== null);
               return (
                 <tr key={a.studentId} className="border-b border-border last:border-0 hover:bg-paper">
-                  <td className="px-5 py-3">
+                  <th scope="row" className="px-5 py-2.5 text-left font-normal">
                     <Link href={`/eleves/${a.studentId}`} className="flex items-center gap-3">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-xs font-semibold text-ink-soft">
                         {initials(a.name)}
                       </span>
                       <span className="font-medium text-ink hover:text-brand">{a.name}</span>
                     </Link>
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-ink">
-                    {a.average !== null ? `${formatScore(a.average)} / 20` : "—"}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  </th>
+                  <td className="px-4 py-2.5 tabular-nums">
                     <EvolutionCell evolution={a.evolution} />
                   </td>
-                  <td className="px-4 py-3 text-ink-soft">{a.weakestSkill?.name ?? "—"}</td>
-                  <td className="px-4 py-3 tabular-nums text-ink-soft">
+                  <td className="px-4 py-2.5 text-ink-soft">
+                    <span className="font-medium text-ink">{a.weakestSkill?.name ?? "—"}</span>
+                    {a.weakestSkill && <span className="ml-1.5 text-xs text-muted">{a.weakestSkill.percent}%</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-ink-soft">
+                    {a.weakestSkill ? CONFIDENCE_LABEL[a.weakestSkill.confidence] : "Données insuffisantes"}
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums text-ink-soft">
                     {last?.absent ? "Absent(e)" : last?.score != null ? `${formatScore(last.score)} / 20` : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2.5">
                     <StatusBadge status={a.status} />
                   </td>
                 </tr>
