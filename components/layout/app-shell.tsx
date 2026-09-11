@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { TeacherProvider } from "@/components/layout/teacher-context";
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 export function AppShell({
   children,
   teacherName,
@@ -22,6 +23,7 @@ export function AppShell({
             <span>Démonstration · données fictives uniquement</span>
           </div>
           <div className="mx-auto w-full max-w-[1180px] px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
+            <DemoDataState />
             {children}
           </div>
         </main>

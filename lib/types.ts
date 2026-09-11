@@ -55,7 +55,7 @@ export interface Evaluation {
 export interface RawGrade {
   studentId: string;
   evaluationId: string;
-  score: number | null; // null si absent
+  score: number | null; // null si absent OU sans note ; absent distingue ces deux situations
   absent: boolean;
   skillLevels?: Partial<Record<string, SkillLevel>>;
 }

@@ -46,7 +46,19 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
   const filtered = useMemo(() => {
     return analyses
       .filter((a) => filter === "all" || a.status === filter)
-      .filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()))
+      .filter((a) =>
+        a.name
+          .normalize("NFD")
+          .replace(/\p{Diacritic}/gu, "")
+          .toLowerCase()
+          .includes(
+            query
+              .trim()
+              .normalize("NFD")
+              .replace(/\p{Diacritic}/gu, "")
+              .toLowerCase(),
+          ),
+      )
       .sort((a, b) => a.name.localeCompare(b.name, "fr"));
   }, [analyses, query, filter]);
 
@@ -86,11 +98,34 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
         </span>
       </div>
 
+      <ul className="mt-4 divide-y divide-border border-y border-border md:hidden">
+        {filtered.map((a) => (
+          <li key={a.studentId}>
+            <Link href={`/app/eleves/${a.studentId}`} className="block py-4">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">{a.name}</span>
+                <EvolutionCell evolution={a.evolution} />
+              </span>
+              <span className="mt-2 block text-sm text-ink-soft">
+                {a.summary}
+              </span>
+              <span className="mt-2 block text-xs text-brand">
+                Ouvrir la fiche →
+              </span>
+            </Link>
+          </li>
+        ))}
+        {!filtered.length && (
+          <li className="py-6 text-sm text-ink-soft">
+            Aucun élève ne correspond à cette recherche.
+          </li>
+        )}
+      </ul>
       <div
         role="region"
         aria-label="Liste des élèves, défilement horizontal et vertical"
         tabIndex={0}
-        className="mt-4 table-scroll rounded-[var(--radius-lg)] border border-border bg-surface"
+        className="mt-4 hidden md:block table-scroll rounded-[var(--radius-lg)] border border-border bg-surface"
       >
         <table className="w-full min-w-[780px] text-left text-sm">
           <thead className="sticky top-0 z-10 bg-surface">
@@ -172,7 +207,13 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
                         : "—"}
                   </td>
                   <td className="px-4 py-2.5">
-                    <StatusBadge status={a.status} />
+                    {a.pattern === "donnees_insuffisantes" ? (
+                      <span className="text-xs text-ink-soft">
+                        Recul insuffisant
+                      </span>
+                    ) : (
+                      <StatusBadge status={a.status} />
+                    )}
                   </td>
                 </tr>
               );

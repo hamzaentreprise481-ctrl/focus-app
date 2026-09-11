@@ -1,10 +1,22 @@
 "use client";
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { formatDateShort } from "@/lib/utils";
 import type { StudentAnalysis } from "@/lib/analysis";
 
-export function GradeChart({ timeline }: { timeline: StudentAnalysis["timeline"] }) {
+export function GradeChart({
+  timeline,
+}: {
+  timeline: StudentAnalysis["timeline"];
+}) {
   const data = timeline.map((t) => ({
     name: formatDateShort(t.evaluation.date),
     fullName: t.evaluation.name,
@@ -15,8 +27,15 @@ export function GradeChart({ timeline }: { timeline: StudentAnalysis["timeline"]
   return (
     <div className="h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+        <LineChart
+          data={data}
+          margin={{ top: 8, right: 12, bottom: 0, left: -18 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="var(--color-border)"
+            vertical={false}
+          />
           <XAxis
             dataKey="name"
             tick={{ fontSize: 12, fill: "var(--color-muted)" }}
@@ -40,7 +59,9 @@ export function GradeChart({ timeline }: { timeline: StudentAnalysis["timeline"]
               boxShadow: "0 4px 16px rgba(20,22,27,0.08)",
             }}
             formatter={(value) => [`${value} / 20`, "Note"]}
-            labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+            labelFormatter={(_, payload) =>
+              payload?.[0]?.payload?.fullName ?? ""
+            }
           />
           <Line
             type="monotone"
@@ -49,7 +70,7 @@ export function GradeChart({ timeline }: { timeline: StudentAnalysis["timeline"]
             strokeWidth={2.5}
             dot={{ r: 4, fill: "var(--color-brand)", strokeWidth: 0 }}
             activeDot={{ r: 6 }}
-            connectNulls
+            connectNulls={false}
           />
         </LineChart>
       </ResponsiveContainer>

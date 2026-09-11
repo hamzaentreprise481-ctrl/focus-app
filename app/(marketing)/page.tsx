@@ -123,7 +123,7 @@ const questions = [
   ],
   [
     "Que peut-on essayer aujourd’hui ?",
-    "L’espace professeur présente une classe fictive, ses évaluations, des profils et des pistes d’accompagnement. Les ajouts d’évaluations restent sur l’appareil. Les accompagnements sont simulés ; la mesure de leur effet et les connexions aux outils scolaires restent à développer.",
+    "L’espace professeur présente une classe fictive, ses évaluations, des profils et des pistes d’accompagnement. Les ajouts d’évaluations restent sur l’appareil. Les pistes d’accompagnement ne sont pas enregistrées ; la mesure de leur effet et les connexions aux outils scolaires restent à développer.",
   ],
   [
     "Les élèves et les parents peuvent-ils se connecter ici ?",
@@ -153,9 +153,9 @@ export default function PresentationPage() {
               la suite, en gardant la main.
             </p>
             <div className={styles.heroActions}>
-              <a href="#contact" className={styles.primaryButton}>
-                Demander une démonstration <ArrowRight size={17} />
-              </a>
+              <Link href="/connexion" className={styles.primaryButton}>
+                Se connecter à FOCUS Teacher <ArrowRight size={17} />
+              </Link>
               <a href="#apercu" className={styles.secondaryButton}>
                 Découvrir l’espace professeur
               </a>

@@ -58,7 +58,7 @@ Keep the existing transparent analysis in `lib/analysis.ts`:
 - Keep confidence based on both sample size and consistency. More observations do not guarantee certainty.
 - Preserve distinct patterns: persistent competency difficulty, consistent decline, isolated low result, recent improvement, irregular results, important missed evaluation.
 - Preserve cautious explanations and the teacher's final decision. Do not claim validated dropout prediction.
-- The existing explicit “suggest levels from grades” demonstration shortcut requires teacher action and review. It must not become automatic or be presented as validated competency measurement.
+- Competencies can be entered without a grade. The grade-to-competency shortcut was removed: observations must be entered explicitly. Blank, zero, absent and competency-only results are distinct.
 - Do not alter analysis thresholds or interpretation rules as part of cosmetic changes without explicit approval and regression tests.
 
 ## Terminology
@@ -73,9 +73,15 @@ Do not enter real student data. Business persistence, server-side resource owner
 
 The public preview is isolated by construction and a transitive import test. Never replace its fixture with application data or re-use a teacher view as public preview. The existing client-side academic fixtures must be replaced by authorized server data readers before real records exist; client bundles are publicly downloadable even when their page is protected.
 
+## Reliability update — 11 September 2026
+
+The current user request authorizes progressive production deployment after successful checks. Earlier no-production language in the original PR describes that earlier task, not a new approval requirement. This does not waive verification: provider access and production authentication are still blocked, so production must not be marked verified or ready.
+
+Read AUDIT_2026-09-11.md. Local evaluation saves now report failures, validate restored data, and allow editing demo additions. Dates are calendar dates displayed in UTC. Historical evaluation baselines use earlier evaluations in the same class only. Less than two numeric results cannot establish a score trend; explicit competency evidence remains independent. Thresholds and established example narratives remain regression-tested. No SQL migration is safe to invent before inspecting the existing schema.
+
 ## Features and claims
 
-Existing evaluation entry, charts, class roster, student profile and cautious recommendations are preserved. Evaluation persistence depends on browser storage availability and is not synchronized. Accompaniment creation remains a simulation. Measuring intervention outcomes and automatic school-tool synchronization remain future work.
+Existing evaluation entry, charts, class roster, student profile and cautious recommendations are preserved. Evaluation persistence depends on browser storage availability and is not synchronized. Accompaniment suggestions are read-only; no plan or intervention is saved and no simulated success is shown. Measuring intervention outcomes and automatic school-tool synchronization remain future work.
 
 The demonstration CTA uses an optional verified HTTPS `FOCUS_DEMO_REQUEST_URL`. Without it, explain that requests are not open and link to the public preview. Never invent an email address, collect leads without a configured recipient, or claim a request was sent when it was not.
 

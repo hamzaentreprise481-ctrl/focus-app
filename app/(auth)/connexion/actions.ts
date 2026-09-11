@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createAuthClient } from "@/lib/auth/server";
+import { createAuthClient, clearAuthCookies } from "@/lib/auth/server";
+import { loginError } from "@/lib/auth/errors";
 import { isTeacher, safeNext } from "@/lib/auth/policy";
 
 export async function login(
@@ -31,11 +32,14 @@ export async function login(
     });
     if (error)
       return {
-        error:
-          "Connexion impossible. Vérifiez vos identifiants ou réessayez dans quelques instants.",
+        error: loginError(error),
       };
     if (!isTeacher(data.user)) {
-      await supabase.auth.signOut({ scope: "local" });
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } finally {
+        await clearAuthCookies();
+      }
       return {
         error: "Cet espace est réservé aux comptes professeurs autorisés.",
       };
@@ -48,6 +52,20 @@ export async function login(
 
 export async function logout() {
   const supabase = await createAuthClient();
-  if (supabase) await supabase.auth.signOut({ scope: "local" });
-  redirect("/connexion?deconnexion=1");
+  let providerFailed = false;
+  try {
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      providerFailed = !!error;
+    }
+  } catch {
+    providerFailed = true;
+  } finally {
+    await clearAuthCookies();
+  }
+  redirect(
+    providerFailed
+      ? "/connexion?deconnexion=locale"
+      : "/connexion?deconnexion=1",
+  );
 }

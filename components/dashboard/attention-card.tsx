@@ -21,6 +21,7 @@ const PATTERN_ICON: Record<StudentAnalysis["pattern"], typeof TrendingDown> = {
   note_ponctuelle: AlertTriangle,
   resultats_irreguliers: Shuffle,
   stable: Minus,
+  donnees_insuffisantes: Minus,
 };
 
 export function AttentionCard({ analysis }: { analysis: StudentAnalysis }) {

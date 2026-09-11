@@ -10,6 +10,7 @@ const authOrigin = "http://127.0.0.1:3101";
 let app: ChildProcess;
 let output = "";
 let revoked = false;
+let logoutFailure = false;
 let refreshes = 0;
 const issuedAt = Math.floor(Date.now() / 1000);
 const user = (role = "teacher") => ({
@@ -78,6 +79,10 @@ const mock = createServer(async (req, res) => {
     );
   }
   if (url.pathname === "/auth/v1/logout") {
+    if (logoutFailure) {
+      res.statusCode = 503;
+      return res.end(JSON.stringify({ message: "Unavailable" }));
+    }
     res.statusCode = 204;
     return res.end();
   }
@@ -182,6 +187,7 @@ test("all unauthenticated teacher routes and RSC requests redirect without roste
     "/app/evaluations",
     "/app/evaluations/eval-1",
     "/app/evaluations/nouvelle",
+    "/app/evaluations/demo-local/modifier",
     "/app/parametres",
   ]) {
     for (const headers of [{}, { RSC: "1" }] as Record<string, string>[]) {
@@ -243,6 +249,7 @@ test("real login server action creates persistent HttpOnly session and returns t
     "/app/evaluations",
     "/app/evaluations/eval-1",
     "/app/evaluations/nouvelle",
+    "/app/evaluations/demo-local/modifier",
   ]) {
     const page = await request(path);
     assert.equal(page.status, 200, path);
@@ -292,4 +299,44 @@ test("an expired session is refreshed through Auth before rendering", async () =
   assert.ok(refreshes > 0);
   assert.ok(r.headers.getSetCookie().length > 0);
   jar = "";
+});
+
+// Logout must discard local cookies even when Supabase cannot revoke the session.
+test("logout failure still removes this browser's session and reports the limitation", async () => {
+  jar =
+    "sb-127-auth-token=base64-" +
+    Buffer.from(JSON.stringify(session())).toString("base64url");
+  const body = actionForm(
+    await (await request("/app")).text(),
+    "Se déconnecter",
+  );
+  logoutFailure = true;
+  try {
+    const response = await request("/app", {
+      method: "POST",
+      headers: { Origin: origin },
+      body,
+    });
+    assert.equal(response.status, 303);
+    assert.match(response.headers.get("location")!, /deconnexion=locale/);
+    cookies(response);
+    assert.equal((await request("/app")).status, 307);
+  } finally {
+    logoutFailure = false;
+    jar = "";
+  }
+});
+test("server render waits for browser-local evaluation data instead of sending a false 404", async () => {
+  jar =
+    "sb-127-auth-token=base64-" +
+    Buffer.from(JSON.stringify(session())).toString("base64url");
+  try {
+    const response = await request("/app/evaluations/demo-local");
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Chargement des essais/);
+    assert.doesNotMatch(html, /NEXT_HTTP_ERROR_FALLBACK;404/);
+  } finally {
+    jar = "";
+  }
 });

@@ -19,7 +19,9 @@ export default async function ParametresPage() {
           <div className="flex items-center justify-between border-b border-border pb-3">
             <span className="text-ink-soft">Nom</span>
             <span className="font-medium text-ink">
-              {teacher.user_metadata?.display_name ?? "Professeur"}
+              {typeof teacher.user_metadata?.display_name === "string"
+                ? teacher.user_metadata.display_name
+                : "Professeur"}
             </span>
           </div>
           <div className="flex items-center justify-between border-b border-border pb-3">

@@ -151,7 +151,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <h3 className="mb-3 text-sm font-semibold">
-                Des notions à reprendre ensemble
+                Compétences à explorer ensemble
               </h3>
               <div className="space-y-5 rounded-xl border border-border bg-white p-5">
                 {weakestSkills.map((s) => (

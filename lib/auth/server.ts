@@ -53,3 +53,26 @@ export async function requireTeacher() {
   if (!teacher) redirect("/connexion");
   return teacher;
 }
+
+/** Only called by server actions; also clears chunked cookies after provider errors. */
+export async function clearAuthCookies() {
+  const config = authConfig();
+  if (!config) return;
+  const prefix = `sb-${new URL(config.url).hostname.split(".")[0]}-auth-token`;
+  const cookieStore = await cookies();
+  for (const cookie of cookieStore.getAll()) {
+    if (
+      cookie.name === prefix ||
+      (cookie.name.startsWith(prefix + ".") &&
+        /^\d+$/.test(cookie.name.slice(prefix.length + 1)))
+    ) {
+      cookieStore.set(cookie.name, "", {
+        maxAge: 0,
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: !!process.env.VERCEL || config.url.startsWith("https:"),
+      });
+    }
+  }
+}

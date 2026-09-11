@@ -1,3 +1,7 @@
+# Latest audit
+
+The following is the historical PR audit. For the current pass, see [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md).
+
 # FOCUS — corrective product / UX audit
 
 ## Context

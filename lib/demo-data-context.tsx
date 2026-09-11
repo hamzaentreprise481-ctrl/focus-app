@@ -8,53 +8,107 @@ import {
   type DemoOverlay,
 } from "@/lib/demo-store";
 import { useTeacher } from "@/components/layout/teacher-context";
-const EMPTY_OVERLAY: DemoOverlay = { evaluations: [], rawGrades: [] };
-const overlays = new Map<string, DemoOverlay>();
+
+interface Snapshot {
+  overlay: DemoOverlay;
+  loaded: boolean;
+  error: string | null;
+}
+const INITIAL: Snapshot = {
+  overlay: { evaluations: [], rawGrades: [] },
+  loaded: false,
+  error: null,
+};
+const snapshots = new Map<string, Snapshot>();
 const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((callback) => callback());
+function storageChanged(event: StorageEvent) {
+  if (event.key !== null && !event.key.startsWith("focus-demo-overlay-v2:"))
+    return;
+  snapshots.clear();
+  emit();
+}
 function subscribe(callback: () => void) {
+  if (!listeners.size) window.addEventListener("storage", storageChanged);
   listeners.add(callback);
   return () => {
     listeners.delete(callback);
+    if (!listeners.size) window.removeEventListener("storage", storageChanged);
   };
 }
-function getServerSnapshot() {
-  return EMPTY_OVERLAY;
+function getSnapshot(id: string): Snapshot {
+  if (typeof window === "undefined") return INITIAL;
+  if (!snapshots.has(id)) {
+    try {
+      snapshots.set(id, {
+        overlay: loadOverlay(id),
+        loaded: true,
+        error: null,
+      });
+    } catch (error) {
+      snapshots.set(id, {
+        ...INITIAL,
+        loaded: true,
+        error: (error as Error).message,
+      });
+    }
+  }
+  return snapshots.get(id)!;
 }
-function getSnapshot(id: string) {
-  if (typeof window === "undefined") return EMPTY_OVERLAY;
-  if (!overlays.has(id)) overlays.set(id, loadOverlay(id));
-  return overlays.get(id)!;
-}
+const getServerSnapshot = () => INITIAL;
+
 export function useDemoData() {
   const { id } = useTeacher();
   const snapshot = useCallback(() => getSnapshot(id), [id]);
-  const overlay = useSyncExternalStore(subscribe, snapshot, getServerSnapshot);
+  const state = useSyncExternalStore(subscribe, snapshot, getServerSnapshot);
   const dataset: EvaluationDataset = useMemo(
     () => ({
-      evaluations: [...defaultDataset.evaluations, ...overlay.evaluations],
-      rawGrades: [...defaultDataset.rawGrades, ...overlay.rawGrades],
+      evaluations: [
+        ...defaultDataset.evaluations,
+        ...state.overlay.evaluations,
+      ],
+      rawGrades: [...defaultDataset.rawGrades, ...state.overlay.rawGrades],
     }),
-    [overlay],
+    [state.overlay],
   );
-  const addEvaluation = useCallback(
+  const saveEvaluation = useCallback(
     (evaluation: Evaluation, grades: RawGrade[]) => {
-      const old = getSnapshot(id);
-      const next = {
-        evaluations: [...old.evaluations, evaluation],
-        rawGrades: [...old.rawGrades, ...grades],
-      };
-      overlays.set(id, next);
-      persistOverlay(next, id);
-      listeners.forEach((callback) => callback());
+      try {
+        // Re-read before writing so sequential saves in other tabs are preserved.
+        const old = loadOverlay(id);
+        const next = {
+          evaluations: [
+            ...old.evaluations.filter((e) => e.id !== evaluation.id),
+            evaluation,
+          ],
+          rawGrades: [
+            ...old.rawGrades.filter((g) => g.evaluationId !== evaluation.id),
+            ...grades,
+          ],
+        };
+        persistOverlay(next, id);
+        snapshots.set(id, { overlay: next, loaded: true, error: null });
+        emit();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, error: (error as Error).message };
+      }
     },
     [id],
   );
+  const retryStorage = useCallback(() => {
+    snapshots.delete(id);
+    emit();
+  }, [id]);
   return {
     dataset,
+    loaded: state.loaded,
+    storageError: state.error,
+    retryStorage,
     addedEvaluationIds: useMemo(
-      () => overlay.evaluations.map((e) => e.id),
-      [overlay],
+      () => state.overlay.evaluations.map((e) => e.id),
+      [state.overlay],
     ),
-    addEvaluation,
+    saveEvaluation,
   };
 }

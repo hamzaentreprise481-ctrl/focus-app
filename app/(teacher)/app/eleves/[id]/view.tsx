@@ -2,8 +2,8 @@
 
 import { notFound, useParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Info } from "lucide-react";
-import { analyzeStudent, CONFIDENCE_LABEL } from "@/lib/analysis";
+import { ChevronLeft } from "lucide-react";
+import { analyzeStudent } from "@/lib/analysis";
 import { studentById } from "@/lib/data/students";
 import { classById } from "@/lib/data/class-info";
 import { useDemoData } from "@/lib/demo-data-context";
@@ -11,150 +11,214 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
 import { CreateAccompagnementDialog } from "@/components/students/create-accompagnement-dialog";
-import { formatScore } from "@/lib/utils";
+import { formatScore, formatDate } from "@/lib/utils";
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const { dataset } = useDemoData();
   const student = studentById.get(id);
   if (!student) notFound();
-
   const analysis = analyzeStudent(id, dataset);
   const classInfo = classById.get(student.classId);
-  const firstName = student.name.split(" ")[0];
+  const documented = analysis.skillMasteries.filter((s) => s.testedCount > 0);
+  const strengths = documented.filter(
+    (s) =>
+      s.lastTwoLevels.length > 0 &&
+      s.lastTwoLevels.every((l) => l === "maitrise"),
+  );
+  const fragile = documented.filter((s) =>
+    ["fragile", "non_maitrise"].includes(s.lastTwoLevels.at(-1) ?? ""),
+  );
+  const observed = dataset.rawGrades.filter(
+    (g) =>
+      g.studentId === id &&
+      analysis.timeline.some((t) => t.evaluation.id === g.evaluationId),
+  );
+  const nextAction = analysis.recommendedActions[0];
 
   return (
     <div className="space-y-8">
-      <div>
+      <header>
         <Link
           href={`/app/classes/${student.classId}`}
           className="inline-flex items-center gap-1 text-sm text-ink-soft hover:text-ink"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           {classInfo?.name}
         </Link>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">
+            <h1 className="text-2xl font-semibold tracking-tight">
               {student.name}
             </h1>
-            <p className="mt-1 text-sm text-ink-soft">{classInfo?.name}</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              {classInfo?.subject} · {observed.length} évaluations renseignées
+            </p>
           </div>
-          <StatusBadge status={analysis.status} />
+          {analysis.pattern === "donnees_insuffisantes" ? (
+            <span className="text-sm text-ink-soft">Recul encore limité</span>
+          ) : (
+            <StatusBadge status={analysis.status} />
+          )}
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <p className="text-sm text-ink-soft">
-            Moyenne générale en mathématiques
-          </p>
-          <p className="mt-2 text-[32px] font-semibold leading-none tracking-tight text-ink">
-            {analysis.average !== null ? formatScore(analysis.average) : "—"}
-            <span className="text-base font-normal text-muted"> / 20</span>
-          </p>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <p className="text-sm text-ink-soft">Évolution</p>
-          <p className="mt-2 text-[32px] font-semibold leading-none tracking-tight text-ink">
-            {analysis.evolution !== null ? (
-              <>
-                {analysis.evolution > 0 ? "+" : ""}
-                {formatScore(analysis.evolution)}
-                <span className="text-base font-normal text-muted"> pts</span>
-              </>
-            ) : (
-              "—"
-            )}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            sur les {analysis.evolutionWindow} dernières évaluations
-          </p>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <p className="text-sm text-ink-soft">Point à travailler</p>
-          <p className="mt-2 text-[19px] font-semibold leading-tight text-ink">
-            {analysis.weakestSkill?.name ?? "Données insuffisantes"}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {analysis.weakestSkill
-              ? `${analysis.weakestSkill.percent}% de maîtrise estimée · ${CONFIDENCE_LABEL[analysis.weakestSkill.confidence]} · ${analysis.weakestSkill.testedCount} évaluations`
-              : ""}
-          </p>
-        </div>
-      </div>
-
-      <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-        <h2 className="text-[15px] font-semibold text-ink">
-          Évolution des résultats
+      <section
+        aria-labelledby="next-step"
+        className="rounded-xl border border-border bg-surface p-5 sm:p-6"
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand">
+          Piste à examiner ensemble
+        </p>
+        <h2 id="next-step" className="mt-3 text-xl font-medium">
+          {nextAction?.label ??
+            (analysis.pattern === "donnees_insuffisantes"
+              ? "Compléter les observations avant de conclure"
+              : "Poursuivre les observations")}
         </h2>
-        <div className="mt-4">
-          <GradeChart timeline={analysis.timeline} />
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-soft">
+          {analysis.summary}
+        </p>
+        <p className="mt-3 text-xs text-ink-soft">
+          Suggestion issue de règles explicites. À confirmer avec votre
+          connaissance de l’élève.
+        </p>
+        {nextAction && (
+          <div className="mt-4">
+            <CreateAccompagnementDialog
+              studentFirstName={student.name.split(" ")[0]}
+              actions={analysis.recommendedActions}
+            />
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="observations">
+        <h2 id="observations" className="text-lg font-semibold">
+          Ce qui a été observé
+        </h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          Les niveaux ci-dessous proviennent des compétences renseignées,
+          indépendamment des notes.
+        </p>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          <div className="border-t border-border pt-4">
+            <h3 className="font-medium">Points d’appui</h3>
+            <p className="mt-2 text-sm text-ink-soft">
+              {strengths.length
+                ? strengths.map((s) => s.name).join(" · ")
+                : "Aucun niveau « maîtrisé » renseigné dans les dernières observations disponibles."}
+            </p>
+            <p className="mt-2 text-xs text-ink-soft">
+              Niveau « maîtrisé » sur la ou les deux dernières observations. Le
+              recul est indiqué dans le détail.
+            </p>
+          </div>
+          <div className="border-t border-border pt-4">
+            <h3 className="font-medium">À vérifier ou à retravailler</h3>
+            <p className="mt-2 text-sm text-ink-soft">
+              {fragile.length
+                ? fragile
+                    .map((s) => `${s.name} (${s.testedCount} observations)`)
+                    .join(" · ")
+                : "Aucun niveau fragile ou non maîtrisé dans les dernières observations renseignées."}
+            </p>
+          </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <h2 className="text-[15px] font-semibold text-ink">Compétences</h2>
-          <p className="mt-1 text-sm text-ink-soft">
-            Saisies indépendamment de la note globale — la fiabilité du signal
-            varie selon le nombre d&rsquo;évaluations disponibles.
-          </p>
-          <div className="mt-4">
-            <SkillMasteryList skills={analysis.skillMasteries} />
-          </div>
-        </section>
+      <section
+        className="rounded-xl border border-border bg-surface p-5"
+        aria-labelledby="skills-title"
+      >
+        <h2 id="skills-title" className="text-lg font-semibold">
+          Compétences et évolution
+        </h2>
+        <p className="mb-5 mt-2 text-sm text-ink-soft">
+          Les pourcentages sont des indices de synthèse des niveaux saisis, pas
+          des taux de réussite mesurés.
+        </p>
+        <SkillMasteryList skills={analysis.skillMasteries} />
+      </section>
 
-        <div className="space-y-6">
-          <section className="rounded-[var(--radius-lg)] border border-brand-soft bg-brand-soft/40 p-5">
-            <div className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-brand" />
-              <h2 className="text-[15px] font-semibold text-brand-ink">
-                Analyse FOCUS
-              </h2>
+      <details className="insights-disclosure border-t border-border pt-4">
+        <summary className="cursor-pointer rounded-lg py-3 text-lg font-semibold">
+          Explorer les résultats et l’historique
+        </summary>
+        <div className="mt-4 space-y-6">
+          <div className="flex flex-wrap gap-x-12 gap-y-5 text-sm">
+            <div>
+              <p className="text-ink-soft">Moyenne des notes renseignées</p>
+              <p className="mt-1 text-xl font-medium">
+                {analysis.average !== null
+                  ? `${formatScore(analysis.average)} / 20`
+                  : "Aucune note"}
+              </p>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+            <div>
+              <p className="text-ink-soft">Évolution</p>
+              <p className="mt-1 text-xl font-medium">
+                {analysis.evolution !== null
+                  ? `${analysis.evolution > 0 ? "+" : ""}${formatScore(analysis.evolution)} points`
+                  : "Recul insuffisant"}
+              </p>
+              {analysis.evolution !== null && (
+                <p className="mt-1 text-xs text-ink-soft">
+                  Sur les {analysis.evolutionWindow} dernières évaluations
+                  notées
+                </p>
+              )}
+            </div>
+          </div>
+          {analysis.average !== null && (
+            <GradeChart timeline={analysis.timeline} />
+          )}
+          <ul className="divide-y divide-border">
+            {[...analysis.timeline].reverse().map((t) => {
+              const grade = observed.find(
+                (g) => g.evaluationId === t.evaluation.id,
+              );
+              return (
+                <li
+                  key={t.evaluation.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                >
+                  <div>
+                    <Link
+                      className="font-medium hover:text-brand"
+                      href={`/app/evaluations/${t.evaluation.id}`}
+                    >
+                      {t.evaluation.name}
+                    </Link>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      {formatDate(t.evaluation.date)}
+                    </p>
+                  </div>
+                  <span>
+                    {t.absent
+                      ? "Absent(e)"
+                      : t.score !== null
+                        ? `${formatScore(t.score)} / 20`
+                        : grade
+                          ? "Compétences uniquement"
+                          : "Non renseigné"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="rounded-lg bg-paper p-4 text-sm">
+            <h3 className="font-medium">Interprétation FOCUS</h3>
+            <p className="mt-2 leading-relaxed text-ink-soft">
               {analysis.narrative}
             </p>
-            <p className="mt-3 text-xs text-muted">
-              Signal généré à partir des données disponibles — à confirmer par
-              votre propre analyse. FOCUS ne décide de rien à la place de
-              l&rsquo;enseignant.
+            <p className="mt-3 text-xs text-ink-soft">
+              Cette interprétation ne constitue pas un fait supplémentaire sur
+              l’élève.
             </p>
-          </section>
-
-          <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-            <h2 className="text-[15px] font-semibold text-ink">
-              Actions recommandées
-            </h2>
-            {analysis.recommendedActions.length > 0 ? (
-              <ul className="mt-4 space-y-2">
-                {analysis.recommendedActions.map((action, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-border px-3 py-2 text-sm"
-                  >
-                    <span className="text-ink">{action.label}</span>
-                    <span className="shrink-0 text-xs text-muted">
-                      {action.minutes} min
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-ink-soft">
-                Aucune action particulière recommandée pour le moment.
-              </p>
-            )}
-            <div className="mt-4">
-              <CreateAccompagnementDialog
-                studentFirstName={firstName}
-                actions={analysis.recommendedActions}
-              />
-            </div>
-          </section>
+          </div>
         </div>
-      </div>
+      </details>
     </div>
   );
 }

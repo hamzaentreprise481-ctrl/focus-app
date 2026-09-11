@@ -30,7 +30,9 @@ export default async function LoginPage({
       <div className="rounded-2xl border border-border bg-white p-6 sm:p-8">
         {params.deconnexion && (
           <p role="status" className="mb-5 text-sm text-normal">
-            Vous êtes déconnecté.
+            {params.deconnexion === "locale"
+              ? "Vous êtes déconnecté sur cet appareil. Le service n’a pas confirmé la révocation de la session distante."
+              : "Vous êtes déconnecté."}
           </p>
         )}
         {!configured && (

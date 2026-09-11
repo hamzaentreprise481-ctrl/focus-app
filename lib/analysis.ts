@@ -1,4 +1,11 @@
-import type { ConfidenceLevel, Evaluation, EvaluationDataset, RawGrade, SkillLevel, StatusLevel } from "@/lib/types";
+import type {
+  ConfidenceLevel,
+  Evaluation,
+  EvaluationDataset,
+  RawGrade,
+  SkillLevel,
+  StatusLevel,
+} from "@/lib/types";
 import { skills, skillById } from "@/lib/data/skills";
 import { evaluations as seedEvaluations } from "@/lib/data/evaluations";
 import { seedRawGrades } from "@/lib/data/grades";
@@ -32,6 +39,7 @@ export const defaultDataset: EvaluationDataset = {
 
 export type PatternType =
   | "stable"
+  | "donnees_insuffisantes"
   | "absence_sequence_importante"
   | "difficulte_persistante"
   | "baisse_reguliere"
@@ -83,7 +91,9 @@ const median = (values: number[]): number => {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
 };
 
 const popStdDev = (values: number[]): number => {
@@ -97,7 +107,9 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 const firstNameOf = (fullName: string) => fullName.split(" ")[0];
 
 function sortedEvaluations(dataset: EvaluationDataset): Evaluation[] {
-  return [...dataset.evaluations].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return [...dataset.evaluations].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
 }
 
 // --- niveaux de compétence <-> score numérique ------------------------------
@@ -133,7 +145,10 @@ export function suggestSkillLevelFromScore(score: number): SkillLevel {
   return "non_maitrise";
 }
 
-function confidenceFor(testedCount: number, levels: SkillLevel[]): ConfidenceLevel {
+function confidenceFor(
+  testedCount: number,
+  levels: SkillLevel[],
+): ConfidenceLevel {
   if (testedCount <= 0) return "aucune";
   if (testedCount === 1) return "limitee";
   if (testedCount === 2) return "moderee";
@@ -144,8 +159,14 @@ function confidenceFor(testedCount: number, levels: SkillLevel[]): ConfidenceLev
   return spread <= 25 ? "forte" : "moderee";
 }
 
-function gradeFor(studentId: string, evaluationId: string, dataset: EvaluationDataset): RawGrade | undefined {
-  return dataset.rawGrades.find((g) => g.studentId === studentId && g.evaluationId === evaluationId);
+function gradeFor(
+  studentId: string,
+  evaluationId: string,
+  dataset: EvaluationDataset,
+): RawGrade | undefined {
+  return dataset.rawGrades.find(
+    (g) => g.studentId === studentId && g.evaluationId === evaluationId,
+  );
 }
 
 /**
@@ -156,17 +177,22 @@ function gradeFor(studentId: string, evaluationId: string, dataset: EvaluationDa
 function skillLevelForGrade(
   grade: RawGrade | undefined,
   evaluation: Evaluation,
-  skillId: string
+  skillId: string,
 ): SkillLevel | null {
-  if (!grade || grade.absent || grade.score == null) return null;
+  if (!grade || grade.absent) return null;
   if (!evaluation.skillIds.includes(skillId)) return null;
   return grade.skillLevels?.[skillId] ?? null;
 }
 
 // --- maîtrise des compétences, élève par élève ------------------------------
 
-export function computeSkillMasteries(studentId: string, dataset: EvaluationDataset = defaultDataset): SkillMastery[] {
-  const evalsChrono = sortedEvaluations(dataset);
+export function computeSkillMasteries(
+  studentId: string,
+  dataset: EvaluationDataset = defaultDataset,
+): SkillMastery[] {
+  const evalsChrono = sortedEvaluations(dataset).filter(
+    (e) => e.classId === studentById.get(studentId)?.classId,
+  );
   return skills.map((skill) => {
     const tests: { level: SkillLevel; weight: number }[] = [];
     evalsChrono.forEach((evaluation, index) => {
@@ -178,14 +204,19 @@ export function computeSkillMasteries(studentId: string, dataset: EvaluationData
     const testedCount = tests.length;
     const percent = testedCount
       ? Math.round(
-          tests.reduce((sum, t) => sum + SKILL_LEVEL_SCORE[t.level] * t.weight, 0) /
-            tests.reduce((sum, t) => sum + t.weight, 0)
+          tests.reduce(
+            (sum, t) => sum + SKILL_LEVEL_SCORE[t.level] * t.weight,
+            0,
+          ) / tests.reduce((sum, t) => sum + t.weight, 0),
         )
       : null;
 
     let trend: SkillMastery["trend"] = testedCount >= 2 ? "stable" : null;
     const trendDelta =
-      testedCount >= 2 ? SKILL_LEVEL_SCORE[tests[tests.length - 1].level] - SKILL_LEVEL_SCORE[tests[0].level] : 0;
+      testedCount >= 2
+        ? SKILL_LEVEL_SCORE[tests[tests.length - 1].level] -
+          SKILL_LEVEL_SCORE[tests[0].level]
+        : 0;
     if (trendDelta >= 15) trend = "hausse";
     else if (trendDelta <= -15) trend = "baisse";
 
@@ -196,7 +227,7 @@ export function computeSkillMasteries(studentId: string, dataset: EvaluationData
       testedCount,
       confidence: confidenceFor(
         testedCount,
-        tests.map((t) => t.level)
+        tests.map((t) => t.level),
       ),
       trend,
       trendDelta,
@@ -223,7 +254,11 @@ function buildNarrative(params: {
   improvedSkillName?: string;
   absentEvaluationName?: string;
   outlierEvaluationName?: string;
-}): { summary: string; narrative: string; recommendedActions: RecommendedAction[] } {
+}): {
+  summary: string;
+  narrative: string;
+  recommendedActions: RecommendedAction[];
+} {
   const {
     pattern,
     firstName,
@@ -237,7 +272,10 @@ function buildNarrative(params: {
     outlierEvaluationName,
   } = params;
 
-  const evoText = evolution !== null ? `${evolution > 0 ? "+" : ""}${round1(evolution)}` : "–";
+  const evoText =
+    evolution !== null
+      ? `${evolution > 0 ? "+" : ""}${round1(evolution)}`
+      : "–";
   const confidenceNote =
     weakSkillConfidence === "forte"
       ? " (signal fiable : résultats cohérents sur plusieurs évaluations)"
@@ -246,13 +284,25 @@ function buildNarrative(params: {
         : "";
 
   switch (pattern) {
+    case "donnees_insuffisantes":
+      return {
+        summary: "Pas assez de résultats pour décrire une évolution.",
+        narrative: `Les observations disponibles pour ${firstName} ne permettent pas encore de décrire une évolution des notes. Consultez les compétences renseignées et complétez les observations avant de conclure.`,
+        recommendedActions: [],
+      };
     case "absence_sequence_importante":
       return {
         summary: `Absent(e) à une séquence importante${absentEvaluationName ? ` (${absentEvaluationName})` : ""} — rattrapage à envisager.`,
         narrative: `${firstName} n'a pas pu participer à « ${absentEvaluationName} », une séquence charnière du programme. Cette absence peut laisser un vrai trou dans la progression sur les notions concernées : les données sont encore limitées sur ce point. Un point de rattrapage semble utile avant de poursuivre sur la suite du programme.`,
         recommendedActions: [
-          { label: `Proposer un temps de rattrapage sur « ${absentEvaluationName} »`, minutes: 20 },
-          { label: "Vérifier la compréhension des notions manquées", minutes: 10 },
+          {
+            label: `Proposer un temps de rattrapage sur « ${absentEvaluationName} »`,
+            minutes: 20,
+          },
+          {
+            label: "Vérifier la compréhension des notions manquées",
+            minutes: 10,
+          },
           { label: "Point individuel rapide en fin de cours", minutes: 5 },
         ],
       };
@@ -271,8 +321,14 @@ function buildNarrative(params: {
         summary: `Baisse assez régulière depuis plusieurs évaluations (évolution : ${evoText} pts) — à confirmer.`,
         narrative: `Les résultats disponibles montrent une baisse assez régulière depuis ${evolutionWindow} évaluations pour ${firstName} (évolution d'environ ${evoText} points). Cela peut traduire une difficulté qui s'installe, un contexte particulier, ou un besoin de remobilisation — un échange avec l'élève permettrait d'en cerner l'origine avant que l'écart ne se creuse.`,
         recommendedActions: [
-          { label: "Échanger avec l'élève sur ses difficultés récentes", minutes: 10 },
-          { label: "Proposer des exercices de consolidation ciblés", minutes: 15 },
+          {
+            label: "Échanger avec l'élève sur ses difficultés récentes",
+            minutes: 10,
+          },
+          {
+            label: "Proposer des exercices de consolidation ciblés",
+            minutes: 15,
+          },
           { label: "Suivre l'évolution à la prochaine évaluation", minutes: 5 },
         ],
       };
@@ -282,7 +338,10 @@ function buildNarrative(params: {
         narrative: `Un léger fléchissement apparaît dans les résultats de ${firstName} sur les dernières évaluations (évolution d'environ ${evoText} points). Rien d'alarmant à ce stade : c'est un signal à surveiller, pas encore une tendance confirmée.`,
         recommendedActions: [
           { label: "Garder un œil sur la prochaine évaluation", minutes: 5 },
-          { label: "Proposer un exercice de consolidation en autonomie", minutes: 10 },
+          {
+            label: "Proposer un exercice de consolidation en autonomie",
+            minutes: 10,
+          },
         ],
       };
     case "progression_recente":
@@ -293,7 +352,11 @@ function buildNarrative(params: {
         narrative: `Les résultats disponibles suggèrent une nette progression de ${firstName} depuis les deux dernières évaluations, après une période plus difficile${improvedSkillName ? ` — c'est particulièrement visible sur « ${improvedSkillName} »` : ""}. Ce résultat mérite d'être valorisé auprès de l'élève ; encore récent, il gagnerait à être confirmé sur la prochaine évaluation.`,
         recommendedActions: [
           { label: "Valoriser les progrès auprès de l'élève", minutes: 5 },
-          { label: "Consolider les acquis récents avec un exercice de renforcement", minutes: 10 },
+          {
+            label:
+              "Consolider les acquis récents avec un exercice de renforcement",
+            minutes: 10,
+          },
         ],
       };
     case "note_ponctuelle":
@@ -301,16 +364,23 @@ function buildNarrative(params: {
         summary: `Note isolée en retrait${outlierEvaluationName ? ` (${outlierEvaluationName})` : ""} — résultats stables sinon.`,
         narrative: `${firstName} a obtenu un résultat nettement plus faible que d'habitude à « ${outlierEvaluationName} », ce qui tranche avec des résultats stables par ailleurs. Cela ressemble davantage à un incident isolé qu'à une difficulté installée, mais un point rapide avec l'élève permettrait de le confirmer.`,
         recommendedActions: [
-          { label: "Vérifier avec l'élève le contexte de cette évaluation", minutes: 5 },
+          {
+            label: "Vérifier avec l'élève le contexte de cette évaluation",
+            minutes: 5,
+          },
           { label: "Confirmer l'acquis avec un exercice rapide", minutes: 10 },
         ],
       };
     case "resultats_irreguliers":
       return {
-        summary: "Résultats irréguliers, sans tendance nette — signal à observer.",
+        summary:
+          "Résultats irréguliers, sans tendance nette — signal à observer.",
         narrative: `Les résultats de ${firstName} varient sensiblement d'une évaluation à l'autre, sans tendance nette à la hausse ou à la baisse. Cela peut traduire une méthode de travail encore irrégulière ou des facteurs ponctuels (fatigue, organisation) — un échange pourrait aider à identifier ce qui favorise ses meilleurs résultats.`,
         recommendedActions: [
-          { label: "Identifier avec l'élève ce qui favorise ses réussites", minutes: 10 },
+          {
+            label: "Identifier avec l'élève ce qui favorise ses réussites",
+            minutes: 10,
+          },
           { label: "Renforcer une méthode de travail régulière", minutes: 15 },
         ],
       };
@@ -318,7 +388,7 @@ function buildNarrative(params: {
     default:
       return {
         summary: "Progression normale.",
-        narrative: `Les résultats disponibles pour ${firstName} sont réguliers depuis le début de l'année, sans signal particulier à ce stade.`,
+        narrative: `Les résultats disponibles pour ${firstName} ne montrent pas de tendance particulière dans les évaluations renseignées. Cette lecture reste limitée aux observations disponibles.`,
         recommendedActions: [],
       };
   }
@@ -326,42 +396,60 @@ function buildNarrative(params: {
 
 // --- classification d'un élève ----------------------------------------------
 
-export function analyzeStudent(studentId: string, dataset: EvaluationDataset = defaultDataset): StudentAnalysis {
+export function analyzeStudent(
+  studentId: string,
+  dataset: EvaluationDataset = defaultDataset,
+): StudentAnalysis {
   const student = studentById.get(studentId);
   if (!student) throw new Error(`Élève introuvable : ${studentId}`);
 
-  const evalsChrono = sortedEvaluations(dataset);
+  const evalsChrono = sortedEvaluations(dataset).filter(
+    (e) => e.classId === studentById.get(studentId)?.classId,
+  );
   const timeline = evalsChrono.map((evaluation) => {
     const grade = gradeFor(studentId, evaluation.id, dataset);
-    return { evaluation, score: grade?.score ?? null, absent: grade?.absent ?? false };
+    return {
+      evaluation,
+      score: grade?.score ?? null,
+      absent: grade?.absent ?? false,
+    };
   });
 
   const present = timeline.filter(
-    (t): t is { evaluation: Evaluation; score: number; absent: false } => !t.absent && t.score != null
+    (t): t is { evaluation: Evaluation; score: number; absent: false } =>
+      !t.absent && t.score != null,
   );
   const n = present.length;
   const average = n ? mean(present.map((p) => p.score)) : null;
 
   const skillMasteries = computeSkillMasteries(studentId, dataset);
   const testedSkills = skillMasteries.filter(
-    (s): s is SkillMastery & { percent: number } => s.testedCount > 0 && s.percent !== null
+    (s): s is SkillMastery & { percent: number } =>
+      s.testedCount > 0 && s.percent !== null,
   );
-  const avgSkillPercent = testedSkills.length ? mean(testedSkills.map((s) => s.percent)) : 0;
+  const avgSkillPercent = testedSkills.length
+    ? mean(testedSkills.map((s) => s.percent))
+    : 0;
 
   // 1. absence à une séquence importante
-  const importantAbsence = timeline.find((t) => t.absent && t.evaluation.important);
+  const importantAbsence = timeline.find(
+    (t) => t.absent && t.evaluation.important,
+  );
 
   // 2. tendance : baisse régulière vs léger fléchissement
   const diffs = present.slice(1).map((p, i) => p.score - present[i].score);
   // "Baisse régulière" = une tendance vraiment continue, pas un simple zig-zag
   // dont la moyenne penche vers le bas : on exige qu'aucune évaluation ne
   // remonte (à une tolérance d'arrondi près).
-  const monotoneish = n >= 3 && diffs.length > 0 && diffs.every((d) => d <= 0.05);
+  const monotoneish =
+    n >= 3 && diffs.length > 0 && diffs.every((d) => d <= 0.05);
   const windowStart = Math.max(0, n - 3);
-  const evolutionWindow = n - windowStart - 1;
-  const evolution = n >= 2 ? present[n - 1].score - present[windowStart].score : null;
+  const evolutionWindow = n >= 2 ? n - windowStart : 0;
+  const evolution =
+    n >= 2 ? present[n - 1].score - present[windowStart].score : null;
   const markedDecline = monotoneish && evolution !== null && evolution <= -1.8;
-  const mildDecline = monotoneish && !markedDecline && evolution !== null && evolution <= -0.8;
+  const mildDecline =
+    monotoneish && !markedDecline && evolution !== null && evolution <= -0.8;
 
   // 3. progression récente
   const last2 = present.slice(-2);
@@ -386,9 +474,16 @@ export function analyzeStudent(studentId: string, dataset: EvaluationDataset = d
 
   // 5. résultats irréguliers
   const stdDev = popStdDev(values);
-  const signs = diffs.map((d) => (d > 0.05 ? 1 : d < -0.05 ? -1 : 0)).filter((s) => s !== 0);
+  const signs = diffs
+    .map((d) => (d > 0.05 ? 1 : d < -0.05 ? -1 : 0))
+    .filter((s) => s !== 0);
   const signChanges = signs.slice(1).filter((s, i) => s !== signs[i]).length;
-  const irregular = n >= 3 && stdDev >= 1.8 && signChanges >= 2 && !monotoneish && !recentProgression;
+  const irregular =
+    n >= 3 &&
+    stdDev >= 1.8 &&
+    signChanges >= 2 &&
+    !monotoneish &&
+    !recentProgression;
 
   // 6. difficulté qui semble persister sur une compétence précise (écart
   //    significatif par rapport à la moyenne des compétences du même élève —
@@ -399,9 +494,11 @@ export function analyzeStudent(studentId: string, dataset: EvaluationDataset = d
         s.testedCount >= 2 &&
         s.percent - avgSkillPercent <= -20 &&
         s.lastTwoLevels.length === 2 &&
-        s.lastTwoLevels.every((l) => l === "fragile" || l === "non_maitrise")
+        s.lastTwoLevels.every((l) => l === "fragile" || l === "non_maitrise"),
     )
-    .sort((a, b) => a.percent - avgSkillPercent - (b.percent - avgSkillPercent));
+    .sort(
+      (a, b) => a.percent - avgSkillPercent - (b.percent - avgSkillPercent),
+    );
   const persistentSkill = persistentCandidates[0];
 
   // --- décision finale, par ordre de priorité pédagogique ---
@@ -428,6 +525,9 @@ export function analyzeStudent(studentId: string, dataset: EvaluationDataset = d
   } else if (irregular) {
     pattern = "resultats_irreguliers";
     status = "a_surveiller";
+  } else if (n < 2) {
+    pattern = "donnees_insuffisantes";
+    status = "normal";
   } else {
     pattern = "stable";
     status = "normal";
@@ -442,16 +542,19 @@ export function analyzeStudent(studentId: string, dataset: EvaluationDataset = d
     firstName: firstNameOf(student.name),
     average,
     evolution,
-    evolutionWindow: evolutionWindow || 2,
+    evolutionWindow,
     weakSkillName: persistentSkill?.name,
     weakSkillTestedCount: persistentSkill?.testedCount,
     weakSkillConfidence: persistentSkill?.confidence,
     improvedSkillName: improvedSkill?.name,
     absentEvaluationName: importantAbsence?.evaluation.name,
-    outlierEvaluationName: outlierIndex >= 0 ? present[outlierIndex].evaluation.name : undefined,
+    outlierEvaluationName:
+      outlierIndex >= 0 ? present[outlierIndex].evaluation.name : undefined,
   });
 
-  const weakestSkill = testedSkills.length ? [...testedSkills].sort((a, b) => a.percent - b.percent)[0] : null;
+  const weakestSkill = testedSkills.length
+    ? [...testedSkills].sort((a, b) => a.percent - b.percent)[0]
+    : null;
 
   return {
     studentId,
@@ -461,7 +564,7 @@ export function analyzeStudent(studentId: string, dataset: EvaluationDataset = d
     pattern,
     average: average !== null ? round1(average) : null,
     evolution: evolution !== null ? round1(evolution) : null,
-    evolutionWindow: evolutionWindow || 2,
+    evolutionWindow,
     summary,
     narrative,
     recommendedActions,
@@ -476,19 +579,35 @@ export function analyzeStudent(studentId: string, dataset: EvaluationDataset = d
 export interface ClassOverview {
   classInfo: (typeof classes)[number];
   studentAnalyses: StudentAnalysis[];
-  counts: { total: number; normal: number; aSurveiller: number; attention: number };
-  weakestSkills: { skillId: string; name: string; percent: number; sampleSize: number }[];
+  counts: {
+    total: number;
+    normal: number;
+    aSurveiller: number;
+    attention: number;
+  };
+  weakestSkills: {
+    skillId: string;
+    name: string;
+    percent: number;
+    sampleSize: number;
+  }[];
 }
 
-export function analyzeClass(classId: string, dataset: EvaluationDataset = defaultDataset): ClassOverview {
+export function analyzeClass(
+  classId: string,
+  dataset: EvaluationDataset = defaultDataset,
+): ClassOverview {
   const classInfo = classById.get(classId);
   if (!classInfo) throw new Error(`Classe introuvable : ${classId}`);
 
-  const studentAnalyses = classInfo.studentIds.map((id) => analyzeStudent(id, dataset));
+  const studentAnalyses = classInfo.studentIds.map((id) =>
+    analyzeStudent(id, dataset),
+  );
   const counts = {
     total: studentAnalyses.length,
     normal: studentAnalyses.filter((a) => a.status === "normal").length,
-    aSurveiller: studentAnalyses.filter((a) => a.status === "a_surveiller").length,
+    aSurveiller: studentAnalyses.filter((a) => a.status === "a_surveiller")
+      .length,
     attention: studentAnalyses.filter((a) => a.status === "attention").length,
   };
 
@@ -496,12 +615,29 @@ export function analyzeClass(classId: string, dataset: EvaluationDataset = defau
     .map((skill) => {
       const percents = studentAnalyses
         .map((a) => a.skillMasteries.find((sm) => sm.skillId === skill.id))
-        .filter((sm): sm is SkillMastery & { percent: number } => !!sm && sm.testedCount > 0 && sm.percent !== null)
+        .filter(
+          (sm): sm is SkillMastery & { percent: number } =>
+            !!sm && sm.testedCount > 0 && sm.percent !== null,
+        )
         .map((sm) => sm.percent);
       const percent = percents.length ? Math.round(mean(percents)) : null;
-      return { skillId: skill.id, name: skill.name, percent, sampleSize: percents.length };
+      return {
+        skillId: skill.id,
+        name: skill.name,
+        percent,
+        sampleSize: percents.length,
+      };
     })
-    .filter((s): s is { skillId: string; name: string; percent: number; sampleSize: number } => s.percent !== null)
+    .filter(
+      (
+        s,
+      ): s is {
+        skillId: string;
+        name: string;
+        percent: number;
+        sampleSize: number;
+      } => s.percent !== null,
+    )
     .sort((a, b) => a.percent - b.percent)
     .slice(0, 4);
 
@@ -517,20 +653,26 @@ const PATTERN_PRIORITY: Record<PatternType, number> = {
   note_ponctuelle: 5,
   resultats_irreguliers: 6,
   stable: 99,
+  donnees_insuffisantes: 100,
 };
 
 export function getAttentionFeed(
   classId: string,
   limit = 5,
-  dataset: EvaluationDataset = defaultDataset
+  dataset: EvaluationDataset = defaultDataset,
 ): StudentAnalysis[] {
   const { studentAnalyses } = analyzeClass(classId, dataset);
-  const statusRank: Record<StatusLevel, number> = { attention: 0, a_surveiller: 1, normal: 2 };
+  const statusRank: Record<StatusLevel, number> = {
+    attention: 0,
+    a_surveiller: 1,
+    normal: 2,
+  };
   return [...studentAnalyses]
     .filter((a) => a.status !== "normal")
     .sort(
       (a, b) =>
-        statusRank[a.status] - statusRank[b.status] || PATTERN_PRIORITY[a.pattern] - PATTERN_PRIORITY[b.pattern]
+        statusRank[a.status] - statusRank[b.status] ||
+        PATTERN_PRIORITY[a.pattern] - PATTERN_PRIORITY[b.pattern],
     )
     .slice(0, limit);
 }
@@ -548,10 +690,17 @@ export interface EvaluationAnalysis {
   evaluation: Evaluation;
   average: number | null;
   presentCount: number;
+  recordedCount: number;
+  unrecordedCount: number;
   absentStudents: { studentId: string; name: string }[];
   distribution: { label: string; count: number }[];
   strugglingStudents: StrugglingStudent[];
-  skillBreakdown: { skillId: string; name: string; weakPercent: number | null; sampleSize: number }[];
+  skillBreakdown: {
+    skillId: string;
+    name: string;
+    weakPercent: number | null;
+    sampleSize: number;
+  }[];
 }
 
 const DISTRIBUTION_BUCKETS: [number, number, string][] = [
@@ -565,14 +714,29 @@ const DISTRIBUTION_BUCKETS: [number, number, string][] = [
 
 export function analyzeEvaluation(
   evaluationId: string,
-  dataset: EvaluationDataset = defaultDataset
+  dataset: EvaluationDataset = defaultDataset,
 ): EvaluationAnalysis {
   const evaluation = dataset.evaluations.find((e) => e.id === evaluationId);
   if (!evaluation) throw new Error(`Évaluation introuvable : ${evaluationId}`);
 
-  const gradesForEval = dataset.rawGrades.filter((g) => g.evaluationId === evaluationId);
-  const present = gradesForEval.filter((g) => !g.absent && g.score != null) as (RawGrade & { score: number })[];
-  const average = present.length ? round1(mean(present.map((g) => g.score))) : null;
+  const gradesForEval = dataset.rawGrades.filter(
+    (g) =>
+      g.evaluationId === evaluationId &&
+      studentById.get(g.studentId)?.classId === evaluation.classId,
+  );
+  const priorIds = new Set(
+    dataset.evaluations
+      .filter(
+        (e) => e.classId === evaluation.classId && e.date < evaluation.date,
+      )
+      .map((e) => e.id),
+  );
+  const present = gradesForEval.filter(
+    (g) => !g.absent && g.score != null,
+  ) as (RawGrade & { score: number })[];
+  const average = present.length
+    ? round1(mean(present.map((g) => g.score)))
+    : null;
 
   const distribution = DISTRIBUTION_BUCKETS.map(([min, max, label]) => ({
     label,
@@ -581,7 +745,10 @@ export function analyzeEvaluation(
 
   const absentStudents = gradesForEval
     .filter((g) => g.absent)
-    .map((g) => ({ studentId: g.studentId, name: studentById.get(g.studentId)?.name ?? g.studentId }));
+    .map((g) => ({
+      studentId: g.studentId,
+      name: studentById.get(g.studentId)?.name ?? g.studentId,
+    }));
 
   // Élèves en difficulté SUR CETTE évaluation : comparés à leur propre
   // moyenne habituelle (pas à un seuil universel du type "note < 10"), et/ou
@@ -589,7 +756,13 @@ export function analyzeEvaluation(
   const strugglingStudents: StrugglingStudent[] = present
     .map((g) => {
       const otherScores = dataset.rawGrades
-        .filter((og) => og.studentId === g.studentId && og.evaluationId !== evaluationId && !og.absent && og.score != null)
+        .filter(
+          (og) =>
+            og.studentId === g.studentId &&
+            priorIds.has(og.evaluationId) &&
+            !og.absent &&
+            og.score != null,
+        )
         .map((og) => og.score as number);
       const baseline = otherScores.length ? mean(otherScores) : null;
       const gap = baseline !== null ? baseline - g.score : null;
@@ -601,11 +774,12 @@ export function analyzeEvaluation(
 
       let reason: string | null = null;
       if (gap !== null && gap >= 2.5) {
-        reason = `en retrait de ${round1(gap)} pts par rapport à sa moyenne habituelle`;
+        reason = `en retrait de ${round1(gap)} pts par rapport à sa moyenne des évaluations antérieures`;
       } else if (weakSkillCount >= 2) {
         reason = `${weakSkillCount} compétences en difficulté sur cette évaluation`;
       } else if (gap !== null && gap >= 1.5 && weakSkillCount >= 1) {
-        reason = "résultat en retrait, avec au moins une compétence fragile identifiée";
+        reason =
+          "résultat en retrait, avec au moins une compétence fragile identifiée";
       }
 
       if (!reason) return null;
@@ -623,16 +797,31 @@ export function analyzeEvaluation(
     const levels = gradesForEval
       .map((g) => skillLevelForGrade(g, evaluation, skillId))
       .filter((l): l is SkillLevel => !!l);
-    const weakCount = levels.filter((l) => l === "fragile" || l === "non_maitrise").length;
-    const weakPercent = levels.length ? Math.round((weakCount / levels.length) * 100) : null;
-    return { skillId, name: skillById.get(skillId)?.name ?? skillId, weakPercent, sampleSize: levels.length };
+    const weakCount = levels.filter(
+      (l) => l === "fragile" || l === "non_maitrise",
+    ).length;
+    const weakPercent = levels.length
+      ? Math.round((weakCount / levels.length) * 100)
+      : null;
+    return {
+      skillId,
+      name: skillById.get(skillId)?.name ?? skillId,
+      weakPercent,
+      sampleSize: levels.length,
+    };
   });
   skillBreakdown.sort((a, b) => (b.weakPercent ?? -1) - (a.weakPercent ?? -1));
 
   return {
     evaluation,
     average,
-    presentCount: present.length,
+    presentCount: gradesForEval.filter((g) => !g.absent).length,
+    recordedCount: gradesForEval.length,
+    unrecordedCount: Math.max(
+      0,
+      (classById.get(evaluation.classId)?.studentIds.length ?? 0) -
+        gradesForEval.length,
+    ),
     absentStudents,
     distribution,
     strugglingStudents,

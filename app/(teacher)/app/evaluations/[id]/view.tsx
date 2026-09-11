@@ -1,18 +1,37 @@
 "use client";
 
-import { notFound, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
+import { classById } from "@/lib/data/class-info";
+import { Button } from "@/components/ui/button";
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import { useDemoData } from "@/lib/demo-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
 
 export default function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { dataset } = useDemoData();
+  const { dataset, loaded, storageError, addedEvaluationIds } = useDemoData();
 
-  if (!dataset.evaluations.some((e) => e.id === id)) notFound();
+  if (!dataset.evaluations.some((e) => e.id === id)) {
+    if (!loaded || storageError) return <DemoDataState />;
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">
+          Évaluation introuvable sur cet appareil
+        </h1>
+        <p className="text-ink-soft">
+          Les essais sont conservés dans le navigateur utilisé pour les créer.
+          Vérifiez le compte professeur et l’appareil.
+        </p>
+        <Link className="text-brand" href="/app/evaluations">
+          Retour aux évaluations
+        </Link>
+      </div>
+    );
+  }
 
   const analysis = analyzeEvaluation(id, dataset);
   const { evaluation } = analysis;
@@ -32,11 +51,24 @@ export default function EvaluationDetailPage() {
             {evaluation.name}
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
-            {formatDate(evaluation.date)} · Seconde 3
+            {formatDate(evaluation.date)} ·{" "}
+            {classById.get(evaluation.classId)?.name}
           </p>
         </div>
       </div>
 
+      {addedEvaluationIds.includes(id) && (
+        <Button asChild>
+          <Link href={`/app/evaluations/${id}/modifier`}>
+            Compléter ou corriger les résultats
+          </Link>
+        </Button>
+      )}
+      <p className="text-sm text-ink-soft">
+        {analysis.recordedCount} élèves renseignés · {analysis.unrecordedCount}{" "}
+        non renseignés. Les cases vides ne comptent ni comme zéro ni comme
+        absence.
+      </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
           <p className="text-sm text-ink-soft">Moyenne de classe</p>
@@ -47,7 +79,9 @@ export default function EvaluationDetailPage() {
           </p>
         </div>
         <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <p className="text-sm text-ink-soft">Élèves présents</p>
+          <p className="text-sm text-ink-soft">
+            Résultats renseignés hors absences
+          </p>
           <p className="mt-2 text-[28px] font-semibold text-ink">
             {analysis.presentCount}
           </p>
@@ -60,7 +94,7 @@ export default function EvaluationDetailPage() {
                 (sid) =>
                   analysis.skillBreakdown.find((s) => s.skillId === sid)?.name,
               )
-              .join(" · ")}
+              .join(" · ") || "Aucune compétence renseignée"}
           </p>
         </div>
       </div>
@@ -113,8 +147,8 @@ export default function EvaluationDetailPage() {
           Élèves en difficulté sur cette évaluation
         </h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Comparés à leur propre moyenne habituelle, pas à un seuil unique pour
-          toute la classe.
+          Comparés uniquement à leurs évaluations antérieures dans cette classe,
+          ou aux compétences explicitement renseignées.
         </p>
         {analysis.strugglingStudents.length === 0 ? (
           <p className="mt-3 text-sm text-ink-soft">

@@ -6,6 +6,19 @@ FOCUS complète les outils de vie scolaire avec un espace de suivi pédagogique 
 
 Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGENTS.md](./AGENTS.md). Claude Code charge ces deux références via [CLAUDE.md](./CLAUDE.md).
 
+## Mise à jour du 11 septembre 2026
+
+Voir [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md) pour les constats vérifiés et les blocages actuels.
+
+- Saisie indépendante des notes et compétences ; compétences facultatives pour une évaluation notée.
+- Évaluations ajoutées en démonstration : correction et saisie partielle via `/app/evaluations/:id/modifier`, sans duplication.
+- Restauration des essais après actualisation, validation du stockage et erreurs explicites. Les données illisibles ne sont pas effacées.
+- Analyse historique limitée aux évaluations antérieures de la même classe ; manque de recul signalé, sans progression inventée.
+- Fiche élève : action proposée, observations et compétences, puis historique dépliable. Liste mobile dédiée.
+- Déconnexion locale même en cas d’indisponibilité du fournisseur ; limitation de révocation explicitement affichée.
+
+Le schéma du Supabase existant reste inaccessible au connecteur. Aucune migration n’a été appliquée et aucune persistance scolaire sécurisée n’est revendiquée. La production publique observée affiche toujours l’ancienne version, accessible sans connexion. La version de travail conserve les protections Auth.
+
 ## Développement
 
 Node.js 20.9+ ; versions de dépendances et lockfile dans le dépôt.
@@ -62,7 +75,7 @@ Documentation fournisseur : [clients SSR](https://supabase.com/docs/guides/auth/
 - `lib/data/` : 31 élèves fictifs, 5 évaluations, 8 compétences, une classe de mathématiques.
 - `lib/analysis.ts` : règles existantes, transparentes et prudentes. Aucune IA distante. Les scores globaux et les compétences sont distincts ; aucune compétence n’est silencieusement inférée d’une note. Pas de règle universelle « note < 10 = difficulté ».
 - `lib/demo-data-context.tsx`, `lib/demo-store.ts` : ajouts d’évaluations dans le navigateur, avec clé par identifiant professeur. Pas de synchronisation, de chiffrement ni de véritable isolation multiétablissement. Le stockage historique `focus-demo-overlay-v1` reste intact mais n’est pas repris automatiquement, car son propriétaire n’est pas identifié.
-- L’accompagnement reste simulé. La mesure de l’effet des interventions et les intégrations PRONOTE/ÉcoleDirecte/ENT ne sont pas implémentées.
+- Les pistes d’accompagnement sont consultables mais aucun plan n’est enregistré ; aucune confirmation de création fictive n’est affichée. La mesure de l’effet des interventions et les intégrations PRONOTE/ÉcoleDirecte/ENT ne sont pas implémentées.
 - Les fixtures métier sont encore dans les bundles client. Avant de brancher des données réelles, les remplacer par des lectures serveur autorisées, avec contrôle de propriété/établissement sur chaque ressource et règles de base de données appropriées.
 
 Aucune conformité RGPD ni isolation des établissements n’est revendiquée. Le stockage métier sécurisé, les droits sur les données, les règles de conservation/suppression et les vérifications opérationnelles restent nécessaires.
