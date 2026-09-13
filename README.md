@@ -6,6 +6,29 @@ FOCUS complète les outils de vie scolaire avec un espace de suivi pédagogique 
 
 Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGENTS.md](./AGENTS.md). Claude Code charge ces deux références via [CLAUDE.md](./CLAUDE.md).
 
+## Vérification du 13 septembre 2026
+
+La production observée sert encore le prototype : `/` et `/classes` répondent,
+mais `/connexion` et `/app` renvoient 404. Le code de connexion se trouve dans
+la PR #1 non fusionnée. Un build Vercel réussi ne signifie donc pas que cette
+version a atteint la production.
+
+| Élément | État vérifié / cible |
+| --- | --- |
+| Dépôt | `hamzaentreprise481-ctrl/focus-app` |
+| Branche par défaut | `main`, encore au prototype `6a88301` lors de l'audit |
+| Travail existant | PR #1, `codex/effectuer-un-audit-visuel-de-focus` |
+| Projet Vercel lié au statut de la PR | `focus-app-nhkt` |
+| URL publique observée | https://focus-app-nhkt.vercel.app |
+| Backend | Projet Supabase FOCUS existant désigné par le propriétaire ; accès fournisseur à rétablir |
+
+La branche de production configurée dans Vercel, les variables, les domaines
+et les éventuels doublons restent à contrôler dans le compte propriétaire.
+L'architecture cible est ce dépôt → `main` → ce projet Vercel → le backend
+FOCUS existant. Aucun nouveau projet n'est nécessaire.
+
+Voir [AUDIT_2026-09-13.md](./AUDIT_2026-09-13.md) pour les preuves récentes.
+
 ## Mise à jour du 11 septembre 2026
 
 Voir [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md) pour les constats vérifiés et les blocages actuels.
@@ -21,7 +44,9 @@ Le schéma du Supabase existant reste inaccessible au connecteur. Aucune migrati
 
 ## Développement
 
-Node.js 20.9+ ; versions de dépendances et lockfile dans le dépôt.
+Node.js 22 est utilisé en CI ; versions de dépendances et lockfile dans le dépôt.
+Le build a également été vérifié sous Node.js 24 sur Windows. Conserver npm et
+`package-lock.json` ; ne pas introduire un deuxième lockfile.
 
 ```bash
 npm ci
@@ -61,10 +86,16 @@ Utiliser un projet Supabase réservé à FOCUS. Ne jamais réutiliser les ressou
 1. Dans Supabase Auth, activer la connexion e-mail/mot de passe et désactiver les inscriptions publiques et les connexions anonymes.
 2. Créer/administrer les comptes professeurs via les outils d’administration sécurisés de Supabase. Les comptes doivent avoir une adresse confirmée et un mot de passe défini. Il n’existe pas encore de parcours d’acceptation d’invitation ou de réinitialisation autonome dans FOCUS.
 3. Affecter **côté administrateur** `app_metadata: { "role": "teacher" }` via l’Admin API. Ne pas mettre le rôle dans `user_metadata` : cette valeur est modifiable par l’utilisateur. Les utilisateurs sans ce rôle, parents, élèves et comptes anonymes sont refusés. Le champ facultatif `user_metadata.display_name` sert uniquement à l’affichage.
-4. Définir `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` dans `.env.local` et dans l’environnement **Preview** du projet Vercel FOCUS. La clé est la clé publiable, jamais `service_role` ou une secret key. Les opérations administratives ne s’exécutent pas dans cette application.
+4. Définir `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` dans les environnements **Production** et **Preview** du même projet Vercel FOCUS, ainsi que dans `.env.local` pour le développement. Vérifier chaque portée séparément. La clé est la clé publiable, jamais `service_role` ou une secret key. L'application attend exactement ces noms. Les opérations administratives ne s’exécutent pas dans cette application.
 5. Vérifier les limites de tentatives Auth et les réglages d’e-mail du projet. Tester un vrai compte professeur, un compte sans autorisation, l’expiration, la déconnexion et les erreurs réseau avant un pilote.
 6. Facultatif : `FOCUS_DEMO_REQUEST_URL` doit désigner un formulaire/contact HTTPS vérifié et suivi. Sans valeur, le site indique que les demandes ne sont pas encore ouvertes et propose son aperçu ; il ne collecte ni n’envoie de demandes.
-7. Redéployer **la Preview** après modification des variables. Ne pas publier en production ni fusionner la PR sans instruction explicite.
+7. Redéployer la Preview après modification des variables : les valeurs `NEXT_PUBLIC_` peuvent être intégrées lors du build. Vérifier la connexion réelle, puis fusionner/publier dans le cadre de l'autorisation du propriétaire. Refaire les tests sur l'URL de production. L'autorisation de production existe dans la demande actuelle ; les blocages restants sont l'accès aux fournisseurs et la vérification du comportement, pas une nouvelle demande d'accord.
+
+Pour cette connexion par mot de passe, le formulaire appelle une Server Action,
+qui contacte Supabase Auth puis redirige sur le même site. Aucun callback OAuth
+n'est utilisé. Les cookies n'ont pas de domaine partagé : une session Preview
+ne connecte pas automatiquement à la production. Vérifier aussi Site URL et les
+URL de retour Supabase avant d'activer de futurs liens d'invitation/récupération.
 
 Sessions persistantes via cookies HttpOnly, SameSite=Lax, Secure en HTTPS/Vercel. Le serveur vérifie l’identité et le rôle à jour avec `getUser()`. Les redirections de retour sont restreintes à `/app`. L’inscription et la récupération de mot de passe sont administrées hors application pour cette version.
 
@@ -88,9 +119,15 @@ npm run lint            # ESLint
 npm run test            # tests réels : analyse, rôle, redirects, frontière des imports
 npm run build           # production build, sans déploiement
 npm run test:routes     # après build ; lance un serveur local et un double Auth HTTP
+npm run check:deployment -- https://votre-domaine-focus
 ```
 
 `test:routes` réserve les ports locaux 3100 et 3101. Il exécute les vraies routes et Server Actions contre un double du protocole Supabase : refus sans session, cookies falsifiés, rôle révoqué, connexion, persistance, renouvellement et déconnexion. Il ne vérifie pas les paramètres d’un véritable projet Supabase.
+
+`check:deployment` effectue uniquement des lectures anonymes et sort en erreur
+si la vitrine, le formulaire activé ou les protections professeur manquent.
+Il ne journalise ni corps de réponse, ni cookies, ni secrets. Un succès ne
+certifie pas la connexion réelle, les workflows métier ou les politiques RLS.
 
 Le rapport [DESIGN_AUDIT.md](./DESIGN_AUDIT.md) distingue les validations réalisées de celles encore bloquées. La mention historique « pnpm test passed » de la première version de PR #1 était inexacte : aucun script test n’existait à ce commit. Les scripts et tests ci-dessus ont été ajoutés dans cette révision.
 
@@ -99,4 +136,8 @@ Le rapport [DESIGN_AUDIT.md](./DESIGN_AUDIT.md) distingue les validations réali
 Dépôt existant uniquement : `hamzaentreprise481-ctrl/focus-app`.
 PR de travail : [#1](https://github.com/hamzaentreprise481-ctrl/focus-app/pull/1).
 Branche : `codex/effectuer-un-audit-visuel-de-focus`.
-Les pushes sur cette branche doivent produire une Vercel Preview via l’intégration existante. Vérifier le statut lié au commit exact. Ne pas fusionner dans `main`, déployer en production, ni toucher à un autre projet.
+Les pushes sur cette branche produisent une Vercel Preview via l’intégration
+existante (statut vérifié sur `1bb6aa1`). Vérifier le statut du commit exact,
+ouvrir la Preview et tester avant de fusionner dans `main`. La promotion en
+production est autorisée par le propriétaire, mais reste bloquée tant que
+l'accès aux fournisseurs et la connexion réelle ne sont pas vérifiés.

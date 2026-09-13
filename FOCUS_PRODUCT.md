@@ -95,7 +95,7 @@ Do not, without explicit approval:
 - Claim prediction, autonomous decisions, compliance, tenant isolation, live integrations or features unsupported by implementation/evidence.
 - Introduce real student data into the demo store or public fixture.
 - Change analytical safeguards/thresholds under a design task.
-- Merge into main or deploy production during the current PR task.
+- Promote unverified changes: the current owner request authorizes merging and production deployment after provider configuration and real authentication are verified. See AUDIT_2026-09-13.md for the remaining access gates.
 - Access, inspect or modify the unrelated Metrik project. It is outside this project's scope.
 
 Continue PR #1 on `codex/effectuer-un-audit-visuel-de-focus`, or use a safe continuation branch. Re-read current PR comments, confirm the remote head before pushing, and never overwrite another agent's work. Report commands actually run, exact commit, Preview URL, and remaining limitations honestly.

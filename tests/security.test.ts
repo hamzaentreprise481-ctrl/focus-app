@@ -108,7 +108,7 @@ test("all transitive public imports are isolated from application datasets and a
   );
 });
 test("every teacher page checks authentication before rendering", () => {
-  const pages = walk("app/(teacher)").filter((f) => f.endsWith("/page.tsx"));
+  const pages = walk("app/(teacher)").filter((f) => path.basename(f) === "page.tsx");
   assert.ok(pages.length >= 9);
   for (const file of pages)
     assert.match(readFileSync(file, "utf8"), /await requireTeacher\(\)/);

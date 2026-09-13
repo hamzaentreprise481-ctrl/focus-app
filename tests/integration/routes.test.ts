@@ -1,7 +1,8 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
 // A protocol-level Auth double, bound to loopback. Never imported by the app.
@@ -222,6 +223,37 @@ test("forged cookies do not authorize a teacher", async () => {
   assert.equal(r.status, 307);
   jar = "";
 });
+
+test("deployment smoke check accepts the configured public and protected routes", async () => {
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    "scripts/check-deployment.mjs", origin,
+  ]);
+  assert.doesNotMatch(stdout, /FAIL/);
+  assert.equal((stdout.match(/^PASS /gm) ?? []).length, 8);
+});
+
+test("invalid password and missing input never establish a teacher session", async () => {
+  for (const [email, password, message] of [
+    ["teacher@example.invalid", "incorrect-fixture-password", /Connexion impossible/],
+    ["teacher@example.invalid", "", /Renseignez votre adresse/],
+    ["invalid-email", "fixture-password", /Renseignez votre adresse/],
+  ] as const) {
+    jar = "";
+    const body = actionForm(await (await request("/connexion")).text(), "Se connecter");
+    body.set("email", email);
+    body.set("password", password);
+    const response = await request("/connexion", {
+      method: "POST",
+      headers: { Origin: origin },
+      body,
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), message);
+    cookies(response);
+    assert.equal((await request("/app")).status, 307);
+  }
+  jar = "";
+});
 test("real login server action creates persistent HttpOnly session and returns to requested route", async () => {
   const html = await (await request("/connexion?next=/app/classes")).text();
   const body = actionForm(html, "Se connecter");
@@ -273,6 +305,24 @@ test("logout action clears the session and protected navigation is denied", asyn
   assert.equal(r.status, 303);
   cookies(r);
   assert.equal((await request("/app")).status, 307);
+  jar = "";
+});
+
+test("teacher can sign in again after logout and cannot redirect outside FOCUS", async () => {
+  const body = actionForm(await (await request("/connexion")).text(), "Se connecter");
+  body.set("email", "teacher@example.invalid");
+  body.set("password", "fixture-password");
+  body.set("next", "https://outside.example.invalid/");
+  const response = await request("/connexion", {
+    method: "POST",
+    headers: { Origin: origin },
+    body,
+  });
+  assert.equal(response.status, 303);
+  assert.equal(new URL(response.headers.get("location")!, origin).href, origin + "/app");
+  cookies(response);
+  assert.equal((await request("/app")).status, 200);
+  assert.equal((await request("/app")).status, 200);
   jar = "";
 });
 test("parent login is rejected and does not create teacher access", async () => {
