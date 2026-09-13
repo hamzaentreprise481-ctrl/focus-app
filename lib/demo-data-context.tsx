@@ -1,75 +1,114 @@
 "use client";
-
-// Petit store externe (au sens de useSyncExternalStore) pour les données de
-// démonstration ajoutées en session : une évaluation créée doit se refléter
-// immédiatement dans le tableau de bord, la liste des évaluations et les
-// fiches élèves concernées, ET survivre à un rechargement de page via
-// localStorage — sans backend.
-//
-// On utilise useSyncExternalStore plutôt qu'un useState+useEffect classique :
-// c'est le mécanisme prévu par React pour lire une source de données externe
-// (ici le localStorage du navigateur, absent côté serveur) sans provoquer de
-// désynchronisation d'hydratation ni de cascade de rendus.
-
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { Evaluation, EvaluationDataset, RawGrade } from "@/lib/types";
 import { defaultDataset } from "@/lib/analysis";
-import { loadOverlay, persistOverlay, type DemoOverlay } from "@/lib/demo-store";
+import {
+  loadOverlay,
+  persistOverlay,
+  type DemoOverlay,
+} from "@/lib/demo-store";
+import { useTeacher } from "@/components/layout/teacher-context";
 
-const EMPTY_OVERLAY: DemoOverlay = { evaluations: [], rawGrades: [] };
-
-let currentOverlay: DemoOverlay = EMPTY_OVERLAY;
-let loadedFromStorage = false;
+interface Snapshot {
+  overlay: DemoOverlay;
+  loaded: boolean;
+  error: string | null;
+}
+const INITIAL: Snapshot = {
+  overlay: { evaluations: [], rawGrades: [] },
+  loaded: false,
+  error: null,
+};
+const snapshots = new Map<string, Snapshot>();
 const listeners = new Set<() => void>();
-
-function ensureLoaded() {
-  if (loadedFromStorage || typeof window === "undefined") return;
-  currentOverlay = loadOverlay();
-  loadedFromStorage = true;
+const emit = () => listeners.forEach((callback) => callback());
+function storageChanged(event: StorageEvent) {
+  if (event.key !== null && !event.key.startsWith("focus-demo-overlay-v2:"))
+    return;
+  snapshots.clear();
+  emit();
 }
-
 function subscribe(callback: () => void) {
+  if (!listeners.size) window.addEventListener("storage", storageChanged);
   listeners.add(callback);
-  return () => listeners.delete(callback);
-}
-
-function getSnapshot(): DemoOverlay {
-  ensureLoaded();
-  return currentOverlay;
-}
-
-function getServerSnapshot(): DemoOverlay {
-  return EMPTY_OVERLAY;
-}
-
-function addEvaluationToStore(evaluation: Evaluation, grades: RawGrade[]) {
-  ensureLoaded();
-  currentOverlay = {
-    evaluations: [...currentOverlay.evaluations, evaluation],
-    rawGrades: [...currentOverlay.rawGrades, ...grades],
+  return () => {
+    listeners.delete(callback);
+    if (!listeners.size) window.removeEventListener("storage", storageChanged);
   };
-  persistOverlay(currentOverlay);
-  listeners.forEach((callback) => callback());
 }
+function getSnapshot(id: string): Snapshot {
+  if (typeof window === "undefined") return INITIAL;
+  if (!snapshots.has(id)) {
+    try {
+      snapshots.set(id, {
+        overlay: loadOverlay(id),
+        loaded: true,
+        error: null,
+      });
+    } catch (error) {
+      snapshots.set(id, {
+        ...INITIAL,
+        loaded: true,
+        error: (error as Error).message,
+      });
+    }
+  }
+  return snapshots.get(id)!;
+}
+const getServerSnapshot = () => INITIAL;
 
 export function useDemoData() {
-  const overlay = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-
+  const { id } = useTeacher();
+  const snapshot = useCallback(() => getSnapshot(id), [id]);
+  const state = useSyncExternalStore(subscribe, snapshot, getServerSnapshot);
   const dataset: EvaluationDataset = useMemo(
     () => ({
-      evaluations: [...defaultDataset.evaluations, ...overlay.evaluations],
-      rawGrades: [...defaultDataset.rawGrades, ...overlay.rawGrades],
+      evaluations: [
+        ...defaultDataset.evaluations,
+        ...state.overlay.evaluations,
+      ],
+      rawGrades: [...defaultDataset.rawGrades, ...state.overlay.rawGrades],
     }),
-    [overlay]
+    [state.overlay],
   );
-
-  const addEvaluation = useCallback((evaluation: Evaluation, grades: RawGrade[]) => {
-    addEvaluationToStore(evaluation, grades);
-  }, []);
-
+  const saveEvaluation = useCallback(
+    (evaluation: Evaluation, grades: RawGrade[]) => {
+      try {
+        // Re-read before writing so sequential saves in other tabs are preserved.
+        const old = loadOverlay(id);
+        const next = {
+          evaluations: [
+            ...old.evaluations.filter((e) => e.id !== evaluation.id),
+            evaluation,
+          ],
+          rawGrades: [
+            ...old.rawGrades.filter((g) => g.evaluationId !== evaluation.id),
+            ...grades,
+          ],
+        };
+        persistOverlay(next, id);
+        snapshots.set(id, { overlay: next, loaded: true, error: null });
+        emit();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, error: (error as Error).message };
+      }
+    },
+    [id],
+  );
+  const retryStorage = useCallback(() => {
+    snapshots.delete(id);
+    emit();
+  }, [id]);
   return {
     dataset,
-    addedEvaluationIds: useMemo(() => overlay.evaluations.map((e) => e.id), [overlay]),
-    addEvaluation,
+    loaded: state.loaded,
+    storageError: state.error,
+    retryStorage,
+    addedEvaluationIds: useMemo(
+      () => state.overlay.evaluations.map((e) => e.id),
+      [state.overlay],
+    ),
+    saveEvaluation,
   };
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
-import type { StudentAnalysis } from "@/lib/analysis";
+import { CONFIDENCE_LABEL, type StudentAnalysis } from "@/lib/analysis";
 import type { StatusLevel } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,9 @@ import { cn, formatScore, initials } from "@/lib/utils";
 
 const FILTERS: { value: StatusLevel | "all"; label: string }[] = [
   { value: "all", label: "Tous" },
-  { value: "normal", label: "Normal" },
+  { value: "normal", label: "Sans signal particulier" },
   { value: "a_surveiller", label: "À surveiller" },
-  { value: "attention", label: "Attention" },
+  { value: "attention", label: "À examiner" },
 ];
 
 function EvolutionCell({ evolution }: { evolution: number | null }) {
@@ -46,7 +46,19 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
   const filtered = useMemo(() => {
     return analyses
       .filter((a) => filter === "all" || a.status === filter)
-      .filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()))
+      .filter((a) =>
+        a.name
+          .normalize("NFD")
+          .replace(/\p{Diacritic}/gu, "")
+          .toLowerCase()
+          .includes(
+            query
+              .trim()
+              .normalize("NFD")
+              .replace(/\p{Diacritic}/gu, "")
+              .toLowerCase(),
+          ),
+      )
       .sort((a, b) => a.name.localeCompare(b.name, "fr"));
   }, [analyses, query, filter]);
 
@@ -59,6 +71,7 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher un élève"
+            aria-label="Rechercher un élève"
             className="pl-9"
           />
         </div>
@@ -66,12 +79,14 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
           {FILTERS.map((f) => (
             <button
               key={f.value}
+              type="button"
               onClick={() => setFilter(f.value)}
+              aria-pressed={filter === f.value}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
                 filter === f.value
                   ? "border-brand bg-brand-soft text-brand-ink"
-                  : "border-border-strong text-ink-soft hover:bg-paper"
+                  : "border-border-strong text-ink-soft hover:bg-paper",
               )}
             >
               {f.label}
@@ -83,50 +98,132 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
         </span>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-[var(--radius-lg)] border border-border bg-surface">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-              <th className="px-5 py-3 font-medium">Nom</th>
-              <th className="px-4 py-3 font-medium">Moyenne</th>
-              <th className="px-4 py-3 font-medium">Progression</th>
-              <th className="px-4 py-3 font-medium">Compétence la plus fragile</th>
-              <th className="px-4 py-3 font-medium">Dernière évaluation</th>
-              <th className="px-4 py-3 font-medium">Statut</th>
+      <ul className="mt-4 divide-y divide-border border-y border-border md:hidden">
+        {filtered.map((a) => (
+          <li key={a.studentId}>
+            <Link href={`/app/eleves/${a.studentId}`} className="block py-4">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">{a.name}</span>
+                <EvolutionCell evolution={a.evolution} />
+              </span>
+              <span className="mt-2 block text-sm text-ink-soft">
+                {a.summary}
+              </span>
+              <span className="mt-2 block text-xs text-brand">
+                Ouvrir la fiche →
+              </span>
+            </Link>
+          </li>
+        ))}
+        {!filtered.length && (
+          <li className="py-6 text-sm text-ink-soft">
+            Aucun élève ne correspond à cette recherche.
+          </li>
+        )}
+      </ul>
+      <div
+        role="region"
+        aria-label="Liste des élèves, défilement horizontal et vertical"
+        tabIndex={0}
+        className="mt-4 hidden md:block table-scroll rounded-[var(--radius-lg)] border border-border bg-surface"
+      >
+        <table className="w-full min-w-[780px] text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-surface">
+            <tr className="border-b border-border text-[11px] uppercase tracking-[0.06em] text-muted">
+              <th scope="col" className="px-5 py-3 font-medium">
+                Nom
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Évolution
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Point à travailler
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Fiabilité du signal
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Dernière évaluation
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Statut
+              </th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((a) => {
-              const last = [...a.timeline].reverse().find((t) => t.absent || t.score !== null);
+              const last = [...a.timeline]
+                .reverse()
+                .find((t) => t.absent || t.score !== null);
               return (
-                <tr key={a.studentId} className="border-b border-border last:border-0 hover:bg-paper">
-                  <td className="px-5 py-3">
-                    <Link href={`/eleves/${a.studentId}`} className="flex items-center gap-3">
+                <tr
+                  key={a.studentId}
+                  className="border-b border-border last:border-0 hover:bg-paper"
+                >
+                  <th scope="row" className="px-5 py-2.5 text-left font-normal">
+                    <Link
+                      href={`/app/eleves/${a.studentId}`}
+                      className="flex items-center gap-3"
+                    >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-xs font-semibold text-ink-soft">
                         {initials(a.name)}
                       </span>
-                      <span className="font-medium text-ink hover:text-brand">{a.name}</span>
+                      <span className="font-medium text-ink hover:text-brand">
+                        {a.name}
+                      </span>
                     </Link>
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-ink">
-                    {a.average !== null ? `${formatScore(a.average)} / 20` : "—"}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  </th>
+                  <td className="px-4 py-2.5 tabular-nums">
                     <EvolutionCell evolution={a.evolution} />
                   </td>
-                  <td className="px-4 py-3 text-ink-soft">{a.weakestSkill?.name ?? "—"}</td>
-                  <td className="px-4 py-3 tabular-nums text-ink-soft">
-                    {last?.absent ? "Absent(e)" : last?.score != null ? `${formatScore(last.score)} / 20` : "—"}
+                  <td className="px-4 py-2.5 text-ink-soft">
+                    <span className="font-medium text-ink">
+                      {a.weakestSkill?.name ?? "—"}
+                    </span>
+                    {a.weakestSkill && (
+                      <span className="ml-1.5 text-xs text-muted">
+                        {a.weakestSkill.percent}%
+                      </span>
+                    )}
                   </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={a.status} />
+                  <td className="px-4 py-2.5 text-xs text-ink-soft">
+                    {a.weakestSkill ? (
+                      <>
+                        {CONFIDENCE_LABEL[a.weakestSkill.confidence]}
+                        <span className="mt-1 block">
+                          Basé sur {a.weakestSkill.testedCount} évaluation
+                          {a.weakestSkill.testedCount > 1 ? "s" : ""}
+                        </span>
+                      </>
+                    ) : (
+                      "Données insuffisantes"
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums text-ink-soft">
+                    {last?.absent
+                      ? "Absent(e)"
+                      : last?.score != null
+                        ? `${formatScore(last.score)} / 20`
+                        : "—"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {a.pattern === "donnees_insuffisantes" ? (
+                      <span className="text-xs text-ink-soft">
+                        Recul insuffisant
+                      </span>
+                    ) : (
+                      <StatusBadge status={a.status} />
+                    )}
                   </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-sm text-muted">
+                <td
+                  colSpan={6}
+                  className="px-5 py-10 text-center text-sm text-muted"
+                >
                   Aucun élève ne correspond à cette recherche.
                 </td>
               </tr>
