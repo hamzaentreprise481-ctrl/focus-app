@@ -6,6 +6,20 @@ FOCUS complète les outils de vie scolaire avec un espace de suivi pédagogique 
 
 Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGENTS.md](./AGENTS.md). Claude Code charge ces deux références via [CLAUDE.md](./CLAUDE.md).
 
+## Parcours compétences — 22 septembre 2026
+
+- Dans une classe ou la liste des élèves, choisissez une compétence puis un dernier niveau observé. Ces filtres se combinent avec le nom et le statut. « Non renseigné » n’est pas assimilé à « Non maîtrisé ».
+- Le dossier élève affiche désormais les observations datées, filtrables par compétence, avec un lien vers l’évaluation source. Notes, absences, compétences seules et données manquantes sont distinguées.
+- Les listes et dossiers attendent la lecture du stockage local avant d’afficher une synthèse. En cas d’erreur, ils indiquent que seul le jeu d’exemple est affiché et proposent de réessayer.
+- Aucun seuil d’analyse ni contrôle d’accès n’a été modifié. Les données restent fictives et locales au navigateur.
+
+Validation locale : 10 tests d’analyse et de restitution passent, dont 5 nouveaux
+cas de non-régression. Le réseau de cet environnement ne permet pas d’installer
+les dépendances npm ; le build, le typage, le lint et la suite complète sont
+à vérifier sur la CI du commit de cette mise à jour. Les accès Vercel et au
+backend Supabase désigné restent refusés le 22 septembre. Le parcours avec un
+vrai compte et la vérification visuelle des nouveaux filtres restent à faire.
+
 ## Vérification du 13 septembre 2026
 
 La production observée sert encore le prototype : `/` et `/classes` répondent,
@@ -141,3 +155,4 @@ existante (statut vérifié sur `1bb6aa1`). Vérifier le statut du commit exact,
 ouvrir la Preview et tester avant de fusionner dans `main`. La promotion en
 production est autorisée par le propriétaire, mais reste bloquée tant que
 l'accès aux fournisseurs et la connexion réelle ne sont pas vérifiés.
+

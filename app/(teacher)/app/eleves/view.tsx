@@ -1,15 +1,19 @@
 "use client";
 
 import { analyzeClass } from "@/lib/analysis";
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import { useDemoData } from "@/lib/demo-data-context";
 import { StudentRoster } from "@/components/students/student-roster";
 
 export default function ElevesPage() {
-  const { dataset } = useDemoData();
+  const { dataset, loaded } = useDemoData();
   const { classInfo, studentAnalyses } = analyzeClass("seconde-3", dataset);
+
+  if (!loaded) return <DemoDataState />;
 
   return (
     <div className="space-y-6">
+      <DemoDataState />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">
           Élèves
@@ -23,3 +27,4 @@ export default function ElevesPage() {
     </div>
   );
 }
+

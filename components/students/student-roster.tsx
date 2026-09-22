@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
-import { CONFIDENCE_LABEL, type StudentAnalysis } from "@/lib/analysis";
+import { CONFIDENCE_LABEL, SKILL_LEVEL_LABEL, type StudentAnalysis } from "@/lib/analysis";
 import type { StatusLevel } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { skills } from "@/lib/data/skills";
+import { filterStudentRoster, latestSkillLevel, type SkillLevelFilter } from "@/lib/student-evidence";
 import { Input } from "@/components/ui/input";
 import { cn, formatScore, initials } from "@/lib/utils";
 
@@ -43,24 +45,13 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusLevel | "all">("all");
 
-  const filtered = useMemo(() => {
-    return analyses
-      .filter((a) => filter === "all" || a.status === filter)
-      .filter((a) =>
-        a.name
-          .normalize("NFD")
-          .replace(/\p{Diacritic}/gu, "")
-          .toLowerCase()
-          .includes(
-            query
-              .trim()
-              .normalize("NFD")
-              .replace(/\p{Diacritic}/gu, "")
-              .toLowerCase(),
-          ),
-      )
-      .sort((a, b) => a.name.localeCompare(b.name, "fr"));
-  }, [analyses, query, filter]);
+  const selectId = useId();
+  const [skillId, setSkillId] = useState("");
+  const [level, setLevel] = useState<SkillLevelFilter>("all");
+  const filtered = useMemo(() => filterStudentRoster(analyses, {
+    query, status: filter, skillId, level,
+  }), [analyses, query, filter, skillId, level]);
+  const activeSkill = skills.find((skill) => skill.id === skillId);
 
   return (
     <div>
@@ -93,10 +84,39 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
             </button>
           ))}
         </div>
-        <span className="ml-auto text-sm text-muted">
+        <span role="status" className="ml-auto text-sm text-muted">
           {filtered.length} élève{filtered.length > 1 ? "s" : ""}
         </span>
       </div>
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <div className="w-full sm:w-auto">
+          <label htmlFor={`${selectId}-skill`} className="mb-1 block text-sm font-medium">Compétence</label>
+          <select id={`${selectId}-skill`} value={skillId}
+            onChange={(event) => { setSkillId(event.target.value); setLevel("all"); }}
+            className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm">
+            <option value="">Vue d’ensemble</option>
+            {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+          </select>
+        </div>
+        <div className="w-full sm:w-auto">
+          <label htmlFor={`${selectId}-level`} className="mb-1 block text-sm font-medium">Dernier niveau observé</label>
+          <select id={`${selectId}-level`} value={level} disabled={!skillId}
+            onChange={(event) => setLevel(event.target.value as SkillLevelFilter)}
+            className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm disabled:opacity-50">
+            <option value="all">Tous les niveaux</option>
+            {Object.entries(SKILL_LEVEL_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            <option value="missing">Non renseigné</option>
+          </select>
+        </div>
+        {(query || filter !== "all" || skillId) && <button type="button"
+          onClick={() => { setQuery(""); setFilter("all"); setSkillId(""); setLevel("all"); }}
+          className="h-10 px-2 text-sm text-brand underline underline-offset-4">Réinitialiser les filtres</button>}
+      </div>
+      {activeSkill && <p className="mt-2 text-xs text-ink-soft">
+        Dernière observation renseignée pour {activeSkill.name}, indépendamment de la note.
+        « Non renseigné » signifie qu’aucun niveau n’a été saisi pour cette compétence.
+      </p>}
 
       <ul className="mt-4 divide-y divide-border border-y border-border md:hidden">
         {filtered.map((a) => (
@@ -107,7 +127,8 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
                 <EvolutionCell evolution={a.evolution} />
               </span>
               <span className="mt-2 block text-sm text-ink-soft">
-                {a.summary}
+                {activeSkill ? `${activeSkill.name} : ${latestSkillLevel(a, skillId)
+                  ? SKILL_LEVEL_LABEL[latestSkillLevel(a, skillId)!] : "Non renseigné"}` : a.summary}
               </span>
               <span className="mt-2 block text-xs text-brand">
                 Ouvrir la fiche →
@@ -137,13 +158,13 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
                 Évolution
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
-                Point à travailler
+                {activeSkill ? activeSkill.name : "Point à travailler"}
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
                 Fiabilité du signal
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
-                Dernière évaluation
+                Dernière note ou absence
               </th>
               <th scope="col" className="px-4 py-3 font-medium">
                 Statut
@@ -152,6 +173,10 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
           </thead>
           <tbody>
             {filtered.map((a) => {
+              const displayedSkill = activeSkill
+                ? a.skillMasteries.find((skill) => skill.skillId === skillId)
+                : a.weakestSkill;
+              const observedLevel = activeSkill ? latestSkillLevel(a, skillId) : null;
               const last = [...a.timeline]
                 .reverse()
                 .find((t) => t.absent || t.score !== null);
@@ -178,26 +203,21 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
                   </td>
                   <td className="px-4 py-2.5 text-ink-soft">
                     <span className="font-medium text-ink">
-                      {a.weakestSkill?.name ?? "—"}
+                      {activeSkill ? (observedLevel ? SKILL_LEVEL_LABEL[observedLevel] : "Non renseigné") : displayedSkill?.name ?? "—"}
                     </span>
-                    {a.weakestSkill && (
-                      <span className="ml-1.5 text-xs text-muted">
-                        {a.weakestSkill.percent}%
-                      </span>
+                    {!activeSkill && displayedSkill?.percent != null && (
+                      <span className="ml-1.5 text-xs text-muted">{displayedSkill.percent}%</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-ink-soft">
-                    {a.weakestSkill ? (
+                    {displayedSkill && displayedSkill.testedCount > 0 ? (
                       <>
-                        {CONFIDENCE_LABEL[a.weakestSkill.confidence]}
+                        {CONFIDENCE_LABEL[displayedSkill.confidence]}
                         <span className="mt-1 block">
-                          Basé sur {a.weakestSkill.testedCount} évaluation
-                          {a.weakestSkill.testedCount > 1 ? "s" : ""}
+                          Basé sur {displayedSkill.testedCount} évaluation{displayedSkill.testedCount > 1 ? "s" : ""}
                         </span>
                       </>
-                    ) : (
-                      "Données insuffisantes"
-                    )}
+                    ) : "Données insuffisantes"}
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-ink-soft">
                     {last?.absent
@@ -234,3 +254,4 @@ export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
     </div>
   );
 }
+

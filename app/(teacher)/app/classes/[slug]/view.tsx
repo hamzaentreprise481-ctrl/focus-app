@@ -6,12 +6,13 @@ import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { analyzeClass } from "@/lib/analysis";
 import { classById } from "@/lib/data/class-info";
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import { useDemoData } from "@/lib/demo-data-context";
 import { StudentRoster } from "@/components/students/student-roster";
 
 export default function ClassRosterPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { dataset } = useDemoData();
+  const { dataset, loaded } = useDemoData();
 
   if (!classById.has(slug)) notFound();
 
@@ -20,8 +21,11 @@ export default function ClassRosterPage() {
     dataset,
   );
 
+  if (!loaded) return <DemoDataState />;
+
   return (
     <div className="space-y-6">
+      <DemoDataState />
       <div>
         <p className="text-sm text-ink-soft">{classInfo.subject}</p>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">
@@ -103,3 +107,4 @@ export default function ClassRosterPage() {
     </div>
   );
 }
+

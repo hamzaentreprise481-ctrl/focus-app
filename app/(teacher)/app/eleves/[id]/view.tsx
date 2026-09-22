@@ -11,11 +11,13 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
 import { CreateAccompagnementDialog } from "@/components/students/create-accompagnement-dialog";
-import { formatScore, formatDate } from "@/lib/utils";
+import { EvidenceTimeline } from "@/components/students/evidence-timeline";
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { formatScore } from "@/lib/utils";
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const { dataset } = useDemoData();
+  const { dataset, loaded } = useDemoData();
   const student = studentById.get(id);
   if (!student) notFound();
   const analysis = analyzeStudent(id, dataset);
@@ -35,9 +37,11 @@ export default function StudentProfilePage() {
       analysis.timeline.some((t) => t.evaluation.id === g.evaluationId),
   );
   const nextAction = analysis.recommendedActions[0];
+  if (!loaded) return <DemoDataState />;
 
   return (
     <div className="space-y-8">
+      <DemoDataState />
       <header>
         <Link
           href={`/app/classes/${student.classId}`}
@@ -141,9 +145,11 @@ export default function StudentProfilePage() {
         <SkillMasteryList skills={analysis.skillMasteries} />
       </section>
 
+      <EvidenceTimeline studentId={id} classId={student.classId} dataset={dataset} />
+
       <details className="insights-disclosure border-t border-border pt-4">
         <summary className="cursor-pointer rounded-lg py-3 text-lg font-semibold">
-          Explorer les résultats et l’historique
+          Explorer les notes et l’interprétation
         </summary>
         <div className="mt-4 space-y-6">
           <div className="flex flex-wrap gap-x-12 gap-y-5 text-sm">
@@ -173,40 +179,6 @@ export default function StudentProfilePage() {
           {analysis.average !== null && (
             <GradeChart timeline={analysis.timeline} />
           )}
-          <ul className="divide-y divide-border">
-            {[...analysis.timeline].reverse().map((t) => {
-              const grade = observed.find(
-                (g) => g.evaluationId === t.evaluation.id,
-              );
-              return (
-                <li
-                  key={t.evaluation.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
-                >
-                  <div>
-                    <Link
-                      className="font-medium hover:text-brand"
-                      href={`/app/evaluations/${t.evaluation.id}`}
-                    >
-                      {t.evaluation.name}
-                    </Link>
-                    <p className="mt-1 text-xs text-ink-soft">
-                      {formatDate(t.evaluation.date)}
-                    </p>
-                  </div>
-                  <span>
-                    {t.absent
-                      ? "Absent(e)"
-                      : t.score !== null
-                        ? `${formatScore(t.score)} / 20`
-                        : grade
-                          ? "Compétences uniquement"
-                          : "Non renseigné"}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
           <div className="rounded-lg bg-paper p-4 text-sm">
             <h3 className="font-medium">Interprétation FOCUS</h3>
             <p className="mt-2 leading-relaxed text-ink-soft">
@@ -222,3 +194,4 @@ export default function StudentProfilePage() {
     </div>
   );
 }
+
