@@ -10,6 +10,7 @@ import {
 import {
   analyzePedagogicalEvidence,
   pedagogicalAiConfigured,
+  pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
 import type {
   AssessmentEvidenceDraft,
@@ -568,93 +569,139 @@ export async function generatePedagogicalAnalysis(
     responses.map((response) => [response.question_id, response]),
   );
 
-  const assessment = context.assessments.find((candidate) => {
-    const material = materialByAssessment.get(candidate.id);
-    const qs = questionsByAssessment.get(candidate.id) ?? [];
-    return (
-      !!material &&
-      qs.length > 0 &&
-      qs.some((question) => responsesByQuestion.has(question.id))
-    );
-  });
-  if (!assessment)
+  const graph = await curriculumGraph(supabase);
+  const model = pedagogicalAiModel();
+
+  type Prepared = {
+    assessment: AssessmentRow;
+    assessmentQuestions: QuestionRow[];
+    aiInput: {
+      assessment: {
+        id: string;
+        title: string;
+        contextText: string | null;
+        instructionsText: string | null;
+      };
+      questions: Array<{
+        assessmentId: string;
+        questionId: string;
+        prompt: string;
+        correctionText: string;
+        rubricText: string;
+        maxPoints: number | null;
+        responseText: string;
+        awardedPoints: number | null;
+        teacherAnnotation: string | null;
+      }>;
+      curriculum: CurriculumNodeSummary[];
+    };
+    inputHash: string;
+    existing: {
+      id: string;
+      status: "completed" | "no_evidence";
+      failure_reason: string | null;
+    } | null;
+  };
+
+  const prepared: Prepared[] = [];
+  for (const assessment of context.assessments) {
+    const material = materialByAssessment.get(assessment.id);
+    const assessmentQuestions = (questionsByAssessment.get(assessment.id) ?? [])
+      .filter((question) => responsesByQuestion.has(question.id))
+      .sort((a, b) => a.position - b.position);
+
+    if (!material || !assessmentQuestions.length) continue;
+
+    const aiInput = {
+      assessment: {
+        id: assessment.id,
+        title: assessment.title,
+        contextText: material.context_text,
+        instructionsText: material.instructions_text,
+      },
+      questions: assessmentQuestions.map((question) => {
+        const response = responsesByQuestion.get(question.id)!;
+        return {
+          assessmentId: assessment.id,
+          questionId: question.id,
+          prompt: question.prompt,
+          correctionText: question.correction_text,
+          rubricText: question.rubric?.text ?? "",
+          maxPoints:
+            question.max_points === null ? null : Number(question.max_points),
+          responseText: response.response_text,
+          awardedPoints:
+            response.awarded_points === null
+              ? null
+              : Number(response.awarded_points),
+          teacherAnnotation: response.teacher_annotation,
+        };
+      }),
+      curriculum: graph.summaries,
+    };
+
+    const inputHash = createHash("sha256")
+      .update(JSON.stringify({ model, aiInput }))
+      .digest("hex");
+
+    const existingResponse = await supabase
+      .from("ai_analysis_runs")
+      .select("id,status,failure_reason")
+      .eq("teacher_id", teacher.id)
+      .eq("student_id", studentId)
+      .eq("assessment_id", assessment.id)
+      .eq("input_hash", inputHash)
+      .in("status", ["completed", "no_evidence"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    ensureOk(existingResponse.error, "Historique d’analyse");
+
+    prepared.push({
+      assessment,
+      assessmentQuestions,
+      aiInput,
+      inputHash,
+      existing: existingResponse.data as Prepared["existing"],
+    });
+  }
+
+  if (!prepared.length)
     return {
       ok: false,
       error:
         "Ajoutez d’abord le sujet, le corrigé/barème et au moins une réponse de l’élève.",
     };
 
-  const material = materialByAssessment.get(assessment.id)!;
-  const assessmentQuestions = (questionsByAssessment.get(assessment.id) ?? [])
-    .filter((question) => responsesByQuestion.has(question.id))
-    .sort((a, b) => a.position - b.position);
-  const graph = await curriculumGraph(supabase);
+  // Prefer the newest evidence set that has not yet been analyzed with the
+  // current model. Once it is done, the next click can process older evidence
+  // and build longitudinal confidence instead of looping on the latest run.
+  const target = prepared.find((item) => !item.existing) ?? prepared[0];
+  const {
+    assessment,
+    assessmentQuestions,
+    aiInput,
+    inputHash,
+    existing,
+  } = target;
 
-  const aiInput = {
-    assessment: {
-      id: assessment.id,
-      title: assessment.title,
-      contextText: material.context_text,
-      instructionsText: material.instructions_text,
-    },
-    questions: assessmentQuestions.map((question) => {
-      const response = responsesByQuestion.get(question.id)!;
-      return {
-        assessmentId: assessment.id,
-        questionId: question.id,
-        prompt: question.prompt,
-        correctionText: question.correction_text,
-        rubricText: question.rubric?.text ?? "",
-        maxPoints:
-          question.max_points === null ? null : Number(question.max_points),
-        responseText: response.response_text,
-        awardedPoints:
-          response.awarded_points === null
-            ? null
-            : Number(response.awarded_points),
-        teacherAnnotation: response.teacher_annotation,
-      };
-    }),
-    curriculum: graph.summaries,
-  };
-
-  const model = process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
-  const inputHash = createHash("sha256")
-    .update(JSON.stringify({ model, aiInput }))
-    .digest("hex");
-
-  const existingResponse = await supabase
-    .from("ai_analysis_runs")
-    .select("id,status,failure_reason")
-    .eq("teacher_id", teacher.id)
-    .eq("student_id", studentId)
-    .eq("assessment_id", assessment.id)
-    .eq("input_hash", inputHash)
-    .in("status", ["completed", "no_evidence"])
-    .limit(1)
-    .maybeSingle();
-  ensureOk(existingResponse.error, "Historique d’analyse");
-  if (existingResponse.data) {
+  if (existing) {
     const countResponse = await supabase
       .from("pedagogical_recommendations")
       .select("id", { count: "exact", head: true })
-      .eq("analysis_run_id", (existingResponse.data as { id: string }).id);
-    const previous = existingResponse.data as {
-      id: string;
-      status: "completed" | "no_evidence";
-      failure_reason: string | null;
-    };
+      .eq("analysis_run_id", existing.id)
+      .is("dismissed_at", null);
     return {
       ok: true,
       recommendationCount: countResponse.count ?? 0,
       reused: true,
       analysisStatus:
-        previous.status === "no_evidence"
+        existing.status === "no_evidence"
           ? "insufficient_evidence"
           : (countResponse.count ?? 0) > 0
             ? "errors_found"
             : "no_error_observed",
-      insufficientReason: previous.failure_reason ?? "",
+      insufficientReason: existing.failure_reason ?? "",
     };
   }
 
@@ -691,6 +738,14 @@ export async function generatePedagogicalAnalysis(
   );
 
   if (validatedAnalysis.status === "insufficient_evidence") {
+    const dismissResponse = await supabase
+      .from("pedagogical_recommendations")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("student_id", studentId)
+      .eq("assessment_id", assessment.id)
+      .is("dismissed_at", null);
+    ensureOk(dismissResponse.error, "Invalidation des recommandations");
+
     const noEvidenceResponse = await supabase.from("ai_analysis_runs").insert({
       school_id: context.schoolId,
       teacher_id: teacher.id,
@@ -703,6 +758,7 @@ export async function generatePedagogicalAnalysis(
       completed_at: new Date().toISOString(),
     });
     ensureOk(noEvidenceResponse.error, "Trace d’analyse insuffisante");
+
     revalidatePath(`/app/eleves/${studentId}`);
     return {
       ok: true,
@@ -716,15 +772,38 @@ export async function generatePedagogicalAnalysis(
   const validated = validatedAnalysis.errors;
   const nodeIds = [...new Set(validated.map((error) => error.nodeId))];
   let priorErrors: PriorErrorRow[] = [];
+
   if (nodeIds.length) {
-    const priorResponse = await supabase
-      .from("error_observations")
-      .select("curriculum_node_id,assessment_id,verified_by_teacher")
+    const priorRunsResponse = await supabase
+      .from("ai_analysis_runs")
+      .select("id,assessment_id,created_at")
       .eq("student_id", studentId)
-      .in("curriculum_node_id", nodeIds)
-      .neq("assessment_id", assessment.id);
-    ensureOk(priorResponse.error, "Historique des erreurs");
-    priorErrors = (priorResponse.data ?? []) as PriorErrorRow[];
+      .eq("status", "completed")
+      .neq("assessment_id", assessment.id)
+      .order("created_at", { ascending: false });
+    ensureOk(priorRunsResponse.error, "Historique des analyses");
+
+    const latestRunByAssessment = new Map<string, string>();
+    for (const run of (priorRunsResponse.data ?? []) as Array<{
+      id: string;
+      assessment_id: string;
+      created_at: string;
+    }>) {
+      if (!latestRunByAssessment.has(run.assessment_id))
+        latestRunByAssessment.set(run.assessment_id, run.id);
+    }
+    const activeRunIds = [...latestRunByAssessment.values()];
+
+    if (activeRunIds.length) {
+      const priorResponse = await supabase
+        .from("error_observations")
+        .select("curriculum_node_id,assessment_id,verified_by_teacher")
+        .eq("student_id", studentId)
+        .in("analysis_run_id", activeRunIds)
+        .in("curriculum_node_id", nodeIds);
+      ensureOk(priorResponse.error, "Historique des erreurs");
+      priorErrors = (priorResponse.data ?? []) as PriorErrorRow[];
+    }
   }
 
   const occurrencesByNode = new Map<string, number>();
