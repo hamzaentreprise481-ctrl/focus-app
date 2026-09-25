@@ -467,6 +467,7 @@ export async function loadPedagogicalSnapshot(
     .from("ai_analysis_runs")
     .select("status,failure_reason,created_at")
     .eq("student_id", studentId)
+    .is("superseded_at", null)
     .in(
       "assessment_id",
       assessmentIds.length
@@ -717,6 +718,7 @@ export async function generatePedagogicalAnalysis(
       .eq("assessment_id", assessment.id)
       .eq("input_hash", inputHash)
       .in("status", ["completed", "no_evidence"])
+      .is("superseded_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -879,6 +881,7 @@ export async function generatePedagogicalAnalysis(
       .select("id,assessment_id,created_at")
       .eq("student_id", studentId)
       .eq("status", "completed")
+      .is("superseded_at", null)
       .neq("assessment_id", assessment.id)
       .order("created_at", { ascending: false });
     ensureOk(priorRunsResponse.error, "Historique des analyses");
