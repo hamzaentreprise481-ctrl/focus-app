@@ -23,3 +23,36 @@ jobs:
       - run: npm run test
       - run: npm run build
       - run: npm run test:routes
+      - name: Probe Vercel Preview AI health
+        continue-on-error: true
+        env:
+          FOCUS_PREVIEW_AI_HEALTH_URL: https://focus-app-git-codex-pe-c10f8d-hamzaentreprise481-8876s-projects.vercel.app/api/ai-health
+        shell: bash
+        run: |
+          set -u
+          response_file="$(mktemp)"
+          status="$(
+            curl --silent --show-error --location --max-time 20               --output "$response_file" --write-out '%{http_code}'               "$FOCUS_PREVIEW_AI_HEALTH_URL" || true
+          )"
+          echo "FOCUS_AI_HEALTH_HTTP=$status"
+          if jq -e . "$response_file" >/dev/null 2>&1; then
+            configured="$(jq -r '.configured // false' "$response_file")"
+            ok="$(jq -r '.ok // false' "$response_file")"
+            model="$(jq -r '.model // "unknown"' "$response_file")"
+            api_status="$(jq -r '.apiStatus // "null"' "$response_file")"
+            error="$(jq -r '.error // "none"' "$response_file")"
+            echo "FOCUS_AI_HEALTH_JSON=true"
+            echo "FOCUS_AI_CONFIGURED=$configured"
+            echo "FOCUS_AI_OK=$ok"
+            echo "FOCUS_AI_MODEL=$model"
+            echo "FOCUS_AI_API_STATUS=$api_status"
+            echo "FOCUS_AI_ERROR=$error"
+            if [ "$configured" != "true" ] || [ "$ok" != "true" ]; then
+              echo "::warning::FOCUS Preview OpenAI probe is not healthy."
+              exit 1
+            fi
+          else
+            echo "FOCUS_AI_HEALTH_JSON=false"
+            echo "::warning::Preview health endpoint could not be read as JSON (protection, DNS, or old deployment)."
+            exit 1
+          fi
