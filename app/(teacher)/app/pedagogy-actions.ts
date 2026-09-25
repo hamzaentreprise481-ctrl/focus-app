@@ -713,11 +713,24 @@ export async function generatePedagogicalAnalysis(
   } = target;
 
   if (existing) {
+    if (existing.status === "completed") {
+      const reactivateResponse = await supabase
+        .from("pedagogical_recommendations")
+        .update({ dismissed_at: null })
+        .eq("analysis_run_id", existing.id);
+      ensureOk(
+        reactivateResponse.error,
+        "Réactivation des recommandations correspondant aux preuves",
+      );
+    }
+
     const countResponse = await supabase
       .from("pedagogical_recommendations")
       .select("id", { count: "exact", head: true })
       .eq("analysis_run_id", existing.id)
       .is("dismissed_at", null);
+    ensureOk(countResponse.error, "Recommandations réutilisées");
+
     return {
       ok: true,
       recommendationCount: countResponse.count ?? 0,
