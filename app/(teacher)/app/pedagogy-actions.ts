@@ -416,11 +416,7 @@ export async function loadPedagogicalSnapshot(
 
   const analyzable = context.assessments.filter((assessment) => {
     const questionIds = questionIdsByAssessment.get(assessment.id) ?? [];
-    return (
-      materialIds.has(assessment.id) &&
-      questionIds.length > 0 &&
-      questionIds.some((id) => responseQuestionIds.has(id))
-    );
+    return materialIds.has(assessment.id) && questionIds.length > 0;
   });
 
   const latestRunResponse = await supabase
@@ -607,7 +603,6 @@ export async function generatePedagogicalAnalysis(
   for (const assessment of context.assessments) {
     const material = materialByAssessment.get(assessment.id);
     const assessmentQuestions = (questionsByAssessment.get(assessment.id) ?? [])
-      .filter((question) => responsesByQuestion.has(question.id))
       .sort((a, b) => a.position - b.position);
 
     if (!material || !assessmentQuestions.length) continue;
@@ -620,7 +615,7 @@ export async function generatePedagogicalAnalysis(
         instructionsText: material.instructions_text,
       },
       questions: assessmentQuestions.map((question) => {
-        const response = responsesByQuestion.get(question.id)!;
+        const response = responsesByQuestion.get(question.id);
         return {
           assessmentId: assessment.id,
           questionId: question.id,
@@ -629,12 +624,13 @@ export async function generatePedagogicalAnalysis(
           rubricText: question.rubric?.text ?? "",
           maxPoints:
             question.max_points === null ? null : Number(question.max_points),
-          responseText: response.response_text,
+          responseText: response?.response_text ?? "",
           awardedPoints:
-            response.awarded_points === null
+            response?.awarded_points === null ||
+            response?.awarded_points === undefined
               ? null
               : Number(response.awarded_points),
-          teacherAnnotation: response.teacher_annotation,
+          teacherAnnotation: response?.teacher_annotation ?? null,
         };
       }),
       curriculum: graph.summaries,
@@ -705,6 +701,43 @@ export async function generatePedagogicalAnalysis(
     };
   }
 
+  const hasStudentAnswer = aiInput.questions.some(
+    (question) => question.responseText.trim().length > 0,
+  );
+  if (!hasStudentAnswer) {
+    const reason =
+      "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
+    const dismissResponse = await supabase
+      .from("pedagogical_recommendations")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("student_id", studentId)
+      .eq("assessment_id", assessment.id)
+      .is("dismissed_at", null);
+    ensureOk(dismissResponse.error, "Invalidation des recommandations");
+
+    const noEvidenceResponse = await supabase.from("ai_analysis_runs").insert({
+      school_id: context.schoolId,
+      teacher_id: teacher.id,
+      student_id: studentId,
+      assessment_id: assessment.id,
+      model,
+      input_hash: inputHash,
+      status: "no_evidence",
+      failure_reason: reason,
+      completed_at: new Date().toISOString(),
+    });
+    ensureOk(noEvidenceResponse.error, "Trace d’analyse insuffisante");
+
+    revalidatePath(`/app/eleves/${studentId}`);
+    return {
+      ok: true,
+      recommendationCount: 0,
+      reused: false,
+      analysisStatus: "insufficient_evidence",
+      insufficientReason: reason,
+    };
+  }
+
   let modelResult: Awaited<ReturnType<typeof analyzePedagogicalEvidence>>;
   try {
     modelResult = await analyzePedagogicalEvidence(aiInput);
@@ -729,7 +762,7 @@ export async function generatePedagogicalAnalysis(
   const validationQuestions = assessmentQuestions.map((question) => ({
     assessmentId: assessment.id,
     questionId: question.id,
-    responseText: responsesByQuestion.get(question.id)!.response_text,
+    responseText: responsesByQuestion.get(question.id)?.response_text ?? "",
   }));
   const validatedAnalysis = validateModelAnalysis(
     modelResult.analysis,
@@ -834,7 +867,12 @@ export async function generatePedagogicalAnalysis(
   );
   const persistedErrors = validated.map((error) => ({
     questionId: error.questionId,
-    responseId: responseByQuestion.get(error.questionId)!.id,
+    responseId: (() => {
+      const response = responseByQuestion.get(error.questionId);
+      if (!response)
+        throw new Error("Validated error has no persisted student response.");
+      return response.id;
+    })(),
     nodeId: error.nodeId,
     errorType: error.errorType,
     evidenceExcerpt: error.evidenceExcerpt,
