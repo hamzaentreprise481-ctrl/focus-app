@@ -1,4 +1,5 @@
 import type {
+  ModelAnalysisStatus,
   ModelErrorCandidate,
   PedagogicalConfidence,
 } from "@/lib/pedagogy/types";
@@ -102,4 +103,67 @@ export function confidenceForEvidence(params: {
   if (params.currentOccurrences >= 2 || params.priorAssessmentCount >= 1)
     return "moderee";
   return "limitee";
+}
+
+
+export interface ValidatedModelAnalysis {
+  status: ModelAnalysisStatus;
+  insufficientReason: string;
+  errors: ValidatedErrorCandidate[];
+}
+
+export function validateModelAnalysis(
+  raw: unknown,
+  questions: QuestionEvidenceForValidation[],
+  nodesByCode: Map<string, string>,
+): ValidatedModelAnalysis {
+  if (!raw || typeof raw !== "object")
+    return {
+      status: "insufficient_evidence",
+      insufficientReason: "Sortie d’analyse absente ou invalide.",
+      errors: [],
+    };
+
+  const value = raw as Record<string, unknown>;
+  const rawStatus =
+    typeof value.status === "string" ? value.status : "";
+  const validStatus =
+    rawStatus === "errors_found" ||
+    rawStatus === "no_error_observed" ||
+    rawStatus === "insufficient_evidence";
+  if (!validStatus)
+    return {
+      status: "insufficient_evidence",
+      insufficientReason: "Le moteur n’a pas fourni un statut d’analyse valide.",
+      errors: [],
+    };
+
+  const status = rawStatus as ModelAnalysisStatus;
+  const reason = clean(value.insufficientReason, 500);
+  const errors = validateModelErrors(raw, questions, nodesByCode);
+
+  if (status === "insufficient_evidence")
+    return {
+      status,
+      insufficientReason:
+        reason || "Les éléments fournis ne permettent pas d’établir une erreur précise.",
+      errors: [],
+    };
+
+  if (status === "no_error_observed")
+    return {
+      status,
+      insufficientReason: "",
+      errors: [],
+    };
+
+  if (!errors.length)
+    return {
+      status: "insufficient_evidence",
+      insufficientReason:
+        "Le moteur a signalé une erreur, mais aucune preuve vérifiable n’a passé les contrôles FOCUS.",
+      errors: [],
+    };
+
+  return { status, insufficientReason: "", errors };
 }
