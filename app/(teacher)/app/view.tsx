@@ -17,7 +17,7 @@ import { MasteryBar } from "@/components/ui/mastery-bar";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { dataset, loaded, storageError } = useSchoolData();
+  const { dataset, source, loaded, storageError } = useSchoolData();
   const { name } = useTeacher();
   const [selectedClass, setSelectedClass] = useState("");
   const activeClass = dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
