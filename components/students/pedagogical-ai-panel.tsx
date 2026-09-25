@@ -93,7 +93,7 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
             {snapshot.analyzableAssessmentCount} évaluation(s) avec preuves
             exploitables
             {snapshot.latestAnalyzableAssessmentTitle
-              ? ` · prochaine analyse : ${snapshot.latestAnalyzableAssessmentTitle}`
+              ? ` · dernière évaluation documentée : ${snapshot.latestAnalyzableAssessmentTitle}`
               : ""}
           </p>
 
