@@ -1,11 +1,16 @@
 import { requireTeacher } from "@/lib/auth/server";
 import { AppShell } from "@/components/layout/app-shell";
-// Never prerender a denial or a teacher response into a shared static page.
+import {
+  EMPTY_SUPABASE_SCHOOL_DATA,
+  loadSupabaseSchoolData,
+} from "@/lib/supabase-school-data";
+
 export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Mon espace professeur · FOCUS",
   robots: { index: false, follow: false },
 };
+
 export default async function TeacherLayout({
   children,
 }: {
@@ -16,8 +21,27 @@ export default async function TeacherLayout({
     typeof teacher.user_metadata?.display_name === "string"
       ? teacher.user_metadata.display_name
       : "Professeur";
+
+  let schoolData = EMPTY_SUPABASE_SCHOOL_DATA;
+  let dataError: string | null = null;
+  try {
+    schoolData = await loadSupabaseSchoolData({
+      teacherId: teacher.id,
+      teacherName: name,
+    });
+  } catch (error) {
+    console.error("FOCUS school data load failed", error);
+    dataError =
+      "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
+  }
+
   return (
-    <AppShell teacherName={name} teacherId={teacher.id}>
+    <AppShell
+      teacherName={name}
+      teacherId={teacher.id}
+      schoolData={schoolData}
+      dataError={dataError}
+    >
       {children}
     </AppShell>
   );
