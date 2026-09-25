@@ -1,31 +1,35 @@
-# V1 continuation — 25 September 2026
+# V1 Supabase integration — 25 September 2026
 
-Branch: `codex/focus-v1-supabase-20260925`, based on PR #1 commit `8368421a959eb787d69efb413d845471a09712e4`.
+Branch: `codex/focus-live-supabase-20260925`, based on `codex/focus-v1-supabase-20260925`.
 
 ## Implemented
 
-- The existing PR authentication is reused without changes.
-- `EvaluationDataset` now carries classes, students, skills, evaluations and raw grades. Analysis has no fixture imports or implicit default dataset. Teacher views consume `SchoolDataProvider`; only `DemoDataProvider` knows the browser storage/fixture implementation.
-- Dashboard supports selecting a class when the supplied dataset contains several. Class links preselect evaluation entry. Rosters, profiles and analyses resolve the supplied identities. A blank workspace stays blank; failed loading is not presented as valid results.
-- Evaluation saving is asynchronous. Pending writes lock controls and repeated submissions. Failed saves retain fields and retry the same ID. Editing can remove the last incorrect observation.
-- Class, student and evaluation PDF exports use the currently loaded snapshot, have pagination and an embedded locally hosted font. Demo exports are marked fictitious. No academic data is sent to an export service.
+- Existing PR #1 authentication is reused unchanged.
+- Supabase project `wznqeofsvbutbvbyxfab` is readable again. The verified schema contains the existing school/class/subject/enrollment/assessment/competency tables with RLS.
+- Teacher pages now load authorized classes, students, competencies, assessments, results and competency results through the cookie-bound Supabase SSR client. There is no fallback to the fictitious browser dataset when server reads fail.
+- `SchoolDataProvider` now mounts a Supabase-backed adapter in the authenticated teacher shell.
+- Evaluation creation/editing persists through `public.focus_save_assessment`, migration `20260925180351`. The function is `SECURITY INVOKER`, executable by `authenticated` but not `anon`, and validates teacher assignment, class/subject scope, student enrollment and selected competencies.
+- Evaluation writes are transactional: assessment metadata, competency links, per-student score/absence rows and competency results are replaced together.
+- Existing demo/localStorage adapter remains only for isolated demo/component use; it is no longer the authenticated app data source.
+- Existing PDF export and analysis consume the live dataset without sending academic data to an external export service.
 
-## Actual limitation
+## Verified backend state
 
-**The application still mounts `DemoDataProvider` and still saves evaluations to localStorage. No Supabase academic-data reader or writer has been implemented.** The generic provider and async save signature are integration prerequisites, not an active Supabase adapter.
+- 1 school, 1 class, 31 student enrollments, 4 subjects, 8 competencies and 5 assessments exist.
+- The role-authorized teacher account has a teacher membership and a Mathématiques assignment to Seconde 3.
+- Seeded assessments currently have no `assessment_results` or `competency_results`; the live app therefore shows the real empty-result state until a teacher records results.
+- Existing seeded assessments are owned by another teacher record, so the role-authorized teacher may view them through class RLS but cannot edit them. New assessments created by the signed-in teacher are editable by that teacher.
 
-The owner reports Claude restored project `wznqeofsvbutbvbyxfab`, linked the teacher to demo data, and verified the schema/RLS. This session cannot read it: `list_tables` and a read-only `information_schema.columns` query both returned `You do not have permission to perform this action`. Vercel `get_project` for `focus-app-nhkt` returned `403 Forbidden`. This does not contradict Claude's observations: permissions differ between sessions/connectors.
+## Security notes
 
-No migrations, RLS, teacher accounts, production records, environment settings or production deployments were changed. No schema/table/RPC names have been guessed.
+Supabase Security Advisor still reports pre-existing warnings for six public `SECURITY DEFINER` authorization helper functions and leaked-password protection being disabled. The new save RPC is not one of those functions: it is `SECURITY INVOKER` and its anonymous execute privilege is revoked.
 
-## Concrete continuation when access works
+Performance Advisor also reports pre-existing missing FK indexes / RLS init-plan opportunities. They are not required to make the V1 flow correct, but should be addressed before scale testing.
 
-1. Obtain actual generated database types or a schema-only export for this project (columns, foreign keys, enum values and relevant existing RPC signatures). Do not provide service-role keys or real student rows.
-2. Implement the adapter with the existing cookie-bound `createAuthClient()` and `requireTeacher()`. Fetch only classes/subjects available to that teacher; map actual relations into `EvaluationDataset`. Keep queries scoped and page through records beyond the API page limit. Never use a service-role client or fall back to fixtures on failure.
-3. Implement authenticated saves against the verified schema. Validate evaluation/class/subject ownership and student membership server-side; distinguish absent, zero, blank and explicit skills. A save must atomically replace the selected evaluation's results, including clearing removed observations, and report success only after confirmed persistence. Reuse an existing transactional RPC if present. If the current backend has no safe transactional write surface, document the exact proposed migration for coordination with Claude before applying it. Add conflict detection for concurrent edits.
-4. Mount the Supabase-backed provider only after read/write checks succeed. Update demo-specific copy. Do not automatically migrate localStorage into the server.
-5. Test on the existing synthetic teacher dataset: login → dashboard → class → student → create evaluation → reload → edit/clear results → reload → verify analyses and PDF; verify rejection for a different teacher/class and persistence from a second session. Then review deployment gates for PR #1 and this continuation.
+## Remaining gates
 
-## Verification boundaries
-
-Typecheck, ESLint, unit/component tests and production build are run locally. Route tests use an isolated loopback Auth double, and component save tests use controlled promises: they do not establish real Supabase persistence. PDF samples are rendered with Poppler for layout/text inspection. Live authenticated browser QA and real persistence remain unverified; do not merge or promote to production on these checks alone.
+1. GitHub CI must pass typecheck, lint, unit/component tests, production build and route tests on this branch.
+2. Real browser QA still needs a known teacher password: login → dashboard → class → create assessment → reload → edit/clear results → reload → student profile/PDF → logout.
+3. Vercel connector access is still unavailable in this session (no accessible team returned), so Preview/Production environment scopes and live deployment cannot yet be verified from the connector.
+4. The database has no persisted `important` flag on assessments; live assessments currently map that analytical field to `false`. Add a real column/UI before relying on the “séquence charnière” analysis with server data.
+5. Do not merge to `main` or promote production until CI and real authenticated browser persistence are both verified.
