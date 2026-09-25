@@ -13,7 +13,7 @@ import { formatDate, formatScore } from "@/lib/utils";
 
 export default function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
+  const { dataset, source, loaded, storageError, editableEvaluationIds } = useSchoolData();
 
   if (!loaded || storageError) return <DemoDataState />;
 
@@ -21,7 +21,7 @@ export default function EvaluationDetailPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">
-          Évaluation introuvable sur cet appareil
+{source === "demo" ? "Évaluation introuvable sur cet appareil" : "Évaluation introuvable dans votre espace"}
         </h1>
         <p className="text-ink-soft">
           Les essais sont conservés dans le navigateur utilisé pour les créer.
