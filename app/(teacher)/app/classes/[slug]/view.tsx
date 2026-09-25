@@ -1,4 +1,5 @@
 "use client";
+import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
@@ -31,6 +32,7 @@ export default function ClassRosterPage() {
           {classInfo.name}
         </h1>
       </div>
+      <ExportPdfButton target={{ kind: "class", id: slug }} />
       <nav
         aria-label="Dans cette classe"
         className="flex flex-wrap items-center gap-4 text-sm"
@@ -45,7 +47,7 @@ export default function ClassRosterPage() {
           Compétences
         </a>
         <Button asChild variant="secondary">
-          <Link href="/app/evaluations/nouvelle">Ajouter une évaluation</Link>
+          <Link href={`/app/evaluations/nouvelle?classe=${encodeURIComponent(slug)}`}>Ajouter une évaluation</Link>
         </Button>
       </nav>
       <section id="eleves" className="scroll-mt-5">

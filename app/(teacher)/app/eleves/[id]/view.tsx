@@ -1,4 +1,5 @@
 "use client";
+import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
 import { notFound, useParams } from "next/navigation";
 import Link from "next/link";
@@ -65,6 +66,7 @@ export default function StudentProfilePage() {
         </div>
       </header>
 
+      <ExportPdfButton target={{ kind: "student", id: id }} />
       <section
         aria-labelledby="next-step"
         className="rounded-xl border border-border bg-surface p-5 sm:p-6"

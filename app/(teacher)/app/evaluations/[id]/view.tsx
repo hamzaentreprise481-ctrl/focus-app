@@ -1,4 +1,5 @@
 "use client";
+import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -57,6 +58,7 @@ export default function EvaluationDetailPage() {
         </div>
       </div>
 
+      <ExportPdfButton target={{ kind: "evaluation", id: id }} />
       {editableEvaluationIds.includes(id) && (
         <Button asChild>
           <Link href={`/app/evaluations/${id}/modifier`}>
