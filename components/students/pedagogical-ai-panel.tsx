@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import {
   generatePedagogicalAnalysis,
   loadPedagogicalSnapshot,
+  reviewPedagogicalRecommendation,
 } from "@/app/(teacher)/app/pedagogy-actions";
 import type { PedagogicalSnapshot } from "@/lib/pedagogy/types";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, startLoading] = useTransition();
   const [generating, startGenerating] = useTransition();
+  const [reviewing, startReviewing] = useTransition();
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const refresh = () => {
     startLoading(async () => {
@@ -50,6 +53,31 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
             : result.analysisStatus === "errors_found"
               ? `${result.recommendationCount} recommandation(s) fondée(s) sur les erreurs observées.`
               : "Aucune erreur pédagogique n’a été observée dans les preuves fournies.",
+      );
+      refresh();
+    });
+  };
+
+  const review = (
+    recommendationId: string,
+    decision: "validate" | "dismiss",
+  ) => {
+    setReviewingId(recommendationId);
+    startReviewing(async () => {
+      setMessage(null);
+      const result = await reviewPedagogicalRecommendation(
+        recommendationId,
+        decision,
+      );
+      setReviewingId(null);
+      if (!result.ok) {
+        setMessage(result.error);
+        return;
+      }
+      setMessage(
+        decision === "validate"
+          ? "Recommandation confirmée par le professeur."
+          : "Recommandation écartée.",
       );
       refresh();
     });
@@ -200,6 +228,32 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
                       </>
                     )}
                   </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                    {recommendation.teacherValidated ? (
+                      <span className="text-xs font-medium text-normal">
+                        Confirmée par le professeur
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="h-8 px-3 text-xs"
+                        disabled={reviewing && reviewingId === recommendation.id}
+                        onClick={() => review(recommendation.id, "validate")}
+                      >
+                        Confirmer
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      disabled={reviewing && reviewingId === recommendation.id}
+                      onClick={() => review(recommendation.id, "dismiss")}
+                    >
+                      Écarter
+                    </Button>
+                  </div>
                 </article>
               ))}
             </div>
