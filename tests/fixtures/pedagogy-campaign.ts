@@ -93,6 +93,9 @@ export interface PedagogyCampaignCase {
     status: CampaignExpectedStatus;
     nodeCode?: string;
     errorType?: string;
+    competencyCode?: string;
+    prerequisiteCode?: string;
+    confidence?: "limitee" | "moderee" | "forte";
   };
   syntheticModelOutput: Record<string, unknown>;
 }
@@ -165,6 +168,9 @@ export const PEDAGOGY_CAMPAIGN_CASES: PedagogyCampaignCase[] = [
       status: "errors_found",
       nodeCode: "MATH.ALG.DISTRIBUTIVITE",
       errorType: "calcul",
+      competencyCode: "MATH.COMP.CALCULER",
+      prerequisiteCode: "MATH.PREREQ.CYCLE4.DISTRIBUTIVITE",
+      confidence: "limitee",
     },
     syntheticModelOutput: {
       status: "errors_found",
@@ -197,6 +203,9 @@ export const PEDAGOGY_CAMPAIGN_CASES: PedagogyCampaignCase[] = [
       status: "errors_found",
       nodeCode: "MATH.ALG.EQUATION_PREMIER_DEGRE",
       errorType: "raisonnement",
+      competencyCode: "MATH.COMP.RAISONNER",
+      prerequisiteCode: "MATH.PREREQ.CYCLE4.EQUATIONS",
+      confidence: "limitee",
     },
     syntheticModelOutput: {
       status: "errors_found",
@@ -229,6 +238,9 @@ export const PEDAGOGY_CAMPAIGN_CASES: PedagogyCampaignCase[] = [
       status: "errors_found",
       nodeCode: "MATH.NUM.FRACTIONS.OPERATIONS",
       errorType: "prerequis",
+      competencyCode: "MATH.COMP.CALCULER",
+      prerequisiteCode: "MATH.PREREQ.CYCLE4.FRACTIONS",
+      confidence: "limitee",
     },
     syntheticModelOutput: {
       status: "errors_found",
@@ -261,6 +273,9 @@ export const PEDAGOGY_CAMPAIGN_CASES: PedagogyCampaignCase[] = [
       status: "errors_found",
       nodeCode: "MATH.FONC.IMAGE_ANTECEDENT",
       errorType: "calcul",
+      competencyCode: "MATH.COMP.REPRESENTER",
+      prerequisiteCode: "MATH.FONC.NOTION",
+      confidence: "limitee",
     },
     syntheticModelOutput: {
       status: "errors_found",
@@ -282,6 +297,77 @@ export const PEDAGOGY_CAMPAIGN_CASES: PedagogyCampaignCase[] = [
       ],
     },
   }),
+  {
+    id: "repeated-distributivity",
+    label: "Erreur répétée — distributivité",
+    input: {
+      assessment: {
+        id: "assessment-repeated-distributivity",
+        title: "Erreur répétée — distributivité",
+        contextText: "Campagne de validation FOCUS — calcul littéral.",
+        instructionsText: "Développer puis réduire.",
+      },
+      questions: [
+        {
+          assessmentId: "assessment-repeated-distributivity",
+          questionId: "question-repeated-distributivity-1",
+          prompt: "Développer 4(x + 3).",
+          correctionText: "4x + 12.",
+          rubricText: "2 points.",
+          maxPoints: 2,
+          responseText: "4(x + 3) = 4x + 3",
+          awardedPoints: null,
+          teacherAnnotation: null,
+        },
+        {
+          assessmentId: "assessment-repeated-distributivity",
+          questionId: "question-repeated-distributivity-2",
+          prompt: "Développer 5(2x - 1).",
+          correctionText: "10x - 5.",
+          rubricText: "2 points.",
+          maxPoints: 2,
+          responseText: "5(2x - 1) = 10x - 1",
+          awardedPoints: null,
+          teacherAnnotation: null,
+        },
+      ],
+      curriculum: CAMPAIGN_CURRICULUM,
+    },
+    expected: {
+      status: "errors_found",
+      nodeCode: "MATH.ALG.DISTRIBUTIVITE",
+      errorType: "calcul",
+      competencyCode: "MATH.COMP.CALCULER",
+      prerequisiteCode: "MATH.PREREQ.CYCLE4.DISTRIBUTIVITE",
+      confidence: "moderee",
+    },
+    syntheticModelOutput: {
+      status: "errors_found",
+      insufficientReason: "",
+      errors: [
+        {
+          assessmentId: "assessment-repeated-distributivity",
+          questionId: "question-repeated-distributivity-1",
+          nodeCode: "MATH.ALG.DISTRIBUTIVITE",
+          errorType: "calcul",
+          difficulty: "Le facteur n’est pas distribué au terme constant.",
+          evidenceExcerpt: "4(x + 3) = 4x + 3",
+          explanation: "Le facteur 4 n’est pas appliqué au terme 3.",
+          recommendedAction: "Reprendre la distributivité sur deux expressions courtes.",
+        },
+        {
+          assessmentId: "assessment-repeated-distributivity",
+          questionId: "question-repeated-distributivity-2",
+          nodeCode: "MATH.ALG.DISTRIBUTIVITE",
+          errorType: "calcul",
+          difficulty: "Le facteur n’est pas distribué au terme constant.",
+          evidenceExcerpt: "5(2x - 1) = 10x - 1",
+          explanation: "Le facteur 5 n’est pas appliqué au terme -1.",
+          recommendedAction: "Reprendre la distributivité sur deux expressions courtes.",
+        },
+      ],
+    },
+  },
   baseCase({
     id: "partial-response",
     label: "Réponse partielle",
