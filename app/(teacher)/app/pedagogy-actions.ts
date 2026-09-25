@@ -346,6 +346,49 @@ export async function saveAssessmentEvidence(
   return { ok: true };
 }
 
+export async function reviewPedagogicalRecommendation(
+  recommendationId: string,
+  decision: "validate" | "dismiss",
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireTeacher();
+  const supabase = await createAuthClient();
+  if (!supabase)
+    return { ok: false, error: "Supabase n’est pas configuré." };
+  if (!UUID_RE.test(recommendationId) || !["validate", "dismiss"].includes(decision))
+    return { ok: false, error: "Décision invalide." };
+
+  const recommendationResponse = await supabase
+    .from("pedagogical_recommendations")
+    .select("student_id,assessment_id")
+    .eq("id", recommendationId)
+    .maybeSingle();
+  if (recommendationResponse.error || !recommendationResponse.data)
+    return { ok: false, error: "Recommandation introuvable ou inaccessible." };
+
+  const { error } = await supabase.rpc(
+    "focus_review_pedagogical_recommendation",
+    {
+      p_recommendation_id: recommendationId,
+      p_decision: decision,
+    },
+  );
+  if (error) {
+    console.error("FOCUS recommendation review failed", {
+      code: error.code,
+      message: error.message,
+    });
+    return { ok: false, error: "La décision n’a pas pu être enregistrée." };
+  }
+
+  const row = recommendationResponse.data as {
+    student_id: string;
+    assessment_id: string;
+  };
+  revalidatePath(`/app/eleves/${row.student_id}`);
+  revalidatePath(`/app/evaluations/${row.assessment_id}`);
+  return { ok: true };
+}
+
 async function curriculumGraph(supabase: SupabaseClient) {
   const [nodesResponse, edgesResponse, sourcesResponse] = await Promise.all([
     supabase
