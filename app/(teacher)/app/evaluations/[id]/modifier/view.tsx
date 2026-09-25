@@ -17,8 +17,9 @@ export default function EditEvaluation() {
 {source === "demo" ? "Cet essai n’est pas modifiable ici" : "Cette évaluation n’est pas modifiable par ce compte"}
         </h1>
         <p>
-          Vous pouvez compléter les évaluations que vous avez créées sur cet
-          appareil.
+          {source === "demo"
+            ? "Vous pouvez compléter les évaluations que vous avez créées sur cet appareil."
+            : "Seules les évaluations dont vous êtes l’auteur peuvent être complétées ou corrigées."}
         </p>
         <Link href="/app/evaluations" className="text-brand">
           Retour aux évaluations
