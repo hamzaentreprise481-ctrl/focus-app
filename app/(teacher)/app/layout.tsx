@@ -21,18 +21,22 @@ export default async function TeacherLayout({
     typeof teacher.user_metadata?.display_name === "string"
       ? teacher.user_metadata.display_name
       : "Professeur";
+  const isTestLogin = teacher.app_metadata?.test_login === true;
 
   let schoolData = EMPTY_SUPABASE_SCHOOL_DATA;
   let dataError: string | null = null;
-  try {
-    schoolData = await loadSupabaseSchoolData({
-      teacherId: teacher.id,
-      teacherName: name,
-    });
-  } catch (error) {
-    console.error("FOCUS school data load failed", error);
-    dataError =
-      "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
+
+  if (!isTestLogin) {
+    try {
+      schoolData = await loadSupabaseSchoolData({
+        teacherId: teacher.id,
+        teacherName: name,
+      });
+    } catch (error) {
+      console.error("FOCUS school data load failed", error);
+      dataError =
+        "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
+    }
   }
 
   return (
@@ -41,6 +45,7 @@ export default async function TeacherLayout({
       teacherId={teacher.id}
       schoolData={schoolData}
       dataError={dataError}
+      dataMode={isTestLogin ? "demo" : "supabase"}
     >
       {children}
     </AppShell>
