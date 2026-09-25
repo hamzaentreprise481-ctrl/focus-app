@@ -54,8 +54,69 @@ function outputText(payload: unknown): string {
   return chunks.join("\n");
 }
 
+export function pedagogicalAiModel() {
+  return process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
+}
+
 export function pedagogicalAiConfigured() {
   return Boolean(process.env.OPENAI_API_KEY);
+}
+
+export async function probePedagogicalAiConnection(): Promise<{
+  configured: boolean;
+  ok: boolean;
+  model: string;
+  apiStatus: number | null;
+  error: string | null;
+}> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = pedagogicalAiModel();
+  if (!apiKey)
+    return {
+      configured: false,
+      ok: false,
+      model,
+      apiStatus: null,
+      error: "OPENAI_API_KEY_MISSING",
+    };
+
+  try {
+    const response = await fetch(
+      `https://api.openai.com/v1/models/${encodeURIComponent(model)}`,
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok)
+      return {
+        configured: true,
+        ok: false,
+        model,
+        apiStatus: response.status,
+        error:
+          response.status === 401
+            ? "OPENAI_API_KEY_INVALID"
+            : response.status === 404
+              ? "OPENAI_MODEL_UNAVAILABLE"
+              : "OPENAI_API_UNAVAILABLE",
+      };
+    return {
+      configured: true,
+      ok: true,
+      model,
+      apiStatus: response.status,
+      error: null,
+    };
+  } catch {
+    return {
+      configured: true,
+      ok: false,
+      model,
+      apiStatus: null,
+      error: "OPENAI_NETWORK_ERROR",
+    };
+  }
 }
 
 export async function analyzePedagogicalEvidence(
@@ -64,7 +125,7 @@ export async function analyzePedagogicalEvidence(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY_MISSING");
 
-  const model = process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
+  const model = pedagogicalAiModel();
   const system = PEDAGOGICAL_SYSTEM_PROMPT;
   const schema = PEDAGOGICAL_OUTPUT_SCHEMA;
 
