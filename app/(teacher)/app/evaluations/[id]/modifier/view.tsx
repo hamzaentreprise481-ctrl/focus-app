@@ -7,14 +7,14 @@ import { DemoDataState } from "@/components/evaluations/demo-data-state";
 
 export default function EditEvaluation() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
+  const { dataset, source, loaded, storageError, editableEvaluationIds } = useSchoolData();
   if (!loaded || storageError) return <DemoDataState />;
   const evaluation = dataset.evaluations.find((e) => e.id === id);
   if (!evaluation || !editableEvaluationIds.includes(id))
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">
-          Cet essai n’est pas modifiable ici
+{source === "demo" ? "Cet essai n’est pas modifiable ici" : "Cette évaluation n’est pas modifiable par ce compte"}
         </h1>
         <p>
           Vous pouvez compléter les évaluations que vous avez créées sur cet
