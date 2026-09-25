@@ -43,11 +43,13 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
         return;
       }
       setMessage(
-        result.reused
-          ? "Cette version des preuves a déjà été analysée."
-          : result.recommendationCount
-            ? `${result.recommendationCount} recommandation(s) fondée(s) sur les erreurs observées.`
-            : "Aucune erreur suffisamment étayée n’a été détectée. Aucune recommandation n’a été inventée.",
+        result.analysisStatus === "insufficient_evidence"
+          ? `Preuves insuffisantes : ${result.insufficientReason}`
+          : result.reused
+            ? "Cette version des preuves a déjà été analysée."
+            : result.analysisStatus === "errors_found"
+              ? `${result.recommendationCount} recommandation(s) fondée(s) sur les erreurs observées.`
+              : "Aucune erreur pédagogique n’a été observée dans les preuves fournies.",
       );
       refresh();
     });
@@ -94,6 +96,22 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
               ? ` · prochaine analyse : ${snapshot.latestAnalyzableAssessmentTitle}`
               : ""}
           </p>
+
+          {snapshot.latestAnalysisStatus === "insufficient_evidence" && (
+            <p className="mt-3 rounded-lg bg-paper p-3 text-sm text-ink-soft">
+              <span className="font-medium">Dernière analyse : preuves insuffisantes.</span>
+              {snapshot.latestAnalysisReason
+                ? ` ${snapshot.latestAnalysisReason}`
+                : ""}
+            </p>
+          )}
+
+          {snapshot.latestAnalysisStatus === "no_error_observed" && (
+            <p className="mt-3 rounded-lg bg-paper p-3 text-sm text-ink-soft">
+              Dernière analyse : aucune erreur pédagogique identifiable dans les
+              preuves fournies.
+            </p>
+          )}
 
           {!snapshot.aiConfigured && (
             <p className="mt-3 rounded-lg bg-watch-soft p-3 text-sm text-watch">
