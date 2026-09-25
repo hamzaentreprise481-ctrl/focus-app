@@ -12,6 +12,7 @@ import {
   pedagogicalAiConfigured,
   pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
+import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
 import type {
   AssessmentEvidenceDraft,
   CurriculumNodeSummary,
@@ -675,7 +676,12 @@ export async function generatePedagogicalAnalysis(
   // Prefer the newest evidence set that has not yet been analyzed with the
   // current model. Once it is done, the next click can process older evidence
   // and build longitudinal confidence instead of looping on the latest run.
-  const target = prepared.find((item) => !item.existing) ?? prepared[0];
+  const target = pickNextEvidenceSet(prepared);
+  if (!target)
+    return {
+      ok: false,
+      error: "Aucune évaluation ne contient de preuves exploitables.",
+    };
   const {
     assessment,
     assessmentQuestions,
