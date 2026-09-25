@@ -376,7 +376,7 @@ test("logout failure still removes this browser's session and reports the limita
     jar = "";
   }
 });
-test("server render waits for browser-local evaluation data instead of sending a false 404", async () => {
+test("server data failures stay explicit instead of falling back or sending a false 404", async () => {
   jar =
     "sb-127-auth-token=base64-" +
     Buffer.from(JSON.stringify(session())).toString("base64url");
@@ -384,7 +384,7 @@ test("server render waits for browser-local evaluation data instead of sending a
     const response = await request("/app/evaluations/demo-local");
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /Chargement des essais/);
+    assert.match(html, /Impossible de charger les données de l’établissement/);
     assert.doesNotMatch(html, /NEXT_HTTP_ERROR_FALLBACK;404/);
   } finally {
     jar = "";
