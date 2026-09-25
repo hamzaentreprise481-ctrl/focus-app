@@ -1,4 +1,5 @@
 import type {
+  ClassInfo,
   ConfidenceLevel,
   Evaluation,
   EvaluationDataset,
@@ -6,36 +7,8 @@ import type {
   SkillLevel,
   StatusLevel,
 } from "@/lib/types";
-import { skills, skillById } from "@/lib/data/skills";
-import { evaluations as seedEvaluations } from "@/lib/data/evaluations";
-import { seedRawGrades } from "@/lib/data/grades";
-import { students, studentById } from "@/lib/data/students";
-import { classes, classById } from "@/lib/data/class-info";
-
-// -----------------------------------------------------------------------------
-// Cette logique est volontairement locale et lisible : elle ne cherche pas à
-// être une vraie IA, mais à montrer qu'une analyse utile ne se résume pas à
-// "note < 10 = élève en difficulté". Elle distingue explicitement :
-//   1. une mauvaise note ponctuelle isolée
-//   2. une baisse régulière sur plusieurs évaluations
-//   3. une difficulté qui semble persister sur une compétence précise
-//   4. une progression récente après des difficultés
-//   5. des résultats irréguliers, sans tendance nette
-//   + un cas d'absence à une séquence pédagogique charnière
-//
-// Toutes les fonctions ci-dessous acceptent un `EvaluationDataset` explicite
-// (évaluations + notes). Par défaut elles utilisent les données mockées
-// statiques, mais l'interface "Nouvelle évaluation" peut leur passer un jeu
-// de données enrichi des évaluations ajoutées en cours de démonstration
-// (voir `lib/demo-data-context.tsx`) — aucune fonction ici ne lit jamais le
-// score d'un élève pour DEVINER une compétence : si l'information n'a pas
-// été saisie explicitement, elle est simplement absente.
-// -----------------------------------------------------------------------------
-
-export const defaultDataset: EvaluationDataset = {
-  evaluations: seedEvaluations,
-  rawGrades: seedRawGrades,
-};
+// Pure analysis: every lookup uses the caller's authorized dataset.
+// No fixture import, browser storage or implicit fallback belongs here.
 
 export type PatternType =
   | "stable"
@@ -188,12 +161,12 @@ function skillLevelForGrade(
 
 export function computeSkillMasteries(
   studentId: string,
-  dataset: EvaluationDataset = defaultDataset,
+  dataset: EvaluationDataset,
 ): SkillMastery[] {
   const evalsChrono = sortedEvaluations(dataset).filter(
-    (e) => e.classId === studentById.get(studentId)?.classId,
+    (e) => e.classId === dataset.students.find((s) => s.id === studentId)?.classId,
   );
-  return skills.map((skill) => {
+  return dataset.skills.map((skill) => {
     const tests: { level: SkillLevel; weight: number }[] = [];
     evalsChrono.forEach((evaluation, index) => {
       const grade = gradeFor(studentId, evaluation.id, dataset);
@@ -398,13 +371,13 @@ function buildNarrative(params: {
 
 export function analyzeStudent(
   studentId: string,
-  dataset: EvaluationDataset = defaultDataset,
+  dataset: EvaluationDataset,
 ): StudentAnalysis {
-  const student = studentById.get(studentId);
+  const student = dataset.students.find((s) => s.id === studentId);
   if (!student) throw new Error(`Élève introuvable : ${studentId}`);
 
   const evalsChrono = sortedEvaluations(dataset).filter(
-    (e) => e.classId === studentById.get(studentId)?.classId,
+    (e) => e.classId === dataset.students.find((s) => s.id === studentId)?.classId,
   );
   const timeline = evalsChrono.map((evaluation) => {
     const grade = gradeFor(studentId, evaluation.id, dataset);
@@ -577,7 +550,7 @@ export function analyzeStudent(
 // --- agrégats classe ---------------------------------------------------------
 
 export interface ClassOverview {
-  classInfo: (typeof classes)[number];
+  classInfo: ClassInfo;
   studentAnalyses: StudentAnalysis[];
   counts: {
     total: number;
@@ -595,9 +568,9 @@ export interface ClassOverview {
 
 export function analyzeClass(
   classId: string,
-  dataset: EvaluationDataset = defaultDataset,
+  dataset: EvaluationDataset,
 ): ClassOverview {
-  const classInfo = classById.get(classId);
+  const classInfo = dataset.classes.find((c) => c.id === classId);
   if (!classInfo) throw new Error(`Classe introuvable : ${classId}`);
 
   const studentAnalyses = classInfo.studentIds.map((id) =>
@@ -611,7 +584,7 @@ export function analyzeClass(
     attention: studentAnalyses.filter((a) => a.status === "attention").length,
   };
 
-  const weakestSkills = skills
+  const weakestSkills = dataset.skills
     .map((skill) => {
       const percents = studentAnalyses
         .map((a) => a.skillMasteries.find((sm) => sm.skillId === skill.id))
@@ -659,7 +632,7 @@ const PATTERN_PRIORITY: Record<PatternType, number> = {
 export function getAttentionFeed(
   classId: string,
   limit = 5,
-  dataset: EvaluationDataset = defaultDataset,
+  dataset: EvaluationDataset,
 ): StudentAnalysis[] {
   const { studentAnalyses } = analyzeClass(classId, dataset);
   const statusRank: Record<StatusLevel, number> = {
@@ -714,7 +687,7 @@ const DISTRIBUTION_BUCKETS: [number, number, string][] = [
 
 export function analyzeEvaluation(
   evaluationId: string,
-  dataset: EvaluationDataset = defaultDataset,
+  dataset: EvaluationDataset,
 ): EvaluationAnalysis {
   const evaluation = dataset.evaluations.find((e) => e.id === evaluationId);
   if (!evaluation) throw new Error(`Évaluation introuvable : ${evaluationId}`);
@@ -722,7 +695,7 @@ export function analyzeEvaluation(
   const gradesForEval = dataset.rawGrades.filter(
     (g) =>
       g.evaluationId === evaluationId &&
-      studentById.get(g.studentId)?.classId === evaluation.classId,
+      dataset.students.find((s) => s.id === g.studentId)?.classId === evaluation.classId,
   );
   const priorIds = new Set(
     dataset.evaluations
@@ -747,7 +720,7 @@ export function analyzeEvaluation(
     .filter((g) => g.absent)
     .map((g) => ({
       studentId: g.studentId,
-      name: studentById.get(g.studentId)?.name ?? g.studentId,
+      name: dataset.students.find((s) => s.id === g.studentId)?.name ?? g.studentId,
     }));
 
   // Élèves en difficulté SUR CETTE évaluation : comparés à leur propre
@@ -785,7 +758,7 @@ export function analyzeEvaluation(
       if (!reason) return null;
       return {
         studentId: g.studentId,
-        name: studentById.get(g.studentId)?.name ?? g.studentId,
+        name: dataset.students.find((s) => s.id === g.studentId)?.name ?? g.studentId,
         score: g.score,
         reason,
       } satisfies StrugglingStudent;
@@ -805,7 +778,7 @@ export function analyzeEvaluation(
       : null;
     return {
       skillId,
-      name: skillById.get(skillId)?.name ?? skillId,
+      name: dataset.skills.find((s) => s.id === skillId)?.name ?? skillId,
       weakPercent,
       sampleSize: levels.length,
     };
@@ -819,7 +792,7 @@ export function analyzeEvaluation(
     recordedCount: gradesForEval.length,
     unrecordedCount: Math.max(
       0,
-      (classById.get(evaluation.classId)?.studentIds.length ?? 0) -
+      (dataset.classes.find((c) => c.id === evaluation.classId)?.studentIds.length ?? 0) -
         gradesForEval.length,
     ),
     absentStudents,
@@ -829,6 +802,6 @@ export function analyzeEvaluation(
   };
 }
 
-export function allStudentsCount(): number {
-  return students.length;
+export function allStudentsCount(dataset: EvaluationDataset): number {
+  return dataset.students.length;
 }

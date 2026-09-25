@@ -1,14 +1,15 @@
 "use client";
 
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { analyzeClass } from "@/lib/analysis";
-import { classes } from "@/lib/data/class-info";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 
 export default function ClassesPage() {
-  const { dataset } = useDemoData();
+  const { dataset, loaded, storageError } = useSchoolData();
 
+  if (!loaded || storageError) return <DemoDataState />;
   return (
     <div className="space-y-6">
       <div>
@@ -20,8 +21,9 @@ export default function ClassesPage() {
         </p>
       </div>
 
+      {!dataset.classes.length && <p className="text-ink-soft">Aucune classe disponible dans cet espace.</p>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {classes.map((c) => {
+        {dataset.classes.map((c) => {
           const { counts } = analyzeClass(c.id, dataset);
           return (
             <Link

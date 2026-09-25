@@ -1,3 +1,4 @@
+import { defaultDataset } from "../lib/demo/dataset";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyzeStudent } from "../lib/analysis";
@@ -7,7 +8,7 @@ import type { EvaluationDataset } from "../lib/types";
 const studentId = "lucas-bernard";
 function fixture(): EvaluationDataset {
   return {
-    evaluations: [
+    ...defaultDataset, evaluations: [
       { id: "zero", name: "Zéro", date: "2026-09-01", classId: "seconde-3", skillIds: ["equations"], important: false },
       { id: "skills", name: "Observation", date: "2026-09-02", classId: "seconde-3", skillIds: ["equations", "vecteurs"], important: false },
       { id: "absent", name: "Absence", date: "2026-09-03", classId: "seconde-3", skillIds: ["equations"], important: false },
@@ -47,7 +48,7 @@ test("empty grade objects are not presented as competency observations", () => {
 
 test("latest competency filter ignores unrelated grades and later absences or missing observations", () => {
   const data = fixture();
-  const analysis = analyzeStudent(studentId, data);
+  const analysis = analyzeStudent(studentId, { ...defaultDataset, ...data });
   assert.equal(latestSkillLevel(analysis, "equations"), "fragile");
   assert.equal(latestSkillLevel(analysis, "vecteurs"), null);
   const options = { query: "", status: "all" as const, skillId: "equations", level: "fragile" as const };
@@ -73,7 +74,7 @@ test("name, status and skill filters combine without changing the original roste
 test("a new explicit observation updates the filtered group and dated evidence together", () => {
   const data = fixture();
   data.rawGrades.push({ studentId, evaluationId: "missing", score: null, absent: false, skillLevels: { equations: "en_cours" } });
-  const analysis = analyzeStudent(studentId, data);
+  const analysis = analyzeStudent(studentId, { ...defaultDataset, ...data });
   assert.equal(latestSkillLevel(analysis, "equations"), "en_cours");
   assert.equal(studentEvidence(studentId, "seconde-3", data)[0].levels.equations, "en_cours");
   assert.equal(filterStudentRoster([analysis], { query: "", status: "all", skillId: "equations", level: "fragile" }).length, 0);

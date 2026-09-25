@@ -3,12 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Check, Save } from "lucide-react";
-import { students } from "@/lib/data/students";
-import { skills } from "@/lib/data/skills";
-import { classes } from "@/lib/data/class-info";
 import { SKILL_LEVEL_LABEL } from "@/lib/analysis";
 import type { Evaluation, RawGrade, SkillLevel } from "@/lib/types";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn, formatScore } from "@/lib/utils";
@@ -21,7 +18,6 @@ import {
   type EvaluationRow,
 } from "@/lib/evaluation-entry";
 
-const classStudents = students.filter((s) => s.classId === classes[0].id);
 const LEVEL_OPTIONS: SkillLevel[] = [
   "maitrise",
   "en_cours",
@@ -36,8 +32,11 @@ export function EvaluationEditor({
   initialEvaluation?: Evaluation;
   initialGrades?: RawGrade[];
 }) {
-  const { saveEvaluation, loaded, storageError } = useDemoData();
+  const { dataset, saveEvaluation, loaded, storageError } = useSchoolData();
 
+  const { classes, skills } = dataset;
+  const classId = initialEvaluation?.classId ?? classes[0]?.id;
+  const classStudents = useMemo(() => dataset.students.filter((s) => s.classId === classId), [dataset.students, classId]);
   const [name, setName] = useState(initialEvaluation?.name ?? "");
   const [date, setDate] = useState(initialEvaluation?.date ?? "");
   const [selectedSkills, setSelectedSkills] = useState<string[]>(
@@ -116,7 +115,7 @@ export function EvaluationEditor({
         : parseScoreInput(row.scoreInput);
       return { student, row, parsed };
     });
-  }, [rows]);
+  }, [rows, classStudents]);
 
   const gradedCount = parsedRows.filter(
     (r) =>
@@ -139,16 +138,16 @@ export function EvaluationEditor({
   const readyToGrade =
     name.trim() !== "" && name.trim().length <= 200 && validDate(date);
   const canSave =
-    loaded && !storageError && readyToGrade && gradedCount > 0 && !hasErrors;
+    loaded && !!classId && !storageError && readyToGrade && gradedCount > 0 && !hasErrors;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canSave) return;
     const evaluationId = initialEvaluation?.id ?? `demo-${crypto.randomUUID()}`;
     const evaluation: Evaluation = {
       id: evaluationId,
       name: name.trim(),
       date,
-      classId: initialEvaluation?.classId ?? classes[0].id,
+      classId: classId!,
       skillIds: selectedSkills,
       important: initialEvaluation?.important ?? false,
     };
@@ -156,7 +155,7 @@ export function EvaluationEditor({
       const grade = gradeFromRow(student.id, evaluationId, row, selectedSkills);
       return grade ? [grade] : [];
     });
-    const result = saveEvaluation(evaluation, grades);
+    const result = await saveEvaluation(evaluation, grades);
     if (!result.ok) {
       setSaveError(result.error);
       return;
@@ -257,7 +256,7 @@ export function EvaluationEditor({
         <div>
           <Label>Classe</Label>
           <div className="flex h-10 items-center rounded-[var(--radius-sm)] border border-border-strong bg-paper px-3 text-sm text-ink-soft">
-            {classes[0].name} · {classes[0].subject}
+            {classes.find((c) => c.id === classId)?.name} · {classes.find((c) => c.id === classId)?.subject}
           </div>
         </div>
         <div className="sm:col-span-2">

@@ -1,18 +1,20 @@
 "use client";
 
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import Link from "next/link";
 import { ChevronRight, Plus, Users, Sparkles } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatScore } from "@/lib/utils";
 
 export default function EvaluationsPage() {
-  const { dataset, addedEvaluationIds } = useDemoData();
+  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
   const evaluations = [...dataset.evaluations].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
 
+  if (!loaded || storageError) return <DemoDataState />;
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -35,7 +37,7 @@ export default function EvaluationsPage() {
       <div className="space-y-2">
         {evaluations.map((evaluation) => {
           const analysis = analyzeEvaluation(evaluation.id, dataset);
-          const isNew = addedEvaluationIds.includes(evaluation.id);
+          const isNew = editableEvaluationIds.includes(evaluation.id);
           return (
             <Link
               key={evaluation.id}

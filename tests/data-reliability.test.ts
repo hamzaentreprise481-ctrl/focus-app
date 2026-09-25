@@ -1,3 +1,4 @@
+import { defaultDataset } from "../lib/demo/dataset";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -41,18 +42,18 @@ test("competency-only entry survives saving and contributes to both profile and 
   assert.equal(grade.score, null);
   assert.equal(grade.absent, false);
   assert.equal(
-    computeSkillMasteries(studentId, data).find(
+    computeSkillMasteries(studentId, { ...defaultDataset, ...data }).find(
       (s) => s.skillId === "equations",
     )?.testedCount,
     1,
   );
   assert.equal(
-    analyzeEvaluation(evaluation.id, data).skillBreakdown[0].sampleSize,
+    analyzeEvaluation(evaluation.id, { ...defaultDataset, ...data }).skillBreakdown[0].sampleSize,
     1,
   );
-  assert.equal(analyzeEvaluation(evaluation.id, data).average, null);
-  assert.equal(analyzeEvaluation(evaluation.id, data).presentCount, 1);
-  assert.equal(analyzeEvaluation(evaluation.id, data).unrecordedCount, 30);
+  assert.equal(analyzeEvaluation(evaluation.id, { ...defaultDataset, ...data }).average, null);
+  assert.equal(analyzeEvaluation(evaluation.id, { ...defaultDataset, ...data }).presentCount, 1);
+  assert.equal(analyzeEvaluation(evaluation.id, { ...defaultDataset, ...data }).unrecordedCount, 30);
 });
 test("blank, zero, absence and explicit skill levels are different observations", () => {
   const row = { scoreInput: "", absent: false, levels: {} };
@@ -95,6 +96,7 @@ test("invalid score formats and impossible dates are rejected", () => {
 });
 test("missing observations are never narrated as normal progression", () => {
   const a = analyzeStudent(studentId, {
+    ...defaultDataset,
     evaluations: [evaluation],
     rawGrades: [],
   });
@@ -106,6 +108,7 @@ test("missing observations are never narrated as normal progression", () => {
 test("unrelated classes do not affect a student timeline or mastery", () => {
   const other = { ...evaluation, classId: "other-class" };
   const a = analyzeStudent(studentId, {
+    ...defaultDataset,
     evaluations: [other],
     rawGrades: [
       {
@@ -123,7 +126,7 @@ test("unrelated classes do not affect a student timeline or mastery", () => {
 });
 test("historical evaluation analysis cannot use future results as its baseline", () => {
   const future = { ...evaluation, id: "demo-future", date: "2026-09-12" };
-  const data: EvaluationDataset = {
+  const data: EvaluationDataset = { ...defaultDataset,
     evaluations: [evaluation, future],
     rawGrades: [
       { studentId, evaluationId: evaluation.id, score: 8, absent: false },
@@ -131,12 +134,12 @@ test("historical evaluation analysis cannot use future results as its baseline",
     ],
   };
   assert.equal(
-    analyzeEvaluation(evaluation.id, data).strugglingStudents.length,
+    analyzeEvaluation(evaluation.id, { ...defaultDataset, ...data }).strugglingStudents.length,
     0,
   );
 });
 test("evolution labels count evaluations rather than intervals", () => {
-  const data: EvaluationDataset = { evaluations: [], rawGrades: [] };
+  const data: EvaluationDataset = { ...defaultDataset, evaluations: [], rawGrades: [] };
   for (let i = 0; i < 3; i++) {
     const e = { ...evaluation, id: `demo-${i}`, date: `2026-09-${11 + i}` };
     data.evaluations.push(e);
@@ -147,7 +150,7 @@ test("evolution labels count evaluations rather than intervals", () => {
       absent: false,
     });
   }
-  assert.equal(analyzeStudent(studentId, data).evolutionWindow, 3);
+  assert.equal(analyzeStudent(studentId, { ...defaultDataset, ...data }).evolutionWindow, 3);
 });
 test("corrupt persisted shapes, foreign students and duplicate grades are rejected", () => {
   for (const value of [

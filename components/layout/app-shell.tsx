@@ -1,3 +1,4 @@
+import { DemoDataProvider } from "@/lib/demo-data-context";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TeacherProvider } from "@/components/layout/teacher-context";
 import { DemoDataState } from "@/components/evaluations/demo-data-state";
@@ -12,6 +13,7 @@ export function AppShell({
 }) {
   return (
     <TeacherProvider name={teacherName} id={teacherId}>
+      <DemoDataProvider>
       <div className="teacher-shell">
         <a href="#main-content" className="skip-link">
           Aller au contenu
@@ -28,6 +30,7 @@ export function AppShell({
           </div>
         </main>
       </div>
+      </DemoDataProvider>
     </TeacherProvider>
   );
 }

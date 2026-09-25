@@ -1,4 +1,6 @@
 "use client";
+import { useState } from "react";
+import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -8,21 +10,26 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { analyzeClass, getAttentionFeed } from "@/lib/analysis";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { useTeacher } from "@/components/layout/teacher-context";
 import { AttentionCard } from "@/components/dashboard/attention-card";
 import { MasteryBar } from "@/components/ui/mastery-bar";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { dataset } = useDemoData();
+  const { dataset, loaded, storageError } = useSchoolData();
   const { name } = useTeacher();
+  const [selectedClass, setSelectedClass] = useState("");
+  const activeClass = dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
+  if (!loaded || storageError) return <DemoDataState />;
+  if (!activeClass) return <p className="text-ink-soft">Aucune classe disponible dans cet espace.</p>;
   const { classInfo, counts, weakestSkills } = analyzeClass(
-    "seconde-3",
+    activeClass.id,
     dataset,
   );
-  const feed = getAttentionFeed("seconde-3", 4, dataset);
-  const recent = [...dataset.evaluations]
+  const feed = getAttentionFeed(activeClass.id, 4, dataset);
+  const classEvaluations = dataset.evaluations.filter((e) => e.classId === activeClass.id);
+  const recent = [...classEvaluations]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 3);
   const actions = [
@@ -48,6 +55,12 @@ export default function DashboardPage() {
   return (
     <div className="space-y-10">
       <section className="welcome-area">
+        {dataset.classes.length > 1 && <div className="mb-5">
+          <label htmlFor="dashboard-class" className="mr-3 text-sm">Classe</label>
+          <select id="dashboard-class" value={activeClass.id} onChange={(event) => setSelectedClass(event.target.value)} className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm">
+            {dataset.classes.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.subject}</option>)}
+          </select>
+        </div>}
         <p className="text-sm text-brand">
           {classInfo.name} <span className="mx-2 text-border-strong">/</span>{" "}
           {classInfo.subject}
@@ -82,7 +95,7 @@ export default function DashboardPage() {
               Le fil de votre classe
             </h2>
             <p className="mt-1 text-sm text-ink-soft">
-              {counts.total} élèves · {dataset.evaluations.length} évaluations
+              {counts.total} élèves · {classEvaluations.length} évaluations
               dans cet espace de démonstration
             </p>
           </div>

@@ -1,15 +1,15 @@
+import { defaultDataset } from "../lib/demo/dataset";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   analyzeStudent,
   analyzeEvaluation,
   computeSkillMasteries,
-  defaultDataset,
 } from "../lib/analysis";
 import type { EvaluationDataset, SkillLevel } from "../lib/types";
 function fixture(scores: number[], levels?: SkillLevel[]): EvaluationDataset {
   return {
-    evaluations: scores.map((_, i) => ({
+    ...defaultDataset, evaluations: scores.map((_, i) => ({
       id: `t${i}`,
       name: `Test ${i}`,
       date: `2026-01-${String(i + 1).padStart(2, "0")}`,

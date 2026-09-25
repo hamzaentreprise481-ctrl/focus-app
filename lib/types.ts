@@ -1,4 +1,4 @@
-// Types du domaine FOCUS — V0 (données mockées, mathématiques uniquement)
+// Types du domaine FOCUS, indépendants de la source de données.
 
 export type StatusLevel = "normal" | "a_surveiller" | "attention";
 
@@ -62,6 +62,9 @@ export interface RawGrade {
 
 /** L'ensemble des données (évaluations + notes) sur lesquelles portent les analyses. */
 export interface EvaluationDataset {
+  classes: ClassInfo[];
+  students: Student[];
+  skills: Skill[];
   evaluations: Evaluation[];
   rawGrades: RawGrade[];
 }

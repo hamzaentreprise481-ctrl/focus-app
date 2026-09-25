@@ -4,7 +4,6 @@ import { useId, useState } from "react";
 import Link from "next/link";
 import type { EvaluationDataset } from "@/lib/types";
 import { SKILL_LEVEL_LABEL } from "@/lib/analysis";
-import { skills } from "@/lib/data/skills";
 import { studentEvidence } from "@/lib/student-evidence";
 import { formatDate, formatScore } from "@/lib/utils";
 
@@ -13,6 +12,7 @@ export function EvidenceTimeline({ studentId, classId, dataset }: {
   classId: string;
   dataset: EvaluationDataset;
 }) {
+  const { skills } = dataset;
   const selectId = useId();
   const [skillId, setSkillId] = useState("");
   const rows = studentEvidence(studentId, classId, dataset)

@@ -5,23 +5,22 @@ import { notFound, useParams } from "next/navigation";
 import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { analyzeClass } from "@/lib/analysis";
-import { classById } from "@/lib/data/class-info";
 import { DemoDataState } from "@/components/evaluations/demo-data-state";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { StudentRoster } from "@/components/students/student-roster";
 
 export default function ClassRosterPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { dataset, loaded } = useDemoData();
+  const { dataset, loaded, storageError } = useSchoolData();
 
-  if (!classById.has(slug)) notFound();
+  if (!loaded || storageError) return <DemoDataState />;
+  if (!dataset.classes.some((c) => c.id === slug)) notFound();
 
   const { classInfo, studentAnalyses, weakestSkills } = analyzeClass(
     slug,
     dataset,
   );
 
-  if (!loaded) return <DemoDataState />;
 
   return (
     <div className="space-y-6">
@@ -51,7 +50,7 @@ export default function ClassRosterPage() {
       </nav>
       <section id="eleves" className="scroll-mt-5">
         <h2 className="mb-4 text-lg font-semibold">Élèves</h2>
-        <StudentRoster analyses={studentAnalyses} />
+        <StudentRoster analyses={studentAnalyses} skills={dataset.skills} />
       </section>
       <section
         id="evaluations"

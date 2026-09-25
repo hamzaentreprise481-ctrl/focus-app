@@ -4,19 +4,19 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
-import { classById } from "@/lib/data/class-info";
 import { Button } from "@/components/ui/button";
 import { DemoDataState } from "@/components/evaluations/demo-data-state";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
 
 export default function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, loaded, storageError, addedEvaluationIds } = useDemoData();
+  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
+
+  if (!loaded || storageError) return <DemoDataState />;
 
   if (!dataset.evaluations.some((e) => e.id === id)) {
-    if (!loaded || storageError) return <DemoDataState />;
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">
@@ -52,12 +52,12 @@ export default function EvaluationDetailPage() {
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
             {formatDate(evaluation.date)} ·{" "}
-            {classById.get(evaluation.classId)?.name}
+            {dataset.classes.find((c) => c.id === evaluation.classId)?.name}
           </p>
         </div>
       </div>
 
-      {addedEvaluationIds.includes(id) && (
+      {editableEvaluationIds.includes(id) && (
         <Button asChild>
           <Link href={`/app/evaluations/${id}/modifier`}>
             Compléter ou corriger les résultats

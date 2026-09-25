@@ -1,16 +1,16 @@
 "use client";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { EvaluationEditor } from "@/components/evaluations/evaluation-editor";
 import { DemoDataState } from "@/components/evaluations/demo-data-state";
 
 export default function EditEvaluation() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, loaded, storageError, addedEvaluationIds } = useDemoData();
+  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
   if (!loaded || storageError) return <DemoDataState />;
   const evaluation = dataset.evaluations.find((e) => e.id === id);
-  if (!evaluation || !addedEvaluationIds.includes(id))
+  if (!evaluation || !editableEvaluationIds.includes(id))
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">

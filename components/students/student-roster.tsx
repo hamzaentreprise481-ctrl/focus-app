@@ -4,9 +4,8 @@ import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { CONFIDENCE_LABEL, SKILL_LEVEL_LABEL, type StudentAnalysis } from "@/lib/analysis";
-import type { StatusLevel } from "@/lib/types";
+import type { Skill, StatusLevel } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { skills } from "@/lib/data/skills";
 import { filterStudentRoster, latestSkillLevel, type SkillLevelFilter } from "@/lib/student-evidence";
 import { Input } from "@/components/ui/input";
 import { cn, formatScore, initials } from "@/lib/utils";
@@ -41,7 +40,7 @@ function EvolutionCell({ evolution }: { evolution: number | null }) {
   );
 }
 
-export function StudentRoster({ analyses }: { analyses: StudentAnalysis[] }) {
+export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[]; skills: Skill[] }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusLevel | "all">("all");
 

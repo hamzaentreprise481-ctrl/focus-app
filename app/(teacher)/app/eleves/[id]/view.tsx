@@ -4,9 +4,7 @@ import { notFound, useParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { analyzeStudent } from "@/lib/analysis";
-import { studentById } from "@/lib/data/students";
-import { classById } from "@/lib/data/class-info";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
@@ -17,11 +15,12 @@ import { formatScore } from "@/lib/utils";
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, loaded } = useDemoData();
-  const student = studentById.get(id);
+  const { dataset, loaded, storageError } = useSchoolData();
+  if (!loaded || storageError) return <DemoDataState />;
+  const student = dataset.students.find((s) => s.id === id);
   if (!student) notFound();
   const analysis = analyzeStudent(id, dataset);
-  const classInfo = classById.get(student.classId);
+  const classInfo = dataset.classes.find((c) => c.id === student.classId);
   const documented = analysis.skillMasteries.filter((s) => s.testedCount > 0);
   const strengths = documented.filter(
     (s) =>
@@ -37,7 +36,6 @@ export default function StudentProfilePage() {
       analysis.timeline.some((t) => t.evaluation.id === g.evaluationId),
   );
   const nextAction = analysis.recommendedActions[0];
-  if (!loaded) return <DemoDataState />;
 
   return (
     <div className="space-y-8">

@@ -1,9 +1,9 @@
 "use client";
-import { useDemoData } from "@/lib/demo-data-context";
+import { useSchoolData } from "@/lib/school-data-context";
 import { Button } from "@/components/ui/button";
 
 export function DemoDataState() {
-  const { loaded, storageError, retryStorage } = useDemoData();
+  const { loaded, storageError, retryStorage } = useSchoolData();
   if (!loaded)
     return (
       <p role="status" className="py-6 text-sm text-ink-soft">
