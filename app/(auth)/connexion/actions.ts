@@ -1,9 +1,17 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createAuthClient, clearAuthCookies } from "@/lib/auth/server";
 import { loginError } from "@/lib/auth/errors";
 import { isTeacher, safeNext } from "@/lib/auth/policy";
+import {
+  TEST_TEACHER_COOKIE,
+  TEST_TEACHER_COOKIE_VALUE,
+  TEST_TEACHER_EMAIL,
+  TEST_TEACHER_PASSWORD,
+  testTeacherLoginEnabled,
+} from "@/lib/auth/test-login";
 
 export async function login(
   _previous: { error: string } | null,
@@ -19,6 +27,20 @@ export async function login(
   ) {
     return { error: "Renseignez votre adresse e-mail et votre mot de passe." };
   }
+  if (testTeacherLoginEnabled() && email.toLowerCase() === TEST_TEACHER_EMAIL) {
+    if (password !== TEST_TEACHER_PASSWORD)
+      return { error: "Identifiants incorrects." };
+
+    const cookieStore = await cookies();
+    cookieStore.set(TEST_TEACHER_COOKIE, TEST_TEACHER_COOKIE_VALUE, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: !!process.env.VERCEL,
+      path: "/",
+    });
+    redirect("/app");
+  }
+
   const supabase = await createAuthClient();
   if (!supabase)
     return {
