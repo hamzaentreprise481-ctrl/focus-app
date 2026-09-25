@@ -156,3 +156,14 @@ ouvrir la Preview et tester avant de fusionner dans `main`. La promotion en
 production est autorisée par le propriétaire, mais reste bloquée tant que
 l'accès aux fournisseurs et la connexion réelle ne sont pas vérifiés.
 
+
+### V1 continuation (25 September 2026)
+
+Teacher views and analysis now consume an explicit `EvaluationDataset` through
+`SchoolDataProvider`. The mounted adapter is **still the local demonstration**;
+Supabase academic persistence is blocked on this session's project permissions.
+The existing authentication is unchanged. Class/student/evaluation pages now
+export PDF reports from their current dataset; PDF generation stays in the browser.
+Evaluation saves wait for confirmation, preserve failed input and prevent duplicate
+submissions. See [the integration handoff](docs/SUPABASE_INTEGRATION_HANDOFF.md)
+for the exact remaining backend work and verification gates.
