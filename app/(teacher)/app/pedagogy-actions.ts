@@ -525,6 +525,26 @@ export async function loadPedagogicalSnapshot(
   };
 }
 
+async function persistNoEvidenceOutcome(params: {
+  supabase: SupabaseClient;
+  schoolId: string;
+  studentId: string;
+  assessmentId: string;
+  model: string;
+  inputHash: string;
+  reason: string;
+}) {
+  const { error } = await params.supabase.rpc("focus_persist_no_evidence", {
+    p_school_id: params.schoolId,
+    p_student_id: params.studentId,
+    p_assessment_id: params.assessmentId,
+    p_model: params.model,
+    p_input_hash: params.inputHash,
+    p_reason: params.reason,
+  });
+  ensureOk(error, "Trace d’analyse insuffisante");
+}
+
 export async function generatePedagogicalAnalysis(
   studentId: string,
 ): Promise<
@@ -718,26 +738,15 @@ export async function generatePedagogicalAnalysis(
   if (!hasStudentAnswer) {
     const reason =
       "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
-    const dismissResponse = await supabase
-      .from("pedagogical_recommendations")
-      .update({ dismissed_at: new Date().toISOString() })
-      .eq("student_id", studentId)
-      .eq("assessment_id", assessment.id)
-      .is("dismissed_at", null);
-    ensureOk(dismissResponse.error, "Invalidation des recommandations");
-
-    const noEvidenceResponse = await supabase.from("ai_analysis_runs").insert({
-      school_id: context.schoolId,
-      teacher_id: teacher.id,
-      student_id: studentId,
-      assessment_id: assessment.id,
+    await persistNoEvidenceOutcome({
+      supabase,
+      schoolId: context.schoolId,
+      studentId,
+      assessmentId: assessment.id,
       model,
-      input_hash: inputHash,
-      status: "no_evidence",
-      failure_reason: reason,
-      completed_at: new Date().toISOString(),
+      inputHash,
+      reason,
     });
-    ensureOk(noEvidenceResponse.error, "Trace d’analyse insuffisante");
 
     revalidatePath(`/app/eleves/${studentId}`);
     return {
@@ -784,26 +793,15 @@ export async function generatePedagogicalAnalysis(
   );
 
   if (validatedAnalysis.status === "insufficient_evidence") {
-    const dismissResponse = await supabase
-      .from("pedagogical_recommendations")
-      .update({ dismissed_at: new Date().toISOString() })
-      .eq("student_id", studentId)
-      .eq("assessment_id", assessment.id)
-      .is("dismissed_at", null);
-    ensureOk(dismissResponse.error, "Invalidation des recommandations");
-
-    const noEvidenceResponse = await supabase.from("ai_analysis_runs").insert({
-      school_id: context.schoolId,
-      teacher_id: teacher.id,
-      student_id: studentId,
-      assessment_id: assessment.id,
+    await persistNoEvidenceOutcome({
+      supabase,
+      schoolId: context.schoolId,
+      studentId,
+      assessmentId: assessment.id,
       model: modelResult.model,
-      input_hash: inputHash,
-      status: "no_evidence",
-      failure_reason: validatedAnalysis.insufficientReason,
-      completed_at: new Date().toISOString(),
+      inputHash,
+      reason: validatedAnalysis.insufficientReason,
     });
-    ensureOk(noEvidenceResponse.error, "Trace d’analyse insuffisante");
 
     revalidatePath(`/app/eleves/${studentId}`);
     return {
