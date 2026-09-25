@@ -24,8 +24,9 @@ export default function EvaluationDetailPage() {
 {source === "demo" ? "Évaluation introuvable sur cet appareil" : "Évaluation introuvable dans votre espace"}
         </h1>
         <p className="text-ink-soft">
-          Les essais sont conservés dans le navigateur utilisé pour les créer.
-          Vérifiez le compte professeur et l’appareil.
+          {source === "demo"
+            ? "Les essais sont conservés dans le navigateur utilisé pour les créer. Vérifiez le compte professeur et l’appareil."
+            : "Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès."}
         </p>
         <Link className="text-brand" href="/app/evaluations">
           Retour aux évaluations
