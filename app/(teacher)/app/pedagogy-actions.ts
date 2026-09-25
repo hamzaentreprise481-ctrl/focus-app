@@ -66,6 +66,7 @@ type CurriculumNodeRow = {
   id: string;
   source_id: string;
   code: string;
+  node_type: "domain" | "notion" | "competency" | "prerequisite";
   title: string;
   description: string | null;
   source_locator: string;
@@ -349,7 +350,7 @@ async function curriculumGraph(supabase: SupabaseClient) {
   const [nodesResponse, edgesResponse, sourcesResponse] = await Promise.all([
     supabase
       .from("curriculum_nodes")
-      .select("id,source_id,code,title,description,source_locator")
+      .select("id,source_id,code,node_type,title,description,source_locator")
       .like("code", "MATH.%")
       .eq("active", true),
     supabase
@@ -370,6 +371,7 @@ async function curriculumGraph(supabase: SupabaseClient) {
   const summaries: CurriculumNodeSummary[] = nodes.map((node) => ({
     id: node.id,
     code: node.code,
+    nodeType: node.node_type,
     title: node.title,
     description: node.description,
     sourceLocator: node.source_locator,
@@ -766,7 +768,9 @@ export async function generatePedagogicalAnalysis(
   }
 
   const nodesByCode = new Map(
-    graph.nodes.map((node) => [node.code, node.id]),
+    graph.nodes
+      .filter((node) => node.node_type === "notion")
+      .map((node) => [node.code, node.id]),
   );
   const validationQuestions = assessmentQuestions.map((question) => ({
     assessmentId: assessment.id,
