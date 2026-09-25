@@ -95,8 +95,10 @@ export default function DashboardPage() {
               Le fil de votre classe
             </h2>
             <p className="mt-1 text-sm text-ink-soft">
-              {counts.total} élèves · {classEvaluations.length} évaluations
-              dans cet espace de démonstration
+              {counts.total} élèves · {classEvaluations.length} évaluations{" "}
+              {source === "demo"
+                ? "dans cet espace de démonstration"
+                : "synchronisées avec l’établissement"}
             </p>
           </div>
           <Link
