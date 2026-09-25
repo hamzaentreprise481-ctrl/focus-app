@@ -67,7 +67,10 @@ export async function analyzePedagogicalEvidence(
     "Interdiction absolue de déduire une difficulté à partir d'une moyenne générale, d'une note globale ou d'un profil supposé de l'élève.",
     "Chaque erreur retournée doit citer mot pour mot un court extrait réellement présent dans responseText.",
     "Chaque nodeCode doit appartenir exactement à la liste curriculum fournie. N'invente jamais un point du programme.",
-    "Si une réponse est correcte, ambiguë ou insuffisante pour établir une erreur, ne retourne aucune erreur pour cette question.",
+    "Tu dois distinguer explicitement trois issues : errors_found, no_error_observed, insufficient_evidence.",
+    "Utilise insufficient_evidence si la réponse est vide, trop partielle, ambiguë ou si le corrigé/barème ne permet pas d'établir une erreur précise. Dans ce cas, errors doit être vide et insufficientReason doit expliquer brièvement ce qui manque.",
+    "Utilise no_error_observed uniquement quand les preuves permettent de considérer la réponse comme correcte ou sans erreur pédagogique identifiable. Dans ce cas, errors doit être vide.",
+    "Utilise errors_found uniquement si au moins une erreur précise est démontrée par la réponse de l'élève.",
     "Une action pédagogique doit cibler l'erreur observée et rester proportionnée à la preuve.",
     "Ne produis aucun diagnostic psychologique, médical, comportemental ou social.",
   ].join("\n");
@@ -76,6 +79,11 @@ export async function analyzePedagogicalEvidence(
     type: "object",
     additionalProperties: false,
     properties: {
+      status: {
+        type: "string",
+        enum: ["errors_found", "no_error_observed", "insufficient_evidence"],
+      },
+      insufficientReason: { type: "string" },
       errors: {
         type: "array",
         maxItems: 12,
@@ -116,7 +124,7 @@ export async function analyzePedagogicalEvidence(
         },
       },
     },
-    required: ["errors"],
+    required: ["status", "insufficientReason", "errors"],
   };
 
   const response = await fetch("https://api.openai.com/v1/responses", {
