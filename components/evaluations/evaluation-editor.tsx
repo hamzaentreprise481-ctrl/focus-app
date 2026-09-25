@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Check, Save } from "lucide-react";
 import { SKILL_LEVEL_LABEL } from "@/lib/analysis";
@@ -28,14 +28,20 @@ const LEVEL_OPTIONS: SkillLevel[] = [
 export function EvaluationEditor({
   initialEvaluation,
   initialGrades = [],
+  initialClassId,
 }: {
   initialEvaluation?: Evaluation;
   initialGrades?: RawGrade[];
+  initialClassId?: string;
 }) {
-  const { dataset, saveEvaluation, loaded, storageError } = useSchoolData();
+  const { dataset, source, saveEvaluation, loaded, storageError } = useSchoolData();
 
   const { classes, skills } = dataset;
-  const classId = initialEvaluation?.classId ?? classes[0]?.id;
+  const [selectedClassId, setSelectedClassId] = useState(initialEvaluation?.classId ?? initialClassId ?? "");
+  const classId = classes.find((c) => c.id === selectedClassId)?.id ?? classes[0]?.id;
+  const evaluationId = useRef(initialEvaluation?.id ?? "");
+  const saveLock = useRef(false);
+  const [saving, setSaving] = useState(false);
   const classStudents = useMemo(() => dataset.students.filter((s) => s.classId === classId), [dataset.students, classId]);
   const [name, setName] = useState(initialEvaluation?.name ?? "");
   const [date, setDate] = useState(initialEvaluation?.date ?? "");
@@ -138,13 +144,17 @@ export function EvaluationEditor({
   const readyToGrade =
     name.trim() !== "" && name.trim().length <= 200 && validDate(date);
   const canSave =
-    loaded && !!classId && !storageError && readyToGrade && gradedCount > 0 && !hasErrors;
+    loaded && !!classId && !storageError && !saving && readyToGrade && (gradedCount > 0 || !!initialEvaluation) && !hasErrors;
 
   const handleSave = async () => {
-    if (!canSave) return;
-    const evaluationId = initialEvaluation?.id ?? `demo-${crypto.randomUUID()}`;
+    if (!canSave || saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+    if (!evaluationId.current) evaluationId.current = source === "demo" ? `demo-${crypto.randomUUID()}` : crypto.randomUUID();
     const evaluation: Evaluation = {
-      id: evaluationId,
+      id: evaluationId.current,
       name: name.trim(),
       date,
       classId: classId!,
@@ -152,7 +162,7 @@ export function EvaluationEditor({
       important: initialEvaluation?.important ?? false,
     };
     const grades = parsedRows.flatMap(({ student, row }) => {
-      const grade = gradeFromRow(student.id, evaluationId, row, selectedSkills);
+      const grade = gradeFromRow(student.id, evaluationId.current, row, selectedSkills);
       return grade ? [grade] : [];
     });
     const result = await saveEvaluation(evaluation, grades);
@@ -162,9 +172,16 @@ export function EvaluationEditor({
     }
     setSaveError(null);
     setSavedEvaluation(evaluation);
+    } catch {
+      setSaveError("Enregistrement impossible. Votre saisie est conservée. Réessayez.");
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
   };
 
   const resetForm = () => {
+    evaluationId.current = "";
     setName("");
     setDate("");
     setSelectedSkills([]);
@@ -186,10 +203,9 @@ export function EvaluationEditor({
               : "Évaluation enregistrée"}
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
-            « {savedEvaluation.name} » est enregistrée sur cet appareil. Les
-            statistiques de la classe, le tableau de bord et les fiches élèves
-            concernées sont à jour. Cet essai reste local et n’est pas
-            synchronisé avec d’autres appareils.
+            « {savedEvaluation.name} » est enregistrée {source === "demo" ? "sur cet appareil" : "dans votre espace professeur"}.
+            Les statistiques et les fiches élèves concernées sont à jour.
+            {source === "demo" && " Cet essai reste local et n’est pas synchronisé avec d’autres appareils."}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
@@ -228,12 +244,11 @@ export function EvaluationEditor({
             : "Nouvelle évaluation"}
         </h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Utilisez uniquement des données fictives. Vos essais restent sur cet
-          appareil ; ils ne sont pas synchronisés.
+          {source === "demo" ? "Utilisez uniquement des données fictives. Vos essais restent sur cet appareil ; ils ne sont pas synchronisés." : "Les notes et les compétences sont enregistrées dans votre espace professeur."}
         </p>
       </div>
 
-      <section className="grid grid-cols-1 gap-5 rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:grid-cols-2">
+      <fieldset disabled={saving} className="grid grid-cols-1 gap-5 rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:grid-cols-2">
         <div>
           <Label htmlFor="eval-name">Nom de l&rsquo;évaluation</Label>
           <Input
@@ -254,10 +269,15 @@ export function EvaluationEditor({
           />
         </div>
         <div>
-          <Label>Classe</Label>
-          <div className="flex h-10 items-center rounded-[var(--radius-sm)] border border-border-strong bg-paper px-3 text-sm text-ink-soft">
-            {classes.find((c) => c.id === classId)?.name} · {classes.find((c) => c.id === classId)?.subject}
-          </div>
+          <Label htmlFor="eval-class">Classe</Label>
+          <select id="eval-class" value={classId ?? ""}
+            disabled={!!initialEvaluation || Object.keys(rows).length > 0 || saving}
+            onChange={(event) => setSelectedClassId(event.target.value)}
+            className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm">
+            {!classes.length && <option value="">Aucune classe disponible</option>}
+            {classes.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.subject}</option>)}
+          </select>
+          {!initialEvaluation && Object.keys(rows).length > 0 && <p className="mt-2 text-xs text-ink-soft">La classe reste fixe après le début de la saisie.</p>}
         </div>
         <div className="sm:col-span-2">
           <p className="mb-2 text-sm font-medium">
@@ -290,10 +310,10 @@ export function EvaluationEditor({
             })}
           </div>
         </div>
-      </section>
+      </fieldset>
 
       {readyToGrade && (
-        <section>
+        <fieldset disabled={saving}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-[15px] font-semibold text-ink">
@@ -447,10 +467,10 @@ export function EvaluationEditor({
             )}
             <Button variant="primary" onClick={handleSave} disabled={!canSave}>
               <Save className="h-4 w-4" />
-              Enregistrer l&rsquo;évaluation
+              {saving ? "Enregistrement…" : "Enregistrer l’évaluation"}
             </Button>
           </div>
-        </section>
+        </fieldset>
       )}
     </div>
   );

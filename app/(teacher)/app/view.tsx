@@ -42,7 +42,7 @@ export default function DashboardPage() {
     {
       title: "Ajouter une évaluation",
       description: "Enrichir le suivi à partir de mes observations.",
-      href: "/app/evaluations/nouvelle",
+      href: `/app/evaluations/nouvelle?classe=${encodeURIComponent(activeClass.id)}`,
       icon: ClipboardPlus,
     },
     {
