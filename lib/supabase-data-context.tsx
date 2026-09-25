@@ -4,8 +4,12 @@ import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { saveEvaluationAction } from "@/app/(teacher)/app/actions";
 import { SchoolDataProvider } from "@/lib/school-data-context";
-import type { Evaluation, RawGrade } from "@/lib/types";
-import type { SupabaseSchoolData } from "@/lib/supabase-school-data";
+import type { Evaluation, EvaluationDataset, RawGrade } from "@/lib/types";
+
+type InitialData = {
+  dataset: EvaluationDataset;
+  editableEvaluationIds: string[];
+};
 
 export function SupabaseDataProvider({
   children,
@@ -13,7 +17,7 @@ export function SupabaseDataProvider({
   initialError = null,
 }: {
   children: React.ReactNode;
-  initialData: SupabaseSchoolData;
+  initialData: InitialData;
   initialError?: string | null;
 }) {
   const router = useRouter();
