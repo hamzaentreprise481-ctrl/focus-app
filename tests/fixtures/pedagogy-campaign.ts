@@ -3,6 +3,7 @@ import type { CurriculumNodeSummary } from "../../lib/pedagogy/types";
 export const CAMPAIGN_CURRICULUM: CurriculumNodeSummary[] = [
   {
     id: "node-fractions",
+    nodeType: "notion",
     code: "MATH.NUM.FRACTIONS.OPERATIONS",
     title: "Opérations sur les fractions",
     description: "Effectuer et contrôler des opérations sur des fractions simples.",
@@ -13,6 +14,7 @@ export const CAMPAIGN_CURRICULUM: CurriculumNodeSummary[] = [
   },
   {
     id: "node-distributivite",
+    nodeType: "notion",
     code: "MATH.ALG.DISTRIBUTIVITE",
     title: "Développement par distributivité",
     description: "Distribuer correctement un facteur et réduire une expression.",
@@ -23,6 +25,7 @@ export const CAMPAIGN_CURRICULUM: CurriculumNodeSummary[] = [
   },
   {
     id: "node-equation",
+    nodeType: "notion",
     code: "MATH.ALG.EQUATION_PREMIER_DEGRE",
     title: "Équation du premier degré",
     description: "Résoudre et interpréter une équation du premier degré.",
@@ -36,6 +39,7 @@ export const CAMPAIGN_CURRICULUM: CurriculumNodeSummary[] = [
   },
   {
     id: "node-fonction-image",
+    nodeType: "notion",
     code: "MATH.FONC.IMAGE_ANTECEDENT",
     title: "Images et antécédents",
     description: "Déterminer et interpréter images et antécédents.",
@@ -46,6 +50,7 @@ export const CAMPAIGN_CURRICULUM: CurriculumNodeSummary[] = [
   },
   {
     id: "node-fonction-notion",
+    nodeType: "notion",
     code: "MATH.FONC.NOTION",
     title: "Notion de fonction",
     description: "Comprendre la dépendance d’une variable par rapport à une autre.",
