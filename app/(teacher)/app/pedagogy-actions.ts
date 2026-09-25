@@ -94,6 +94,11 @@ type PriorErrorRow = {
   assessment_id: string;
   verified_by_teacher: boolean;
 };
+type AnalysisRunRow = {
+  status: "completed" | "failed" | "no_evidence";
+  failure_reason: string | null;
+  created_at: string;
+};
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -417,6 +422,17 @@ export async function loadPedagogicalSnapshot(
     );
   });
 
+  const latestRunResponse = await supabase
+    .from("ai_analysis_runs")
+    .select("status,failure_reason,created_at")
+    .eq("student_id", studentId)
+    .in("assessment_id", assessmentIds.length ? assessmentIds : ["00000000-0000-0000-0000-000000000000"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  ensureOk(latestRunResponse.error, "Dernière analyse pédagogique");
+  const latestRun = latestRunResponse.data as AnalysisRunRow | null;
+
   const recommendationsResponse = await supabase
     .from("pedagogical_recommendations")
     .select(
@@ -492,6 +508,16 @@ export async function loadPedagogicalSnapshot(
     documentedAssessmentCount: materialIds.size,
     analyzableAssessmentCount: analyzable.length,
     latestAnalyzableAssessmentTitle: analyzable[0]?.title ?? null,
+    latestAnalysisStatus:
+      latestRun?.status === "no_evidence"
+        ? "insufficient_evidence"
+        : latestRun?.status === "completed"
+          ? recommendations.length > 0
+            ? "errors_found"
+            : "no_error_observed"
+          : null,
+    latestAnalysisReason: latestRun?.failure_reason ?? null,
+    latestAnalysisAt: latestRun?.created_at ?? null,
     aiConfigured: pedagogicalAiConfigured(),
   };
 }
