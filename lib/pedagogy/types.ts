@@ -39,6 +39,9 @@ export interface PedagogicalSnapshot {
   documentedAssessmentCount: number;
   analyzableAssessmentCount: number;
   latestAnalyzableAssessmentTitle: string | null;
+  latestAnalysisStatus: ModelAnalysisStatus | null;
+  latestAnalysisReason: string | null;
+  latestAnalysisAt: string | null;
   aiConfigured: boolean;
 }
 
