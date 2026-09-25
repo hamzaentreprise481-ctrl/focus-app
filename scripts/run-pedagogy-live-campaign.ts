@@ -1,5 +1,8 @@
 import { PEDAGOGICAL_SYSTEM_PROMPT, PEDAGOGICAL_OUTPUT_SCHEMA } from "../lib/pedagogy/prompt";
-import { validateModelAnalysis } from "../lib/pedagogy/analysis";
+import {
+  confidenceForEvidence,
+  validateModelAnalysis,
+} from "../lib/pedagogy/analysis";
 import {
   CAMPAIGN_CURRICULUM,
   PEDAGOGY_CAMPAIGN_CASES,
@@ -47,6 +50,16 @@ const results: Array<{
   actualNode?: string;
   expectedErrorType?: string;
   actualErrorType?: string;
+  expectedCompetency?: string;
+  actualCompetencies: string[];
+  expectedPrerequisite?: string;
+  actualPrerequisites: string[];
+  expectedConfidence?: string;
+  actualConfidence?: string;
+  questionId?: string;
+  evidenceVerified: boolean;
+  explanationPresent: boolean;
+  remediationPresent: boolean;
   pass: boolean;
   insufficientReason: string;
   latencyMs: number;
@@ -135,6 +148,38 @@ for (const campaignCase of PEDAGOGY_CAMPAIGN_CASES) {
       );
       return Boolean(question?.responseText.includes(error.evidenceExcerpt));
     });
+  const node = firstError
+    ? CAMPAIGN_CURRICULUM.find((item) => item.code === firstError.nodeCode)
+    : undefined;
+  const competencyOk =
+    !campaignCase.expected.competencyCode ||
+    node?.competencies.includes(campaignCase.expected.competencyCode) === true;
+  const prerequisiteOk =
+    !campaignCase.expected.prerequisiteCode ||
+    node?.prerequisites.includes(campaignCase.expected.prerequisiteCode) === true;
+  const currentOccurrences = firstError
+    ? validated.errors.filter((error) => error.nodeCode === firstError.nodeCode)
+        .length
+    : 0;
+  const actualConfidence = firstError
+    ? confidenceForEvidence({
+        currentOccurrences,
+        priorAssessmentCount: 0,
+        teacherVerifiedBefore: false,
+      })
+    : undefined;
+  const confidenceOk =
+    !campaignCase.expected.confidence ||
+    actualConfidence === campaignCase.expected.confidence;
+  const questionOk =
+    !firstError ||
+    campaignCase.input.questions.some(
+      (question) => question.questionId === firstError.questionId,
+    );
+  const explanationPresent =
+    !firstError || firstError.explanation.trim().length > 0;
+  const remediationPresent =
+    !firstError || firstError.recommendedAction.trim().length > 0;
 
   results.push({
     id: campaignCase.id,
@@ -145,7 +190,27 @@ for (const campaignCase of PEDAGOGY_CAMPAIGN_CASES) {
     actualNode: firstError?.nodeCode,
     expectedErrorType: campaignCase.expected.errorType,
     actualErrorType: firstError?.errorType,
-    pass: statusOk && nodeOk && typeOk && evidenceOk,
+    expectedCompetency: campaignCase.expected.competencyCode,
+    actualCompetencies: node?.competencies ?? [],
+    expectedPrerequisite: campaignCase.expected.prerequisiteCode,
+    actualPrerequisites: node?.prerequisites ?? [],
+    expectedConfidence: campaignCase.expected.confidence,
+    actualConfidence,
+    questionId: firstError?.questionId,
+    evidenceVerified: evidenceOk,
+    explanationPresent,
+    remediationPresent,
+    pass:
+      statusOk &&
+      nodeOk &&
+      typeOk &&
+      evidenceOk &&
+      competencyOk &&
+      prerequisiteOk &&
+      confidenceOk &&
+      questionOk &&
+      explanationPresent &&
+      remediationPresent,
     insufficientReason: validated.insufficientReason,
     latencyMs: Date.now() - started,
   });
