@@ -3,6 +3,7 @@ export type PedagogicalConfidence = "limitee" | "moderee" | "forte";
 export interface CurriculumNodeSummary {
   id: string;
   code: string;
+  nodeType: "domain" | "notion" | "competency" | "prerequisite";
   title: string;
   description: string | null;
   sourceLocator: string;
