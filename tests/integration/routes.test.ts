@@ -147,6 +147,7 @@ before(async () => {
         NEXT_PUBLIC_SUPABASE_URL: authOrigin,
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "public-test-key",
         VERCEL: "",
+        FOCUS_ENABLE_TEST_LOGIN: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -254,6 +255,45 @@ test("invalid password and missing input never establish a teacher session", asy
   }
   jar = "";
 });
+test("preview test professor credentials redirect to the professor app", async () => {
+  jar = "";
+  const html = await (await request("/connexion")).text();
+  const body = actionForm(html, "Se connecter");
+  body.set("email", "prof@focus.fr");
+  body.set("password", "focus1234");
+  const response = await request("/connexion", {
+    method: "POST",
+    headers: { Origin: origin },
+    body,
+  });
+  assert.equal(response.status, 303);
+  assert.equal(new URL(response.headers.get("location")!, origin).pathname, "/app");
+  cookies(response);
+  assert.match(jar, /focus-test-professor=/);
+  const appResponse = await request("/app");
+  assert.equal(appResponse.status, 200);
+  assert.match(await appResponse.text(), /Compte professeur de test/);
+  jar = "";
+});
+
+test("preview test professor wrong password shows a simple error", async () => {
+  jar = "";
+  const html = await (await request("/connexion")).text();
+  const body = actionForm(html, "Se connecter");
+  body.set("email", "prof@focus.fr");
+  body.set("password", "wrong-password");
+  const response = await request("/connexion", {
+    method: "POST",
+    headers: { Origin: origin },
+    body,
+  });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Identifiants incorrects\./);
+  cookies(response);
+  assert.equal((await request("/app")).status, 307);
+  jar = "";
+});
+
 test("real login server action creates persistent HttpOnly session and returns to requested route", async () => {
   const html = await (await request("/connexion?next=/app/classes")).text();
   const body = actionForm(html, "Se connecter");
