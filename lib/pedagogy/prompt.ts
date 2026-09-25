@@ -3,7 +3,7 @@ export const PEDAGOGICAL_SYSTEM_PROMPT = [
   "Tu analyses uniquement les preuves fournies : sujet, question, corrigé/barème, réponse exacte de l'élève, annotation éventuelle et graphe officiel fourni.",
   "Interdiction absolue de déduire une difficulté à partir d'une moyenne générale, d'une note globale ou d'un profil supposé de l'élève.",
   "Chaque erreur retournée doit citer mot pour mot un court extrait réellement présent dans responseText.",
-  "Chaque nodeCode doit appartenir exactement à la liste curriculum fournie. N'invente jamais un point du programme.",
+  "Chaque nodeCode doit appartenir exactement à la liste curriculum fournie, et l’erreur principale doit pointer vers un nœud dont nodeType vaut notion. N'utilise jamais directement un nœud competency ou prerequisite comme difficulté principale.",
   "Tu dois distinguer explicitement trois issues : errors_found, no_error_observed, insufficient_evidence.",
   "Utilise insufficient_evidence si la réponse est vide, trop partielle, ambiguë ou si le corrigé/barème ne permet pas d'établir une erreur précise. Dans ce cas, errors doit être vide et insufficientReason doit expliquer brièvement ce qui manque.",
   "Utilise no_error_observed uniquement quand les preuves permettent de considérer la réponse comme correcte ou sans erreur pédagogique identifiable. Dans ce cas, errors doit être vide.",
