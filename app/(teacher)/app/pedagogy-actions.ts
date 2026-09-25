@@ -400,7 +400,7 @@ export async function loadPedagogicalSnapshot(
 
   const context = await teacherMathContext(supabase, teacher.id, studentId);
   const assessmentIds = context.assessments.map((a) => a.id);
-  const { materials, questions, responses } = await evidenceRows(
+  const { materials, questions } = await evidenceRows(
     supabase,
     assessmentIds,
     studentId,
@@ -412,8 +412,6 @@ export async function loadPedagogicalSnapshot(
     ids.push(question.id);
     questionIdsByAssessment.set(question.assessment_id, ids);
   }
-  const responseQuestionIds = new Set(responses.map((row) => row.question_id));
-
   const analyzable = context.assessments.filter((assessment) => {
     const questionIds = questionIdsByAssessment.get(assessment.id) ?? [];
     return materialIds.has(assessment.id) && questionIds.length > 0;
@@ -423,7 +421,12 @@ export async function loadPedagogicalSnapshot(
     .from("ai_analysis_runs")
     .select("status,failure_reason,created_at")
     .eq("student_id", studentId)
-    .in("assessment_id", assessmentIds.length ? assessmentIds : ["00000000-0000-0000-0000-000000000000"])
+    .in(
+      "assessment_id",
+      assessmentIds.length
+        ? assessmentIds
+        : ["00000000-0000-0000-0000-000000000000"],
+    )
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
