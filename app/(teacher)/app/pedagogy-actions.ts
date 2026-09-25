@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
 import {
   confidenceForEvidence,
-  validateModelErrors,
+  validateModelAnalysis,
 } from "@/lib/pedagogy/analysis";
 import {
   analyzePedagogicalEvidence,
@@ -499,7 +499,13 @@ export async function loadPedagogicalSnapshot(
 export async function generatePedagogicalAnalysis(
   studentId: string,
 ): Promise<
-  | { ok: true; recommendationCount: number; reused: boolean }
+  | {
+      ok: true;
+      recommendationCount: number;
+      reused: boolean;
+      analysisStatus: "errors_found" | "no_error_observed" | "insufficient_evidence";
+      insufficientReason: string;
+    }
   | { ok: false; error: string }
 > {
   const teacher = await requireTeacher();
@@ -593,12 +599,12 @@ export async function generatePedagogicalAnalysis(
 
   const existingResponse = await supabase
     .from("ai_analysis_runs")
-    .select("id")
+    .select("id,status,failure_reason")
     .eq("teacher_id", teacher.id)
     .eq("student_id", studentId)
     .eq("assessment_id", assessment.id)
     .eq("input_hash", inputHash)
-    .eq("status", "completed")
+    .in("status", ["completed", "no_evidence"])
     .limit(1)
     .maybeSingle();
   ensureOk(existingResponse.error, "Historique d’analyse");
@@ -607,10 +613,22 @@ export async function generatePedagogicalAnalysis(
       .from("pedagogical_recommendations")
       .select("id", { count: "exact", head: true })
       .eq("analysis_run_id", (existingResponse.data as { id: string }).id);
+    const previous = existingResponse.data as {
+      id: string;
+      status: "completed" | "no_evidence";
+      failure_reason: string | null;
+    };
     return {
       ok: true,
       recommendationCount: countResponse.count ?? 0,
       reused: true,
+      analysisStatus:
+        previous.status === "no_evidence"
+          ? "insufficient_evidence"
+          : (countResponse.count ?? 0) > 0
+            ? "errors_found"
+            : "no_error_observed",
+      insufficientReason: previous.failure_reason ?? "",
     };
   }
 
@@ -640,12 +658,36 @@ export async function generatePedagogicalAnalysis(
     questionId: question.id,
     responseText: responsesByQuestion.get(question.id)!.response_text,
   }));
-  const validated = validateModelErrors(
+  const validatedAnalysis = validateModelAnalysis(
     modelResult.analysis,
     validationQuestions,
     nodesByCode,
   );
 
+  if (validatedAnalysis.status === "insufficient_evidence") {
+    const noEvidenceResponse = await supabase.from("ai_analysis_runs").insert({
+      school_id: context.schoolId,
+      teacher_id: teacher.id,
+      student_id: studentId,
+      assessment_id: assessment.id,
+      model: modelResult.model,
+      input_hash: inputHash,
+      status: "no_evidence",
+      failure_reason: validatedAnalysis.insufficientReason,
+      completed_at: new Date().toISOString(),
+    });
+    ensureOk(noEvidenceResponse.error, "Trace d’analyse insuffisante");
+    revalidatePath(`/app/eleves/${studentId}`);
+    return {
+      ok: true,
+      recommendationCount: 0,
+      reused: false,
+      analysisStatus: "insufficient_evidence",
+      insufficientReason: validatedAnalysis.insufficientReason,
+    };
+  }
+
+  const validated = validatedAnalysis.errors;
   const nodeIds = [...new Set(validated.map((error) => error.nodeId))];
   let priorErrors: PriorErrorRow[] = [];
   if (nodeIds.length) {
@@ -743,5 +785,8 @@ export async function generatePedagogicalAnalysis(
     ok: true,
     recommendationCount: recommendations.length,
     reused: false,
+    analysisStatus:
+      recommendations.length > 0 ? "errors_found" : "no_error_observed",
+    insufficientReason: "",
   };
 }
