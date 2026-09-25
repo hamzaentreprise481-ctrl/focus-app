@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateModelAnalysis } from "../lib/pedagogy/analysis";
+import {
+  confidenceForEvidence,
+  validateModelAnalysis,
+} from "../lib/pedagogy/analysis";
 import {
   CAMPAIGN_CURRICULUM,
   PEDAGOGY_CAMPAIGN_CASES,
@@ -34,6 +37,34 @@ for (const campaignCase of PEDAGOGY_CAMPAIGN_CASES) {
         (question) => question.questionId === error.questionId,
       )?.responseText;
       assert.ok(response?.includes(error.evidenceExcerpt));
+      assert.ok(error.difficulty.length > 0);
+      assert.ok(error.explanation.length > 0);
+      assert.ok(error.recommendedAction.length > 0);
+
+      const node = CAMPAIGN_CURRICULUM.find(
+        (item) => item.code === error.nodeCode,
+      );
+      assert.ok(node);
+      if (campaignCase.expected.competencyCode)
+        assert.ok(node.competencies.includes(campaignCase.expected.competencyCode));
+      if (campaignCase.expected.prerequisiteCode)
+        assert.ok(
+          node.prerequisites.includes(campaignCase.expected.prerequisiteCode),
+        );
+
+      if (campaignCase.expected.confidence) {
+        const currentOccurrences = result.errors.filter(
+          (candidate) => candidate.nodeCode === error.nodeCode,
+        ).length;
+        assert.equal(
+          confidenceForEvidence({
+            currentOccurrences,
+            priorAssessmentCount: 0,
+            teacherVerifiedBefore: false,
+          }),
+          campaignCase.expected.confidence,
+        );
+      }
     } else {
       assert.deepEqual(result.errors, []);
     }
