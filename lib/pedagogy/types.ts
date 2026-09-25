@@ -80,6 +80,13 @@ export interface ModelErrorCandidate {
   recommendedAction: string;
 }
 
+export type ModelAnalysisStatus =
+  | "errors_found"
+  | "no_error_observed"
+  | "insufficient_evidence";
+
 export interface ModelPedagogicalAnalysis {
+  status: ModelAnalysisStatus;
+  insufficientReason: string;
   errors: ModelErrorCandidate[];
 }
