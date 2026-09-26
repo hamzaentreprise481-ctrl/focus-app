@@ -15,6 +15,7 @@ import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
 import {
   AccessError,
   assessmentAccess,
+  catalogueErrorsByCode,
   currentRuns,
   curriculumGraph,
   ensureOk,
@@ -392,7 +393,9 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     const candidates = assessmentId ? context.assessments.filter((assessment) => assessment.id === assessmentId) : context.assessments;
     const { materials, questions, responses, tags } = await evidenceRows(supabase, candidates.map((a) => a.id), studentId);
     const graph = await curriculumGraph(supabase, context.classLevel);
-    const aiCurriculum = toAiCurriculum(graph.summaries);
+    const catalogue = await catalogueErrorsByCode(supabase, graph);
+    const aiCurriculum = toAiCurriculum(graph.summaries, catalogue);
+    const catalogueCodes = new Map([...catalogue].map(([code, entries]) => [code, new Set(entries.map((entry) => entry.code))]));
     const model = pedagogicalAiModel();
     const materialByAssessment = new Map(materials.map((material) => [material.assessment_id, material]));
     const responsesByQuestion = new Map(responses.map((response) => [response.question_id, response]));
@@ -534,7 +537,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
         assessedCodes: question.assessedNotions,
       })),
       graph.mappableNotionIdsByCode,
-      { relatedCodes: relatedCodesFor(graph) },
+      { relatedCodes: relatedCodesFor(graph), catalogueCodes },
     );
     if (validated.rejected.length)
       console.warn("FOCUS model candidates rejected", validated.rejected.map((item) => item.reason));

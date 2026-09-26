@@ -60,12 +60,22 @@ function RecommendationCard({
         <p className="mt-1 text-sm text-ink">{recommendation.recommendedAction}</p>
       </div>
       {recommendation.catalogue.length > 0 && (
-        <details className="mt-3">
-          <summary className="cursor-pointer text-sm font-medium text-brand">Repères du catalogue FOCUS pour cette notion</summary>
-          <ul className="mt-2 space-y-1.5 text-sm text-ink-soft">
+        <details className="mt-3" open={recommendation.catalogue.some((entry) => entry.matched)}>
+          <summary className="cursor-pointer text-sm font-medium text-brand">
+            {recommendation.catalogue.some((entry) => entry.matched)
+              ? "Erreur type reconnue dans le catalogue FOCUS et remédiation associée"
+              : "Repères du catalogue FOCUS pour cette notion"}
+          </summary>
+          <ul className="mt-2 space-y-2 text-sm text-ink-soft">
             {recommendation.catalogue.map((entry) => (
               <li key={entry.code}>
                 <span className="font-medium text-ink">{entry.kind === "typical_error" ? "Erreur type" : "Remédiation"} :</span> {entry.text}
+                {entry.check && (
+                  <span className="mt-0.5 block text-xs">
+                    Vérification : {entry.check.prompt}
+                    {entry.check.expectedAnswer ? ` — attendu : ${entry.check.expectedAnswer}` : ""}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

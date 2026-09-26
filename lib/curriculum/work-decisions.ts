@@ -286,3 +286,64 @@ export function applyWorkDecisions(
     issues,
   };
 }
+
+export interface DeferredRelationship {
+  disputeId: string;
+  kind: WorkDisputeKind;
+  index: number;
+  from: string;
+  to: string;
+  relation: string;
+  provenance: string | null;
+}
+
+/**
+ * Status quo for disputes nobody has decided yet — never a semantic choice:
+ * when exactly one relationship of a disputed pair already exists in the
+ * graph currently imported for this source (`existingEdges`) and keeping it
+ * alone is one of the dispute's valid options, it is kept unchanged; every
+ * other relationship of every remaining dispute is left out of the import.
+ * Nothing new is asserted and nothing existing is removed. Author decisions
+ * (applyWorkDecisions) always take precedence: apply them first.
+ */
+export function deferWorkDisputes(
+  conversion: WorkConversion,
+  document: Record<string, unknown>,
+  existingEdges: Iterable<{ from: string; to: string; relation: string }>,
+): { conversion: WorkConversion; kept: DeferredRelationship[]; deferred: DeferredRelationship[] } {
+  const existing = new Set([...existingEdges].map((edge) => `${edge.from}|${edge.relation}|${edge.to}`));
+  const { disputes } = listWorkDisputes(conversion, document);
+  const kept: DeferredRelationship[] = [];
+  const deferred: DeferredRelationship[] = [];
+  const describe = (dispute: WorkDispute, edge: WorkDisputeEdge): DeferredRelationship => ({
+    disputeId: dispute.id,
+    kind: dispute.kind,
+    index: edge.index,
+    from: edge.from,
+    to: edge.to,
+    relation: edge.relation,
+    provenance: edge.provenance,
+  });
+  for (const dispute of disputes) {
+    const live = dispute.edges.filter((edge) => existing.has(`${edge.from}|${edge.relation}|${edge.to}`));
+    const statusQuo =
+      live.length === 1 && dispute.options.some((option) => option.keep.length === 1 && option.keep[0] === live[0].index)
+        ? live[0]
+        : null;
+    for (const edge of dispute.edges)
+      (edge === statusQuo ? kept : deferred).push(describe(dispute, edge));
+  }
+  const drop = new Set(deferred.map((item) => item.index));
+  const positions = conversion.edgeSourceIndexes
+    .map((index, position) => ({ index, position }))
+    .filter(({ index }) => !drop.has(index));
+  return {
+    conversion: {
+      ...conversion,
+      raw: { ...conversion.raw, edges: positions.map(({ position }) => conversion.raw.edges[position]) },
+      edgeSourceIndexes: positions.map(({ index }) => index),
+    },
+    kept,
+    deferred,
+  };
+}

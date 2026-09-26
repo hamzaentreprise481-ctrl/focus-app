@@ -56,6 +56,10 @@ export interface CatalogueSuggestion {
   code: string;
   title: string;
   text: string;
+  /** True when the analysis matched this typical error (or its remediation). */
+  matched: boolean;
+  /** Remediation check exercise, when the catalogue provides one. */
+  check?: { prompt: string; expectedAnswer: string | null } | null;
 }
 
 /** One notion followed over time for one student. */
@@ -168,6 +172,8 @@ export interface ModelErrorCandidate {
   evidenceExcerpt: string;
   explanation: string;
   recommendedAction: string;
+  /** A typical error of the FOCUS catalogue for this notion, or "". */
+  catalogueErrorCode?: string;
 }
 
 export type ModelAnalysisStatus =

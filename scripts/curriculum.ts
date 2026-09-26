@@ -23,10 +23,12 @@ import {
 import {
   CurriculumParseError,
   validateCurriculumChain,
+  validateCurriculumPackage,
   validateExportedCurriculum,
 } from "../lib/curriculum/package";
 import { renderCurriculumImportMigration } from "../lib/curriculum/sql";
-import { applyWorkDecisions, workDecisionsTemplate } from "../lib/curriculum/work-decisions";
+import { convertWorkCatalogue, renderCatalogueMigration } from "../lib/curriculum/work-catalogue";
+import { applyWorkDecisions, deferWorkDisputes, workDecisionsTemplate } from "../lib/curriculum/work-decisions";
 import type {
   CurriculumIssue,
   CurriculumValidationResult,
@@ -37,6 +39,7 @@ interface Args {
   target: string;
   with: string[];
   decisions: string | null;
+  deferDisputes: string | null;
   out: string | null;
   json: boolean;
   commit: boolean;
@@ -54,6 +57,7 @@ function usage(message?: string): never {
       "  npm run curriculum -- export <sourceUrl> --out <dossier>",
       "  npm run curriculum -- work-disputes <document-work.json> [--out <fichier>|-]",
       "  (validate/sql/apply acceptent --decisions <fichier> pour un document Work)",
+      "  (et --defer-disputes <paquet importé> : garde tel quel le lien déjà importé d’un litige non décidé, écarte le reste)",
     ].join("\n"),
   );
   process.exit(2);
@@ -67,6 +71,7 @@ function parseArgs(argv: string[]): Args {
     target,
     with: [],
     decisions: null,
+    deferDisputes: null,
     out: null,
     json: false,
     commit: false,
@@ -77,6 +82,7 @@ function parseArgs(argv: string[]): Args {
     if (flag === "--with") args.with.push(rest[++i] ?? usage("--with attend un chemin"));
     else if (flag === "--out") args.out = rest[++i] ?? usage("--out attend un chemin");
     else if (flag === "--decisions") args.decisions = rest[++i] ?? usage("--decisions attend un chemin");
+    else if (flag === "--defer-disputes") args.deferDisputes = rest[++i] ?? usage("--defer-disputes attend le paquet actuellement importé");
     else if (flag === "--json") args.json = true;
     else if (flag === "--commit") args.commit = true;
     else if (flag === "--allow-mass-deactivation") args.allowMassDeactivation = true;
@@ -99,6 +105,7 @@ function printIssues(issues: CurriculumIssue[]) {
 function validateWithContext(args: Args): CurriculumValidationResult {
   const input = loadCurriculumInput(args.target);
   let decisionIssues: CurriculumIssue[] = [];
+  let conversion: import("../lib/curriculum/work-format").WorkConversion | null = input.work;
   if (args.decisions) {
     if (!input.work) usage("--decisions ne s’applique qu’à un document Work");
     const applied = applyWorkDecisions(
@@ -108,10 +115,23 @@ function validateWithContext(args: Args): CurriculumValidationResult {
       input.work.fileSha256,
     );
     input.raw = applied.conversion.raw;
+    conversion = applied.conversion;
     decisionIssues = applied.issues;
     log(
       `Décisions ${args.decisions} : ${applied.applied} appliquée(s), ${applied.pending} en attente.`,
     );
+  }
+  if (args.deferDisputes) {
+    if (!input.work || !conversion) usage("--defer-disputes ne s’applique qu’à un document Work");
+    const current = validateCurriculumPackage(loadCurriculumPackage(args.deferDisputes));
+    if (!current.package) usage(`le paquet importé ${args.deferDisputes} est invalide`);
+    const deferral = deferWorkDisputes(conversion, input.work.document, current.package.edges);
+    input.raw = deferral.conversion.raw;
+    log(
+      `Litiges non décidés : ${deferral.kept.length} relation(s) déjà importée(s) conservée(s) telles quelles, ${deferral.deferred.length} relation(s) écartée(s) en attente d’une décision d’auteur.`,
+    );
+    for (const item of deferral.kept) log(`  = conservée   ${item.from} —${item.relation}→ ${item.to}  (${item.disputeId})`);
+    for (const item of deferral.deferred) log(`  ~ en attente ${item.from} —${item.relation}→ ${item.to}  (${item.disputeId})`);
   }
   // Context packages are validated cumulatively, in the order given.
   const chain = validateCurriculumChain(args.with.map(loadCurriculumPackage), input.raw);
@@ -252,6 +272,21 @@ async function main() {
     return;
   }
 
+  if (args.command === "catalogue-sql") {
+    const input = loadCurriculumInput(args.target);
+    if (!input.work) usage("catalogue-sql attend un document Work");
+    const { catalogue, issues, counts } = convertWorkCatalogue(input.work.document, path.basename(args.target));
+    printIssues(issues);
+    if (!catalogue) process.exit(1);
+    const sql = renderCatalogueMigration(catalogue, `npm run curriculum -- catalogue-sql ${args.target}`);
+    if (!args.out || args.out === "-") process.stdout.write(sql);
+    else writeFileSync(args.out, sql);
+    console.error(
+      `Catalogue : ${counts.nodes} nœuds, ${counts.objectives} objectifs, ${counts.errors} erreurs types, ${counts.remediations} remédiations${args.out && args.out !== "-" ? ` → ${args.out}` : ""}.`,
+    );
+    return;
+  }
+
   if (args.command === "work-disputes") {
     const input = loadCurriculumInput(args.target);
     if (!input.work) usage("work-disputes attend un document Work");
@@ -279,7 +314,7 @@ async function main() {
   if (args.command === "sql") {
     const sql = renderCurriculumImportMigration(result.package, {
       allowMassDeactivation: args.allowMassDeactivation,
-      generatedBy: `npm run curriculum -- sql ${args.target}`,
+      generatedBy: ["npm run curriculum -- sql", args.target, ...args.with.flatMap((item) => ["--with", item]), ...(args.decisions ? ["--decisions", args.decisions] : []), ...(args.deferDisputes ? ["--defer-disputes", args.deferDisputes] : [])].join(" "),
     });
     if (args.out === "-") {
       process.stdout.write(sql);

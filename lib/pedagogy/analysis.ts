@@ -38,6 +38,8 @@ export interface RejectedCandidate {
 }
 
 export interface ValidationOptions {
+  /** Catalogue typical-error codes per notion code; unknown codes are dropped. */
+  catalogueCodes?: Map<string, Set<string>>;
   /**
    * Notion codes compatible with a question's assessed notions (the notions
    * themselves, notions above/below them and their prerequisites). Only
@@ -150,6 +152,7 @@ export function reviewModelErrors(
     const evidenceExcerpt = typeof value.evidenceExcerpt === "string" ? value.evidenceExcerpt.slice(0, 500) : "";
     const explanation = clean(value.explanation, 900);
     const recommendedAction = clean(value.recommendedAction, 700);
+    const catalogueCode = clean(value.catalogueErrorCode, 160);
     const question = questionsById.get(questionId);
     const nodeId = nodesByCode.get(nodeCode);
     const reject = (reason: RejectionReason) => rejected.push({ questionId, nodeCode, reason });
@@ -237,6 +240,9 @@ export function reviewModelErrors(
       evidenceExcerpt,
       explanation,
       recommendedAction,
+      // A catalogue reference is kept only if it belongs to the diagnosed
+      // notion; a wrong one is dropped, never forced onto another notion.
+      catalogueErrorCode: catalogueCode && options.catalogueCodes?.get(nodeCode)?.has(catalogueCode) ? catalogueCode : "",
     });
   }
 

@@ -29,22 +29,18 @@ import {
   secondePackage,
   type TestPackage,
 } from "./fixtures/curriculum";
-import { createMigratedDatabase } from "./helpers/pg";
+import { BEFORE_WORK_IMPORT, createMigratedDatabase } from "./helpers/pg";
 
 const SEEDED_URL = "https://www.education.gouv.fr/bo/2026/Hebdo14/MENE2602914A";
-const REFERENCE_PACKAGE = path.join(
-  __dirname,
-  "..",
-  "curriculum",
-  "packages",
-  "math",
-  "seconde-gt-2026-2027",
-);
+// The graph seeded on the live project before the Work import (44 nodes).
+const REFERENCE_PACKAGE = path.join(__dirname, "fixtures", "seeded-44-package");
 
 let db: PGlite;
 
+// Importer mechanics on the seeded 44-node graph, i.e. every migration before
+// the Work curriculum import (that import is tested in curriculum-work).
 before(async () => {
-  db = await createMigratedDatabase();
+  db = await createMigratedDatabase({ upTo: BEFORE_WORK_IMPORT });
 });
 after(async () => {
   await db.close();
@@ -175,7 +171,7 @@ async function referenceNode(code: string) {
 
 // ---------------------------------------------------------------------------
 
-test("all migrations apply on PostgreSQL and keep the seeded 44-node graph, each edge declared by its source", async () => {
+test("migrations up to the importer keep the seeded 44-node graph, each edge declared by its source", async () => {
   assert.equal(await count("select count(*) from public.curriculum_nodes where active"), 44);
   assert.equal(await count("select count(*) from public.curriculum_edges"), 68);
   assert.equal(
@@ -190,20 +186,17 @@ test("all migrations apply on PostgreSQL and keep the seeded 44-node graph, each
   assert.equal(await count("select count(*) from public.curriculum_edge_declarations"), 68);
 });
 
-test("the committed reference package is exactly the seeded graph: importing it changes nothing", async () => {
-  const reference = validateCurriculumPackage(loadCurriculumPackage(REFERENCE_PACKAGE));
-  assert.ok(reference.package);
-
+test("the seeded graph exports as a valid package: importing that export changes nothing", async () => {
   const [exported] = await call<{ pkg: unknown }>(
     "service_role",
     "select public.focus_export_curriculum($1) as pkg",
     [SEEDED_URL],
   );
   const fromDatabase = validateExportedCurriculum(exported.pkg, "export");
-  assert.equal(fromDatabase.hash, reference.hash);
+  assert.ok(fromDatabase.package, JSON.stringify(fromDatabase.errors));
 
   const before = await snapshot();
-  const report = await importPackage(reference.package);
+  const report = await importPackage(fromDatabase.package);
   assert.equal(report.changed, false);
   assert.deepEqual(report.nodes, {
     inserted: 0,

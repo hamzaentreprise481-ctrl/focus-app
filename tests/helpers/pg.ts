@@ -41,6 +41,10 @@ grant execute on function auth.uid() to anon, authenticated, service_role;
 grant execute on function auth.jwt() to anon, authenticated, service_role;
 `;
 
+/** The last migration before the Work curriculum import (44-node graph). */
+export const BEFORE_WORK_IMPORT = "20260926150000_teacher_evidence_review_v1.sql";
+export const WORK_IMPORT_MIGRATION = "20260926160000_curriculum_work_seconde_2026.sql";
+
 export function migrationFiles() {
   return readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith(".sql"))

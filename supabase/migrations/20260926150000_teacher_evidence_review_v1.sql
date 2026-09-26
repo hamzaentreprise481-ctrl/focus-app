@@ -835,6 +835,7 @@ declare
   v_node_id uuid;
   v_response_text text;
   v_excerpt text;
+  v_catalogue_id uuid;
 begin
   perform public.focus_assert_analysis_context(p_school_id, p_student_id, p_assessment_id);
   -- One analysis write at a time per student and assessment (double clicks).
@@ -864,7 +865,7 @@ begin
   returning id into v_run_id;
 
   create temporary table if not exists focus_validated_errors (
-    question_id uuid, response_id uuid, node_id uuid, excerpt text
+    question_id uuid, response_id uuid, node_id uuid, excerpt text, catalogue_error_id uuid
   ) on commit drop;
   truncate focus_validated_errors;
 
@@ -900,19 +901,30 @@ begin
        or char_length(v_error->>'explanation') > 900 then
       raise exception 'invalid error description' using errcode = '22023';
     end if;
-    insert into focus_validated_errors values (v_question_id, v_response_id, v_node_id, v_excerpt);
+    -- An optional typical error of the catalogue, only for that notion.
+    v_catalogue_id := null;
+    if nullif(btrim(coalesce(v_error->>'catalogueErrorCode', '')), '') is not null then
+      select te.id into v_catalogue_id from public.curriculum_typical_errors te
+      where te.code = v_error->>'catalogueErrorCode' and te.node_id = v_node_id and te.active;
+      if v_catalogue_id is null then
+        raise exception 'catalogue error does not belong to the notion' using errcode = '22023';
+      end if;
+    end if;
+    insert into focus_validated_errors values (v_question_id, v_response_id, v_node_id, v_excerpt, v_catalogue_id);
   end loop;
 
   insert into public.error_observations (
     analysis_run_id, school_id, student_id, assessment_id, question_id, student_response_id,
-    curriculum_node_id, error_type, evidence_excerpt, explanation, confidence, source, created_by
+    curriculum_node_id, error_type, evidence_excerpt, explanation, confidence, source, created_by, catalogue_error_id
   )
   select v_run_id, p_school_id, p_student_id, p_assessment_id, (e.value->>'questionId')::uuid,
          (e.value->>'responseId')::uuid, (e.value->>'nodeId')::uuid, e.value->>'errorType',
          e.value->>'evidenceExcerpt', btrim(e.value->>'explanation'),
          public.focus_confidence_for(p_student_id, p_assessment_id, (e.value->>'nodeId')::uuid,
            (select count(*)::integer from focus_validated_errors v where v.node_id = (e.value->>'nodeId')::uuid)),
-         'ai', auth.uid()
+         'ai', auth.uid(),
+         (select te.id from public.curriculum_typical_errors te
+           where te.code = e.value->>'catalogueErrorCode' and te.node_id = (e.value->>'nodeId')::uuid and te.active)
   from jsonb_array_elements(coalesce(p_errors, '[]'::jsonb)) e;
 
   for v_rec in select value from jsonb_array_elements(coalesce(p_recommendations, '[]'::jsonb)) loop
@@ -936,7 +948,7 @@ begin
     end if;
     insert into public.pedagogical_recommendations (
       analysis_run_id, school_id, student_id, assessment_id, curriculum_node_id, difficulty, evidence,
-      confidence, explanation, recommended_action, created_by
+      confidence, explanation, recommended_action, created_by, catalogue_error_id
     )
     values (
       v_run_id, p_school_id, p_student_id, p_assessment_id, v_node_id, btrim(v_rec->>'difficulty'),
@@ -944,7 +956,9 @@ begin
          from focus_validated_errors v where v.node_id = v_node_id),
       public.focus_confidence_for(p_student_id, p_assessment_id, v_node_id,
         (select count(*)::integer from focus_validated_errors v where v.node_id = v_node_id)),
-      btrim(v_rec->>'explanation'), btrim(v_rec->>'recommendedAction'), auth.uid()
+      btrim(v_rec->>'explanation'), btrim(v_rec->>'recommendedAction'), auth.uid(),
+      (select v.catalogue_error_id from focus_validated_errors v
+        where v.node_id = v_node_id and v.catalogue_error_id is not null limit 1)
     );
   end loop;
 

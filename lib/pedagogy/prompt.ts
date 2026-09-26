@@ -9,6 +9,7 @@ export const PEDAGOGICAL_SYSTEM_PROMPT = [
   "assessedNotions, quand il est fourni pour une question, liste les notions que le professeur évalue avec cette question : une erreur de cette question doit porter sur l’une d’elles, sur une notion plus large ou plus précise qui leur est rattachée (part_of), ou sur un de leurs prérequis. Sinon, ne la signale pas.",
   "awardedPoints et teacherAnnotation expriment le jugement du professeur. Si awardedPoints égale maxPoints, la réponse a été jugée juste : ne signale pas d’erreur sur cette question.",
   "difficulty et explanation décrivent uniquement ce que montre la réponse citée ; n’en tire aucune généralisation sur l’élève (pas de « toujours », « jamais », « ne maîtrise pas »).",
+  "Pour une notion, typicalErrors liste les erreurs types du catalogue FOCUS (propositions éditoriales, sans fréquence mesurée). Si l’une décrit exactement l’erreur que montre l’extrait, renseigne son code dans catalogueErrorCode ; sinon laisse catalogueErrorCode vide. Ne force jamais une correspondance.",
   "Tu dois distinguer explicitement trois issues : errors_found, no_error_observed, insufficient_evidence.",
   "Utilise insufficient_evidence si la réponse est vide, trop partielle, ambiguë ou si le corrigé/barème ne permet pas d'établir une erreur précise. Dans ce cas, errors doit être vide et insufficientReason doit expliquer brièvement ce qui manque.",
   "Utilise no_error_observed uniquement quand les preuves permettent de considérer la réponse comme correcte ou sans erreur pédagogique identifiable. Dans ce cas, errors doit être vide.",
@@ -52,6 +53,7 @@ export const PEDAGOGICAL_OUTPUT_SCHEMA = {
           evidenceExcerpt: { type: "string" },
           explanation: { type: "string" },
           recommendedAction: { type: "string" },
+          catalogueErrorCode: { type: "string" },
         },
         required: [
           "assessmentId",
@@ -62,6 +64,7 @@ export const PEDAGOGICAL_OUTPUT_SCHEMA = {
           "evidenceExcerpt",
           "explanation",
           "recommendedAction",
+          "catalogueErrorCode",
         ],
       },
     },

@@ -92,6 +92,7 @@ type RecommendationRow = {
   teacher_decided_at: string | null;
   teacher_note: string | null;
   superseded_at: string | null;
+  catalogue_error_id: string | null;
   created_at: string;
 };
 
@@ -301,33 +302,100 @@ function recommendationStatus(row: RecommendationRow): RecommendationStatus {
   return row.teacher_decision ?? "pending";
 }
 
+type CatalogueErrorRow = { id: string; node_id: string; code: string; description: string; position: number };
+type CatalogueRemediationRow = {
+  id: string;
+  node_id: string;
+  code: string;
+  title: string;
+  steps: string[];
+  check_prompt: string | null;
+  check_expected_answer: string | null;
+  position: number;
+  targets: Array<{ error_id: string }> | null;
+};
+
+/** Typical errors per in-scope notion code, for the model input. */
+export async function catalogueErrorsByCode(supabase: SupabaseClient, graph: CurriculumIndex) {
+  const byCode = new Map<string, Array<{ code: string; description: string }>>();
+  const nodeIds = [...graph.mappableNotionIdsByCode.values()];
+  if (!nodeIds.length) return byCode;
+  const response = await supabase
+    .from("curriculum_typical_errors")
+    .select("node_id,code,description,position")
+    .in("node_id", nodeIds)
+    .eq("active", true)
+    .order("position", { ascending: true });
+  // The catalogue is optional: without it the model sees the graph only.
+  if (response.error) return byCode;
+  for (const row of (response.data ?? []) as CatalogueErrorRow[]) {
+    const code = graph.nodeById.get(row.node_id)?.code;
+    if (code) byCode.set(code, [...(byCode.get(code) ?? []), { code: row.code, description: row.description }]);
+  }
+  return byCode;
+}
+
 async function catalogueFor(supabase: SupabaseClient, nodeIds: string[]) {
-  const byNode = new Map<string, CatalogueSuggestion[]>();
-  if (!nodeIds.length) return byNode;
+  const errorsByNode = new Map<string, CatalogueErrorRow[]>();
+  const remediationsByNode = new Map<string, CatalogueRemediationRow[]>();
+  if (!nodeIds.length) return { errorsByNode, remediationsByNode };
   const [errors, remediations] = await Promise.all([
     supabase
       .from("curriculum_typical_errors")
-      .select("node_id,code,description,position")
+      .select("id,node_id,code,description,position")
       .in("node_id", nodeIds)
       .eq("active", true)
       .order("position", { ascending: true }),
     supabase
       .from("curriculum_remediations")
-      .select("node_id,code,title,steps,position")
+      .select("id,node_id,code,title,steps,check_prompt,check_expected_answer,position")
       .in("node_id", nodeIds)
       .eq("active", true)
       .order("position", { ascending: true }),
   ]);
   // The catalogue is optional: a project without it still shows analyses.
-  if (errors.error || remediations.error) return byNode;
-  for (const row of (errors.data ?? []) as Array<{ node_id: string; code: string; description: string }>)
-    byNode.set(row.node_id, [...(byNode.get(row.node_id) ?? []), { kind: "typical_error", code: row.code, title: "Erreur type", text: row.description }]);
-  for (const row of (remediations.data ?? []) as Array<{ node_id: string; code: string; title: string; steps: string[] }>)
-    byNode.set(row.node_id, [
-      ...(byNode.get(row.node_id) ?? []),
-      { kind: "remediation", code: row.code, title: row.title || "Remédiation", text: (row.steps ?? []).join(" → ") },
-    ]);
-  return byNode;
+  if (errors.error || remediations.error) return { errorsByNode, remediationsByNode };
+  const remediationRows = (remediations.data ?? []) as CatalogueRemediationRow[];
+  const targets = remediationRows.length
+    ? await supabase
+        .from("curriculum_remediation_targets")
+        .select("remediation_id,error_id")
+        .in("remediation_id", remediationRows.map((row) => row.id))
+    : { data: [], error: null };
+  const targetsByRemediation = new Map<string, Array<{ error_id: string }>>();
+  if (!targets.error)
+    for (const row of (targets.data ?? []) as Array<{ remediation_id: string; error_id: string }>)
+      targetsByRemediation.set(row.remediation_id, [...(targetsByRemediation.get(row.remediation_id) ?? []), { error_id: row.error_id }]);
+  for (const row of (errors.data ?? []) as CatalogueErrorRow[])
+    errorsByNode.set(row.node_id, [...(errorsByNode.get(row.node_id) ?? []), row]);
+  for (const row of remediationRows)
+    remediationsByNode.set(row.node_id, [...(remediationsByNode.get(row.node_id) ?? []), { ...row, targets: targetsByRemediation.get(row.id) ?? [] }]);
+  return { errorsByNode, remediationsByNode };
+}
+
+function catalogueSuggestions(
+  catalogue: Awaited<ReturnType<typeof catalogueFor>>,
+  nodeId: string,
+  matchedErrorId: string | null,
+): CatalogueSuggestion[] {
+  const errors = catalogue.errorsByNode.get(nodeId) ?? [];
+  const remediations = catalogue.remediationsByNode.get(nodeId) ?? [];
+  const matched = matchedErrorId ? errors.find((row) => row.id === matchedErrorId) : undefined;
+  const pickedErrors = matched ? [matched] : errors;
+  const pickedRemediations = matched
+    ? remediations.filter((row) => (row.targets ?? []).some((target) => target.error_id === matched.id))
+    : remediations;
+  return [
+    ...pickedErrors.map((row) => ({ kind: "typical_error" as const, code: row.code, title: "Erreur type", text: row.description, matched: !!matched })),
+    ...pickedRemediations.map((row) => ({
+      kind: "remediation" as const,
+      code: row.code,
+      title: row.title || "Remédiation",
+      text: (row.steps ?? []).join(" → "),
+      matched: !!matched,
+      check: row.check_prompt ? { prompt: row.check_prompt, expectedAnswer: row.check_expected_answer } : null,
+    })),
+  ];
 }
 
 /** Everything the student file needs about analyses and recommendations. */
@@ -344,7 +412,7 @@ export async function studentPedagogy(
       ? supabase
           .from("pedagogical_recommendations")
           .select(
-            "id,analysis_run_id,assessment_id,curriculum_node_id,difficulty,evidence,confidence,explanation,recommended_action,teacher_decision,teacher_decided_at,teacher_note,superseded_at,created_at",
+            "id,analysis_run_id,assessment_id,curriculum_node_id,difficulty,evidence,confidence,explanation,recommended_action,teacher_decision,teacher_decided_at,teacher_note,superseded_at,catalogue_error_id,created_at",
           )
           .eq("student_id", studentId)
           .in("assessment_id", assessmentIds)
@@ -417,7 +485,7 @@ export async function studentPedagogy(
         decidedAt: row.teacher_decided_at,
         teacherNote: row.teacher_note,
         createdAt: row.created_at,
-        catalogue: catalogue.get(row.curriculum_node_id) ?? [],
+        catalogue: catalogueSuggestions(catalogue, row.curriculum_node_id, row.catalogue_error_id),
       },
     ];
   });

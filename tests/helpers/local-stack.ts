@@ -170,6 +170,7 @@ export interface ScriptedError {
   difficulty: string;
   explanation: string;
   recommendedAction: string;
+  catalogueErrorCode?: string;
 }
 
 export const DEFAULT_SCRIPT: ScriptedError[] = [
@@ -180,6 +181,7 @@ export const DEFAULT_SCRIPT: ScriptedError[] = [
     difficulty: "Distribuer le facteur à chaque terme de la parenthèse",
     explanation: "Le facteur 2 n’est appliqué qu’au premier terme de la parenthèse.",
     recommendedAction: "Faire écrire l’étape intermédiaire 2 × x + 2 × 3 sur trois exemples.",
+    catalogueErrorCode: "MATH.ALG.DISTRIBUTIVITE.ERR.01",
   },
   {
     excerpt: "2/5 + 1/3 = 3/8",
@@ -216,6 +218,7 @@ export function scriptedAnalysis(input: AiInput, script: ScriptedError[]) {
         evidenceExcerpt: entry.excerpt,
         explanation: entry.explanation,
         recommendedAction: entry.recommendedAction,
+        catalogueErrorCode: entry.catalogueErrorCode ?? "",
       })),
   );
   return errors.length
