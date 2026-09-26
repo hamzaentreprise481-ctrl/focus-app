@@ -23,20 +23,24 @@ const sizeClasses: Record<ButtonSize, string> = {
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", asChild, ...props }, ref) => {
+  (
+    { className, variant = "primary", size = "md", asChild, type, ...props },
+    ref,
+  ) => {
     const Comp = asChild ? Slot : "button";
     return (
       <Comp
         ref={ref}
+        {...(!asChild ? { type: type ?? "button" } : {})}
         className={cn(
           "inline-flex items-center justify-center rounded-[var(--radius-sm)] font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
           variantClasses[variant],
           sizeClasses[size],
-          className
+          className,
         )}
         {...props}
       />
     );
-  }
+  },
 );
 Button.displayName = "Button";

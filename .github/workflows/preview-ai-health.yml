@@ -1,0 +1,44 @@
+name: FOCUS Preview AI health
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/pedagogical-ai-math-v1
+    paths:
+      - .github/workflows/preview-ai-health.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      FOCUS_PREVIEW_AI_HEALTH_URL: https://focus-app-git-codex-pe-c10f8d-hamzaentreprise481-8876s-projects.vercel.app/api/ai-health
+    steps:
+      - name: Probe Preview OpenAI configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(
+            curl               --silent               --show-error               --location               --max-time 20               --output "$response_file"               --write-out '%{http_code}'               "$FOCUS_PREVIEW_AI_HEALTH_URL"
+          )"
+
+          echo "HTTP status: $status"
+          content_type="$(file --brief --mime-type "$response_file")"
+          echo "Response type: $content_type"
+
+          if ! jq -e . "$response_file" >/dev/null 2>&1; then
+            echo "::error::Preview did not return the expected JSON health response. It may be protected or inaccessible."
+            exit 1
+          fi
+
+          jq '{service, environment, configured, ok, model, apiStatus, error}' "$response_file"
+
+          if ! jq -e '.configured == true and .ok == true' "$response_file" >/dev/null; then
+            echo "::error::OPENAI_API_KEY/model probe failed on the Preview."
+            exit 1
+          fi
