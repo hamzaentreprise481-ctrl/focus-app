@@ -217,6 +217,14 @@ export function parseCsvCurriculumPackage(files: {
 // Validation
 // ---------------------------------------------------------------------------
 
+// Lengths are counted in Unicode code points, like PostgreSQL char_length
+// (UTF-16 .length would count an emoji twice).
+export function codePointLength(value: string) {
+  let count = 0;
+  for (const _ of value) count++; // eslint-disable-line @typescript-eslint/no-unused-vars
+  return count;
+}
+
 // NFC + collapsed whitespace: two spellings of the same label must not look
 // like a change to the importer (idempotency) nor like two different nodes.
 export function normalizeCurriculumText(value: string) {
@@ -365,7 +373,7 @@ export function validateCurriculumPackage(
       if (CONTROL_CHARS.test(field))
         error("CONTROL_CHARACTER", `source.${key} contient un caractère de contrôle.`, raw.sourceAt);
       const normalized = normalizeCurriculumText(field);
-      if (normalized.length > max)
+      if (codePointLength(normalized) > max)
         error("SOURCE_FIELD", `source.${key} dépasse ${max} caractères.`, raw.sourceAt);
       return normalized;
     };
@@ -500,7 +508,7 @@ export function validateCurriculumPackage(
         valid = false;
       }
       const normalized = normalizeCurriculumText(field);
-      if (normalized.length > max) {
+      if (codePointLength(normalized) > max) {
         error(
           "TEXT_TOO_LONG",
           `${key} de ${code} dépasse ${max} caractères : stockez un libellé court et un localisateur, jamais le texte du programme ou d’un manuel.`,

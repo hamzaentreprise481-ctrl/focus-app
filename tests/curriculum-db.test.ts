@@ -905,3 +905,61 @@ test("P2: the database and the validator reject the same source and node values"
   const accepted = await importPackage({ ...canonical(secondePackage()), nodes: canonical(secondePackage()).nodes.map((node) => (node.code === "MATH.T2.ALG.DISTRIBUTIVITE" ? { ...node, title: spaced.nodes[4].title } : node)) });
   assert.equal(accepted.nodes.inserted, 7);
 });
+
+// ---------------------------------------------------------------------------
+// Codex review of e0eca4c
+// ---------------------------------------------------------------------------
+
+test("P2: text limits count Unicode code points on both sides (emoji count once)", async () => {
+  const withTitle = (title: string) => {
+    const pkg = clone(secondePackage());
+    pkg.nodes[4].title = title;
+    return pkg;
+  };
+  const hundredEmoji = "😀".repeat(100); // 100 code points, 200 UTF-16 units
+  const offline = validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(withTitle(hundredEmoji)), "emoji.json"));
+  assert.equal(offline.ok, true, JSON.stringify(offline.errors));
+  assert.equal((await importPackage(offline.package, { dryRun: true })).nodes.inserted, 7);
+
+  const tooLong = withTitle("😀".repeat(161));
+  assert.equal(validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(tooLong), "emoji.json")).ok, false);
+  const raw = { ...canonical(secondePackage()) };
+  raw.nodes = raw.nodes.map((node) => (node.code === "MATH.T2.ALG.DISTRIBUTIVITE" ? { ...node, title: "😀".repeat(161) } : node));
+  assert.match(await importError(raw), /invalid nodes: MATH\.T2\.ALG\.DISTRIBUTIVITE/);
+});
+
+test("P2: the database stores normalized values, so a direct import round-trips through export", async () => {
+  const base = canonical(secondePackage());
+  const untidy = {
+    ...base,
+    source: { ...base.source, sourceUrl: `${base.source.sourceUrl}  `, title: `  ${base.source.title}  ` },
+    nodes: base.nodes.map((node) => ({
+      ...node,
+      code: ` ${node.code} `,
+      title: node.title.replace(" ", "   "),
+      description: node.description === null ? "   " : node.description,
+    })),
+    edges: base.edges.map((edge) => ({ ...edge, from: ` ${edge.from}`, relation: `${edge.relation} ` })),
+  };
+  const direct = (await importPackage(untidy)) as ImportReport & { packageHash: string };
+  // Same identity, values and hash as the validator's canonical package.
+  assert.equal(direct.packageHash, hashCurriculumPackage(base));
+  assert.equal(await count("select count(*) from public.curriculum_sources where source_url = $1", [base.source.sourceUrl]), 1);
+
+  const [row] = await call<{ payload: unknown }>("service_role", "select public.focus_export_curriculum($1) as payload", [base.source.sourceUrl]);
+  const exported = validateExportedCurriculum(row.payload, "export");
+  assert.equal(exported.ok, true, JSON.stringify(exported.errors));
+  assert.deepEqual(exported.package, base);
+  assert.equal((await importPackage(exported.package)).changed, false);
+});
+
+test("P2: NULL safety flags are refused before any write", async () => {
+  const before = await snapshot();
+  for (const [dryRun, allow] of [[null, false], [false, null], [null, null]] as const) {
+    await assert.rejects(
+      call("service_role", "select public.focus_import_curriculum($1::jsonb, $2, $3)", [JSON.stringify(canonical(secondePackage())), dryRun, allow]),
+      /p_dry_run and p_allow_mass_deactivation must not be null/,
+    );
+  }
+  assert.deepEqual(await snapshot(), before);
+});

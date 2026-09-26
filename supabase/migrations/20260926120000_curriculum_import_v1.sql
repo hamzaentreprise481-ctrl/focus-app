@@ -245,6 +245,13 @@ begin
   -- stable graph.
   perform pg_advisory_xact_lock(hashtextextended('focus.curriculum_import', 0));
 
+  -- The safety flags must be explicit: NULL would skip the dry-run rollback or
+  -- the mass-deactivation guard.
+  if p_dry_run is null or p_allow_mass_deactivation is null then
+    raise exception 'curriculum import: p_dry_run and p_allow_mass_deactivation must not be null'
+      using errcode = '22004';
+  end if;
+
   -- Shape ---------------------------------------------------------------------
   if p_package is null or jsonb_typeof(p_package) <> 'object' then
     raise exception 'curriculum import: the package must be a JSON object'
@@ -278,6 +285,75 @@ begin
     raise exception 'curriculum import: nodes and edges must be objects' using errcode = '22023';
   end if;
 
+  -- Text rules on the values as received: control characters are refused
+  -- before normalization, lengths are measured after it (validator rules).
+  if not (
+       public.focus_curriculum_text_ok(v_source->>'subjectCode', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'levelCode', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'schoolYear', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'title', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'publisher', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'officialReference', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'sourceUrl', 300, true)
+     ) then
+    raise exception 'curriculum import: source fields are required, 300 characters max, without control characters'
+      using errcode = '22023';
+  end if;
+  if v_source ? 'publishedOn'
+     and jsonb_typeof(v_source->'publishedOn') not in ('string', 'null') then
+    raise exception 'curriculum import: publishedOn must be YYYY-MM-DD or null' using errcode = '22023';
+  end if;
+
+  select string_agg(coalesce(n.code, '(missing code)'), ', ' order by n.code)
+  into v_bad
+  from jsonb_to_recordset(v_nodes)
+    as n(code text, title text, description text, "sourceLocator" text)
+  where not public.focus_curriculum_text_ok(n.title, 160, true)
+     or not public.focus_curriculum_text_ok(n.description, 300, false)
+     or not public.focus_curriculum_text_ok(n."sourceLocator", 200, true);
+  if v_bad is not null then
+    raise exception 'curriculum import: invalid nodes: %', left(v_bad, 2000)
+      using errcode = '22023';
+  end if;
+
+  -- Normalize once, like the validator's canonical package: identity (source
+  -- URL, codes), every check below, the hash and the stored values all use
+  -- the normalized form, so an export always round-trips.
+  v_source := jsonb_build_object(
+    'subjectCode', public.focus_curriculum_text(v_source->>'subjectCode'),
+    'levelCode', public.focus_curriculum_text(v_source->>'levelCode'),
+    'schoolYear', public.focus_curriculum_text(v_source->>'schoolYear'),
+    'title', public.focus_curriculum_text(v_source->>'title'),
+    'publisher', public.focus_curriculum_text(v_source->>'publisher'),
+    'officialReference', public.focus_curriculum_text(v_source->>'officialReference'),
+    'sourceUrl', public.focus_curriculum_text(v_source->>'sourceUrl'),
+    'publishedOn', coalesce(v_source->'publishedOn', 'null'::jsonb)
+  );
+  v_nodes := (
+    select jsonb_agg(
+      jsonb_build_object(
+        'code', public.focus_curriculum_text(x->>'code'),
+        'type', x->>'type',
+        'title', public.focus_curriculum_text(x->>'title'),
+        'description', nullif(public.focus_curriculum_text(x->>'description'), ''),
+        'sourceLocator', public.focus_curriculum_text(x->>'sourceLocator')
+      )
+      order by i
+    )
+    from jsonb_array_elements(v_nodes) with ordinality as t(x, i)
+  );
+  v_edges := coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'from', public.focus_curriculum_text(x->>'from'),
+        'to', public.focus_curriculum_text(x->>'to'),
+        'relation', public.focus_curriculum_text(x->>'relation')
+      )
+      order by i
+    )
+    from jsonb_array_elements(v_edges) with ordinality as t(x, i)
+  ), '[]'::jsonb);
+
   -- Source --------------------------------------------------------------------
   v_subject := v_source->>'subjectCode';
   v_level := v_source->>'levelCode';
@@ -296,18 +372,6 @@ begin
     raise exception 'curriculum import: sourceUrl must be an https URL on an official domain'
       using errcode = '22023';
   end if;
-  if not (
-       public.focus_curriculum_text_ok(v_source->>'subjectCode', 300, true)
-       and public.focus_curriculum_text_ok(v_source->>'levelCode', 300, true)
-       and public.focus_curriculum_text_ok(v_source->>'schoolYear', 300, true)
-       and public.focus_curriculum_text_ok(v_source->>'title', 300, true)
-       and public.focus_curriculum_text_ok(v_source->>'publisher', 300, true)
-       and public.focus_curriculum_text_ok(v_source->>'officialReference', 300, true)
-       and public.focus_curriculum_text_ok(v_url, 300, true)
-     ) then
-    raise exception 'curriculum import: source fields are required, 300 characters max, without control characters'
-      using errcode = '22023';
-  end if;
   if jsonb_typeof(v_source->'publishedOn') = 'string'
      and (v_source->>'publishedOn') !~ '^\d{4}-\d{2}-\d{2}$' then
     raise exception 'curriculum import: publishedOn must be YYYY-MM-DD' using errcode = '22023';
@@ -316,17 +380,13 @@ begin
   -- Nodes ---------------------------------------------------------------------
   select string_agg(coalesce(n.code, '(missing code)'), ', ' order by n.code)
   into v_bad
-  from jsonb_to_recordset(v_nodes)
-    as n(code text, type text, title text, description text, "sourceLocator" text)
+  from jsonb_to_recordset(v_nodes) as n(code text, type text)
   where n.code is null
      or char_length(n.code) > 120
      or n.code !~ c_code_re
      or split_part(n.code, '.', 1) <> v_subject
      or n.type is null
-     or n.type not in ('domain', 'notion', 'competency', 'prerequisite')
-     or not public.focus_curriculum_text_ok(n.title, 160, true)
-     or not public.focus_curriculum_text_ok(n.description, 300, false)
-     or not public.focus_curriculum_text_ok(n."sourceLocator", 200, true);
+     or n.type not in ('domain', 'notion', 'competency', 'prerequisite');
   if v_bad is not null then
     raise exception 'curriculum import: invalid nodes: %', left(v_bad, 2000)
       using errcode = '22023';
