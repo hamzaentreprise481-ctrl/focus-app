@@ -21,13 +21,18 @@ export function StudentEvidenceEditor({
   assessmentId,
   students,
   definitionVersion,
+  initialStudentId,
 }: {
   assessmentId: string;
   students: { id: string; name: string }[];
   /** Changes when the definition was saved, to reload the questions. */
   definitionVersion: number;
+  /** Student to open first (dashboard links), when in this class. */
+  initialStudentId?: string;
 }) {
-  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
+  const [studentId, setStudentId] = useState(
+    students.some((student) => student.id === initialStudentId) ? initialStudentId! : (students[0]?.id ?? ""),
+  );
   const [overview, setOverview] = useState<Map<string, ResponseOverviewRow>>(new Map());
   const [questionCount, setQuestionCount] = useState<number | null>(null);
   const [evidence, setEvidence] = useState<StudentEvidenceView | null>(null);
@@ -37,6 +42,7 @@ export function StudentEvidenceEditor({
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string; link?: boolean } | null>(null);
   const [busy, setBusy] = useState<"save" | "analyze" | null>(null);
   const lock = useRef(false);
+  const scrolled = useRef(false);
 
   const applyOverview = useCallback((result: Awaited<ReturnType<typeof loadResponseOverview>>) => {
     if (result.ok) {
@@ -55,6 +61,11 @@ export function StudentEvidenceEditor({
     setEvidence(result.evidence);
     setDraft(result.evidence.responses);
     setSaved(JSON.stringify(result.evidence.responses));
+    // Opened from a dashboard link: the section only has its height now.
+    if (!scrolled.current && window.location.hash === "#copies") {
+      scrolled.current = true;
+      requestAnimationFrame(() => document.getElementById("copies")?.scrollIntoView({ block: "start" }));
+    }
   }, []);
   const loadStudent = useCallback(
     async (id: string) => applyEvidence(await loadStudentEvidence(assessmentId, id)),
@@ -152,7 +163,7 @@ export function StudentEvidenceEditor({
   const studentName = students.find((student) => student.id === studentId)?.name ?? "l’élève";
 
   return (
-    <section aria-labelledby="copies-title" className="rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:p-6">
+    <section id="copies" aria-labelledby="copies-title" className="scroll-mt-6 rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:p-6">
       <h2 id="copies-title" className="text-[17px] font-semibold text-ink">
         Copies des élèves
       </h2>

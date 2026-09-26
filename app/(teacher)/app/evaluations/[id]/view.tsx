@@ -12,7 +12,7 @@ import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
 import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment-evidence-workspace";
 
-export default function EvaluationDetailPage() {
+export default function EvaluationDetailPage({ initialStudentId }: { initialStudentId?: string }) {
   const { id } = useParams<{ id: string }>();
   const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
 
@@ -197,7 +197,7 @@ export default function EvaluationDetailPage() {
         )}
       </section>
 
-      <AssessmentEvidenceWorkspace assessmentId={id} students={classStudents} />
+      <AssessmentEvidenceWorkspace assessmentId={id} students={classStudents} initialStudentId={initialStudentId} />
     </div>
   );
 }

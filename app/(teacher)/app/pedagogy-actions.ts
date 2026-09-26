@@ -25,6 +25,7 @@ import {
   runStatus,
   studentMathContext,
   studentPedagogy,
+  teacherWorkQueue,
   toNumber,
   UUID_RE,
   type SupabaseClient,
@@ -36,6 +37,7 @@ import type {
   ResponseOverviewRow,
   StudentEvidenceView,
   StudentResponseDraft,
+  TeacherWorkQueue,
 } from "@/lib/pedagogy/types";
 
 type Failure = { ok: false; error: string };
@@ -53,6 +55,16 @@ async function session() {
   const supabase = await createAuthClient();
   if (!supabase) throw new AccessError("Le service de données n’est pas configuré.");
   return { teacher, supabase };
+}
+
+/** What is waiting for the teacher across their mathematics assessments. */
+export async function loadTeacherWorkQueue(): Promise<{ ok: true; queue: TeacherWorkQueue } | Failure> {
+  try {
+    const { supabase } = await session();
+    return { ok: true, queue: { assessments: await teacherWorkQueue(supabase), aiConfigured: pedagogicalAiConfigured() } };
+  } catch (error) {
+    return failure(error, "Impossible de charger les copies à traiter.");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +344,8 @@ export async function loadResponseOverview(
     for (const response of responses) if (response.response_text.trim()) row(response.student_id).answeredCount++;
     const seenRun = new Set<string>();
     for (const run of runs) {
-      if (seenRun.has(run.student_id)) continue;
+      // A failed run analysed nothing: the copy still needs an analysis.
+      if (run.status === "failed" || seenRun.has(run.student_id)) continue;
       seenRun.add(run.student_id);
       row(run.student_id).analysisStatus = runStatus(run, activeByRun.get(run.id) ?? 0);
     }

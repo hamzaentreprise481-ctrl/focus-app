@@ -406,3 +406,54 @@ test("teachers read only their own classes' evidence", async () => {
   assert.deepEqual(await as(otherTeacher, "select 1 from public.assessments where id = $1", [assessmentId]), []);
   assert.deepEqual(await as(otherTeacher, "select 1 from public.profiles where id = $1", [a.students[0]]), []);
 });
+
+test("the dashboard work queue follows evidence, analyses and decisions, through the caller's RLS", async () => {
+  type Row = { assessmentId: string; questionCount: number; answeredStudentIds: string[]; needsAnalysisStudentIds: string[]; pendingReviews: Array<{ studentId: string; count: number }> };
+  const queue = async (user = a.teacher) => (await as<{ q: Row[] }>(user, "select public.focus_teacher_work_queue() as q"))[0].q;
+  const row = async (id: string, user = a.teacher) => (await queue(user)).find((item) => item.assessmentId === id);
+  const sorted = (ids: string[]) => [...ids].sort();
+
+  const empty = await assessment("Sans sujet");
+  assert.deepEqual(await row(empty), { assessmentId: empty, questionCount: 0, answeredStudentIds: [], needsAnalysisStudentIds: [], pendingReviews: [] });
+
+  const assessmentId = await assessment("Copies");
+  const [q] = (await saveQuestions(assessmentId, [{}])).questionIds;
+  await saveResponses(assessmentId, a.students[0], [{ questionId: q, responseText: "3(x+2)=3x+2" }]);
+  await saveResponses(assessmentId, a.students[1], [{ questionId: q, responseText: "3x+6" }]);
+  // Points without an answer is not a copy to analyse.
+  await saveResponses(assessmentId, a.students[2], [{ questionId: q, responseText: "  ", awardedPoints: "0" }]);
+  let current = (await row(assessmentId))!;
+  assert.equal(current.questionCount, 1);
+  assert.deepEqual(current.answeredStudentIds, sorted([a.students[0], a.students[1]]));
+  assert.deepEqual(current.needsAnalysisStudentIds, sorted([a.students[0], a.students[1]]));
+
+  await analyse(assessmentId, a.students[0], [{ questionId: q, node: "MATH.ALG.DISTRIBUTIVITE", excerpt: "3x+2" }]);
+  await teacher("select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'Réponse juste')", [a.school, a.students[1], assessmentId, hash()]);
+  current = (await row(assessmentId))!;
+  assert.deepEqual(current.needsAnalysisStudentIds, []);
+  assert.deepEqual(current.pendingReviews, [{ studentId: a.students[0], count: 1 }]);
+
+  // A decision takes the hypothesis out of the queue.
+  const [{ id }] = await teacher<{ id: string }>("select id from public.pedagogical_recommendations where assessment_id = $1", [assessmentId]);
+  await teacher("select public.focus_review_pedagogical_recommendation($1, 'validate')", [id]);
+  assert.deepEqual((await row(assessmentId))!.pendingReviews, []);
+
+  // Editing a copy supersedes its analysis: it needs a new one.
+  await saveResponses(assessmentId, a.students[1], [{ questionId: q, responseText: "3x+5" }]);
+  assert.deepEqual((await row(assessmentId))!.needsAnalysisStudentIds, [a.students[1]]);
+
+  // Another teacher's queue never lists these assessments; anon cannot call it.
+  assert.equal(await row(assessmentId, otherTeacher), undefined);
+  await assert.rejects(
+    (async () => {
+      await db.exec("savepoint anon");
+      try {
+        await db.exec("set local role anon");
+        await db.query("select public.focus_teacher_work_queue()");
+      } finally {
+        await db.exec("rollback to savepoint anon");
+      }
+    })(),
+    /permission denied/,
+  );
+});

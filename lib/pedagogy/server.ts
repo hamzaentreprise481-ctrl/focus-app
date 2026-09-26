@@ -22,6 +22,7 @@ import type {
   PedagogicalConfidence,
   PedagogicalRecommendationView,
   RecommendationStatus,
+  WorkQueueAssessment,
 } from "@/lib/pedagogy/types";
 
 export type SupabaseClient = NonNullable<Awaited<ReturnType<typeof createAuthClient>>>;
@@ -575,4 +576,39 @@ export async function studentPedagogy(
     notions,
     assessments,
   };
+}
+
+const isUuidList = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string" && UUID_RE.test(item));
+
+/** The dashboard work queue, read through the teacher's RLS in one RPC. */
+export async function teacherWorkQueue(supabase: SupabaseClient): Promise<WorkQueueAssessment[]> {
+  const response = await supabase.rpc("focus_teacher_work_queue");
+  ensureOk(response.error, "Copies à traiter");
+  const rows: unknown = response.data;
+  if (!Array.isArray(rows)) throw new Error("focus_teacher_work_queue: unexpected payload");
+  return rows.map((row) => {
+    const value = row as Record<string, unknown>;
+    const pending = value.pendingReviews;
+    if (
+      typeof value.assessmentId !== "string" ||
+      !UUID_RE.test(value.assessmentId) ||
+      typeof value.questionCount !== "number" ||
+      !isUuidList(value.answeredStudentIds) ||
+      !isUuidList(value.needsAnalysisStudentIds) ||
+      !Array.isArray(pending) ||
+      !pending.every(
+        (item) =>
+          typeof item?.studentId === "string" && UUID_RE.test(item.studentId) && Number.isInteger(item?.count) && item.count > 0,
+      )
+    )
+      throw new Error("focus_teacher_work_queue: unexpected row");
+    return {
+      assessmentId: value.assessmentId,
+      questionCount: value.questionCount,
+      answeredStudentIds: value.answeredStudentIds,
+      needsAnalysisStudentIds: value.needsAnalysisStudentIds,
+      pendingReviews: pending.map((item: { studentId: string; count: number }) => ({ studentId: item.studentId, count: item.count })),
+    };
+  });
 }

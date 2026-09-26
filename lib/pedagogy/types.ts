@@ -156,6 +156,23 @@ export interface ResponseOverviewRow {
   pendingRecommendations: number;
 }
 
+/** One mathematics assessment of the teacher, as the dashboard needs it. */
+export interface WorkQueueAssessment {
+  assessmentId: string;
+  questionCount: number;
+  /** Students with at least one non-empty answer. */
+  answeredStudentIds: string[];
+  /** Answered students without a current (non-superseded) analysis. */
+  needsAnalysisStudentIds: string[];
+  /** Current AI hypotheses the teacher has not decided on yet. */
+  pendingReviews: Array<{ studentId: string; count: number }>;
+}
+
+export interface TeacherWorkQueue {
+  assessments: WorkQueueAssessment[];
+  aiConfigured: boolean;
+}
+
 export interface ModelErrorCandidate {
   assessmentId: string;
   questionId: string;
