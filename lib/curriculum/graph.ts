@@ -231,7 +231,10 @@ function normalizeLevel(value: string) {
 const TRACK_SYNONYMS: Record<string, string> = {
   GENERALE_ET_TECHNOLOGIQUE: "GT",
   GENERALE_TECHNOLOGIQUE: "GT",
+  GENERALE: "GT",
+  GENERAL: "GT",
   PROFESSIONNELLE: "PRO",
+  PROFESSIONNEL: "PRO",
   SPECIALITE: "SPE",
   SPECIALITE_MATHEMATIQUES: "SPE_MATHS",
   SPE_MATHEMATIQUES: "SPE_MATHS",
@@ -264,16 +267,12 @@ export function resolveCurriculumScope(
       // Keep the track qualifier ("2nde GT" → SECONDE_GT, "Première spé" →
       // PREMIERE_SPE…): a general-track class must not receive a
       // professional-track programme that shares the grade prefix.
-      const spelled = normalized
-        .replace(alias.pattern, "")
-        .trim()
-        .split(" ")
-        .filter(Boolean)
-        .join("_")
-        .toUpperCase();
-      const qualifier = TRACK_SYNONYMS[spelled] ?? spelled;
-      if (qualifier) {
-        const withQualifier = `${alias.prefix}_${qualifier}`;
+      // The longest leading words that name a track win, so a class number
+      // after the track ("Seconde générale 3") does not hide it.
+      const words = normalized.replace(alias.pattern, "").trim().split(" ").filter(Boolean);
+      for (let count = words.length; count > 0; count--) {
+        const spelled = words.slice(0, count).join("_").toUpperCase();
+        const withQualifier = `${alias.prefix}_${TRACK_SYNONYMS[spelled] ?? spelled}`;
         const tracked = levels.filter(
           (code) => code === withQualifier || code.startsWith(`${withQualifier}_`),
         );

@@ -186,6 +186,12 @@ test("class levels keep their track qualifier when several tracks share a grade"
   // No track given, or a class number: every programme of the grade.
   assert.deepEqual(resolveCurriculumScope("Seconde", levels).levelCodes, ["SECONDE_GT", "SECONDE_PRO"]);
   assert.deepEqual(resolveCurriculumScope("Seconde 3", levels).levelCodes, ["SECONDE_GT", "SECONDE_PRO"]);
+  // Codex review of 3fab0aa — the short "générale" label and a class number
+  // after the track keep the track.
+  for (const label of ["Seconde générale", "Seconde Generale", "2nde générale 3", "Seconde GT 2", "Seconde générale et technologique 4"])
+    assert.deepEqual(resolveCurriculumScope(label, ["SECONDE_GT", "SECONDE_PRO"]).levelCodes, ["SECONDE_GT"], label);
+  for (const label of ["Seconde professionnelle 1", "2nde pro B", "Seconde professionnel"])
+    assert.deepEqual(resolveCurriculumScope(label, ["SECONDE_GT", "SECONDE_PRO"]).levelCodes, ["SECONDE_PRO"], label);
   // The live class level with the live programme.
   assert.deepEqual(resolveCurriculumScope("Seconde", ["SECONDE_GT"]), { levelCodes: ["SECONDE_GT"], resolution: "class_level" });
 });
