@@ -3,6 +3,8 @@
 
 import { after, before, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { loadCurriculumPackage } from "../lib/curriculum/fs";
@@ -546,4 +548,130 @@ test("database constraints guard nodes and pairs even outside the importer", asy
     ),
     2,
   );
+});
+
+async function seededIdsByCode() {
+  const rows = await call<{ code: string; id: string }>(
+    "postgres",
+    `select n.code, n.id from public.curriculum_nodes n
+     join public.curriculum_sources s on s.id = n.source_id
+     where s.source_url = $1 order by n.code`,
+    [SEEDED_URL],
+  );
+  return new Map(rows.map((row) => [row.code, row.id]));
+}
+
+test("the 44 seeded node UUIDs are preserved through re-import, extension, edits and deactivation cycles", async () => {
+  const seeded = await seededIdsByCode();
+  assert.equal(seeded.size, 44);
+  const nodeId = await referenceNode("MATH.ALG.DISTRIBUTIVITE");
+  assert.equal(nodeId, seeded.get("MATH.ALG.DISTRIBUTIVITE"));
+
+  const reference = validateCurriculumPackage(loadCurriculumPackage(REFERENCE_PACKAGE)).package!;
+  assert.equal((await importPackage(reference)).changed, false);
+
+  // A fuller programme: new notions, one relabelled node, new relationships.
+  const extended = clone(reference);
+  extended.nodes.push(
+    { code: "MATH.ALG.IDENTITES_APPLICATIONS", type: "notion", title: "Applications des identités", description: null, sourceLocator: "Algèbre" },
+    { code: "MATH.GEO.PYTHAGORE_REPERE", type: "notion", title: "Distance dans un repère", description: null, sourceLocator: "Géométrie" },
+  );
+  extended.nodes.sort((a, b) => (a.code < b.code ? -1 : 1));
+  extended.nodes.find((node) => node.code === "MATH.GEO.VECTEURS")!.title = "Vecteurs du plan (coordonnées)";
+  extended.edges.push(
+    { from: "MATH.ALG.IDENTITES", to: "MATH.ALG.IDENTITES_APPLICATIONS", relation: "prerequisite_of" },
+    { from: "MATH.ALG.IDENTITES_APPLICATIONS", to: "MATH.COMP.CALCULER", relation: "supports" },
+    { from: "MATH.GEO.PYTHAGORE_REPERE", to: "MATH.COMP.REPRESENTER", relation: "supports" },
+  );
+  const grown = await importPackage(extended);
+  assert.deepEqual(grown.nodes, {
+    inserted: 2,
+    updated: 1,
+    reactivated: 0,
+    unchanged: 43,
+    deactivated: 0,
+    deactivatedStillReferenced: 0,
+  });
+  assert.deepEqual(grown.edges, { inserted: 3, deleted: 0, unchanged: 68, sharedWithOtherSources: 0 });
+
+  // Back to the reference: the two new notions are deactivated, not deleted,
+  // then a second extension reactivates them under their first UUIDs.
+  const [added] = await call<{ ids: string[] }>(
+    "postgres",
+    "select array_agg(id order by code) as ids from public.curriculum_nodes where code in ('MATH.ALG.IDENTITES_APPLICATIONS', 'MATH.GEO.PYTHAGORE_REPERE')",
+  );
+  const back = await importPackage(reference);
+  assert.equal(back.nodes.deactivated, 2);
+  assert.equal(back.nodes.updated, 1);
+  const again = await importPackage(extended);
+  assert.equal(again.nodes.reactivated, 2);
+  assert.equal(again.nodes.inserted, 0);
+  const [readded] = await call<{ ids: string[] }>(
+    "postgres",
+    "select array_agg(id order by code) as ids from public.curriculum_nodes where code in ('MATH.ALG.IDENTITES_APPLICATIONS', 'MATH.GEO.PYTHAGORE_REPERE')",
+  );
+  assert.deepEqual(readded.ids, added.ids);
+
+  assert.deepEqual(
+    [...(await seededIdsByCode())].filter(([code]) => seeded.has(code)),
+    [...seeded],
+  );
+  assert.equal(
+    await count("select count(*) from public.question_curriculum_nodes where curriculum_node_id = $1", [nodeId]),
+    1,
+  );
+});
+
+test("a JSON package file on disk imports end to end, then re-imports as a no-op", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "focus-curriculum-"));
+  try {
+    const file = path.join(dir, "seconde-test.json");
+    writeFileSync(file, JSON.stringify(secondePackage(), null, 2));
+    const loaded = validateCurriculumPackage(loadCurriculumPackage(file));
+    assert.equal(loaded.ok, true, JSON.stringify(loaded.errors));
+
+    const first = await importPackage(loaded.package);
+    assert.equal(first.nodes.inserted, 7);
+    assert.equal(first.edges.inserted, 9);
+    const ids = await call<{ code: string; id: string }>(
+      "postgres",
+      "select code, id from public.curriculum_nodes where code like 'MATH.T2.%' order by code",
+    );
+
+    const before = await snapshot();
+    const second = await importPackage(validateCurriculumPackage(loadCurriculumPackage(file)).package);
+    assert.equal(second.changed, false);
+    assert.deepEqual(await snapshot(), before);
+    assert.deepEqual(
+      await call("postgres", "select code, id from public.curriculum_nodes where code like 'MATH.T2.%' order by code"),
+      ids,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("applying the importer migration to the existing database keeps the 44 node rows untouched", async () => {
+  const migration = "20260926120000_curriculum_import_v1.sql";
+  const previous = await createMigratedDatabase({ upTo: "20260926003500_supersede_edited_analysis_runs.sql" });
+  try {
+    const nodes = async () =>
+      (
+        await previous.query<{ row: string }>(
+          "select code || ' ' || id || ' ' || ctid::text || ' ' || active as row from public.curriculum_nodes order by code",
+        )
+      ).rows.map((item) => item.row);
+    const before = await nodes();
+    assert.equal(before.length, 44);
+    await previous.exec(readFileSync(path.join(__dirname, "..", "supabase", "migrations", migration), "utf8"));
+    assert.deepEqual(await nodes(), before);
+    const [edges] = (
+      await previous.query<{ total: number; owned: number }>(
+        "select count(*)::int as total, count(source_id)::int as owned from public.curriculum_edges",
+      )
+    ).rows;
+    assert.deepEqual(edges, { total: 68, owned: 68 });
+  } finally {
+    await previous.close();
+  }
 });
