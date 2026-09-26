@@ -232,6 +232,9 @@ export function normalizeCurriculumText(value: string) {
 }
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+// An unpaired UTF-16 surrogate survives JSON.parse but not PostgreSQL's
+// jsonb cast, so a package containing one could never be imported.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 
 // The exact expression used by public.focus_import_curriculum, so both sides
@@ -366,6 +369,8 @@ export function validateCurriculumPackage(
       }
       if (CONTROL_CHARS.test(field))
         error("CONTROL_CHARACTER", `source.${key} contient un caractère de contrôle.`, raw.sourceAt);
+      if (LONE_SURROGATE.test(field))
+        error("INVALID_UNICODE", `source.${key} contient un caractère Unicode invalide (surrogate isolé).`, raw.sourceAt);
       const normalized = normalizeCurriculumText(field);
       if (codePointLength(normalized) > max)
         error("SOURCE_FIELD", `source.${key} dépasse ${max} caractères.`, raw.sourceAt);
@@ -499,6 +504,10 @@ export function validateCurriculumPackage(
       }
       if (CONTROL_CHARS.test(field)) {
         error("CONTROL_CHARACTER", `${key} contient un caractère de contrôle (${code}).`, at);
+        valid = false;
+      }
+      if (LONE_SURROGATE.test(field)) {
+        error("INVALID_UNICODE", `${key} contient un caractère Unicode invalide (surrogate isolé) (${code}).`, at);
         valid = false;
       }
       const normalized = normalizeCurriculumText(field);

@@ -254,6 +254,22 @@ test("control characters are refused", () => {
   assert.ok(errorCodes(pkg).includes("CONTROL_CHARACTER"));
 });
 
+// Codex review of 18e7f3d.
+test("P2: lone UTF-16 surrogates are refused (PostgreSQL could never import them)", () => {
+  for (const bad of ["\uD800", "a\uDC00b", "\uDBFF\uD800"]) {
+    const node = clone(secondePackage());
+    node.nodes[4].title = `Distributivité ${bad}`;
+    assert.ok(errorCodes(node).includes("INVALID_UNICODE"), JSON.stringify(bad));
+    const source = clone(secondePackage());
+    source.source.title = `Programme ${bad}`;
+    assert.ok(errorCodes(source).includes("INVALID_UNICODE"), JSON.stringify(bad));
+  }
+  // A well-formed pair (emoji) is still accepted.
+  const emoji = clone(secondePackage());
+  emoji.nodes[4].title = "Distributivité 😀";
+  assert.ok(!errorCodes(emoji).includes("INVALID_UNICODE"));
+});
+
 test("the source must be official, dated correctly and complete", () => {
   assert.equal(isOfficialSourceUrl("https://www.education.gouv.fr/bo/2026/Hebdo14/X"), true);
   assert.equal(isOfficialSourceUrl("https://eduscol.education.fr/document/1"), true);

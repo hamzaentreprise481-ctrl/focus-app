@@ -1004,3 +1004,30 @@ test("P2: the audit hash is the canonical fingerprint whatever the order of node
   assert.equal(exported.ok, true, JSON.stringify(exported.errors));
   assert.equal(exported.hash, expected);
 });
+
+// Codex review of 18e7f3d.
+test("P2: the RPC refuses non-string text fields instead of coercing them", async () => {
+  const base = canonical(secondePackage());
+  const before = await snapshot();
+  type Loose = { source: Record<string, unknown>; nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] };
+  const cases: Array<[(pkg: Loose) => void, RegExp]> = [
+    [(pkg) => (pkg.source.title = 42), /text fields must be JSON strings: source\.title/],
+    [(pkg) => (pkg.source.publisher = true), /source\.publisher/],
+    [(pkg) => (pkg.nodes[0].title = 7), /nodes\[\]\.title/],
+    [(pkg) => (pkg.nodes[0].description = { text: "x" }), /nodes\[\]\.description/],
+    [(pkg) => (pkg.edges[0].relation = ["supports"]), /edges\[\]\.relation/],
+  ];
+  for (const [mutate, expected] of cases) {
+    const pkg = clone(base) as unknown as Loose;
+    mutate(pkg);
+    assert.match(await importError(pkg), expected);
+    // The validator refuses the same payload.
+    assert.equal(validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(pkg), "t.json")).ok, false);
+  }
+  assert.deepEqual(await snapshot(), before);
+  // JSON null stays allowed where the canonical form uses it.
+  const nulls = clone(base);
+  nulls.source.publishedOn = null;
+  nulls.nodes[0].description = null;
+  assert.equal((await importPackage(nulls, { dryRun: true })).dryRun, true);
+});

@@ -309,6 +309,25 @@ begin
       using errcode = '22023';
   end if;
 
+  -- Every text field must be a JSON string (or null where absence is
+  -- allowed): ->> would otherwise coerce 42 or true into "42" / "true".
+  select string_agg(distinct f, ', ' order by f)
+  into v_bad
+  from (
+    select 'source.' || e.key as f from jsonb_each(v_source) e
+    where jsonb_typeof(e.value) not in ('string', 'null')
+    union all
+    select 'nodes[].' || e.key from jsonb_array_elements(v_nodes) x, jsonb_each(x) e
+    where jsonb_typeof(e.value) not in ('string', 'null')
+    union all
+    select 'edges[].' || e.key from jsonb_array_elements(v_edges) x, jsonb_each(x) e
+    where jsonb_typeof(e.value) not in ('string', 'null')
+  ) u;
+  if v_bad is not null then
+    raise exception 'curriculum import: text fields must be JSON strings: %', left(v_bad, 2000)
+      using errcode = '22023';
+  end if;
+
   -- Text rules on the values as received: control characters are refused
   -- before normalization, lengths are measured after it (validator rules).
   if not (
