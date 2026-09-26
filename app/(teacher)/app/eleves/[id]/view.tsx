@@ -13,6 +13,7 @@ import { CreateAccompagnementDialog } from "@/components/students/create-accompa
 import { EvidenceTimeline } from "@/components/students/evidence-timeline";
 import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import { formatScore } from "@/lib/utils";
+import { PedagogicalAiPanel } from "@/components/students/pedagogical-ai-panel";
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +68,8 @@ export default function StudentProfilePage() {
       </header>
 
       <ExportPdfButton target={{ kind: "student", id: id }} />
+
+      <PedagogicalAiPanel studentId={id} />
       <section
         aria-labelledby="next-step"
         className="rounded-xl border border-border bg-surface p-5 sm:p-6"

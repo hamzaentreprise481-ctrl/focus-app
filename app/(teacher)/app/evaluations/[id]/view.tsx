@@ -10,6 +10,7 @@ import { DemoDataState } from "@/components/evaluations/demo-data-state";
 import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
+import { AssessmentPedagogyEditor } from "@/components/evaluations/assessment-pedagogy-editor";
 
 export default function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +38,9 @@ export default function EvaluationDetailPage() {
 
   const analysis = analyzeEvaluation(id, dataset);
   const { evaluation } = analysis;
+  const classStudents = dataset.students
+    .filter((student) => student.classId === evaluation.classId)
+    .map(({ id: studentId, name }) => ({ id: studentId, name }));
 
   return (
     <div className="space-y-8">
@@ -72,6 +76,13 @@ export default function EvaluationDetailPage() {
         non renseignés. Les cases vides ne comptent ni comme zéro ni comme
         absence.
       </p>
+
+      {editableEvaluationIds.includes(id) && (
+        <AssessmentPedagogyEditor
+          assessmentId={id}
+          students={classStudents}
+        />
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
           <p className="text-sm text-ink-soft">Moyenne de classe</p>
