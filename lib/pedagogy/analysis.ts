@@ -117,6 +117,13 @@ export function validateModelAnalysis(
   questions: QuestionEvidenceForValidation[],
   nodesByCode: Map<string, string>,
 ): ValidatedModelAnalysis {
+  if (!questions.some((question) => question.responseText.trim()))
+    return {
+      status: "insufficient_evidence",
+      insufficientReason: "Aucune réponse exploitable n’est fournie.",
+      errors: [],
+    };
+
   if (!raw || typeof raw !== "object")
     return {
       status: "insufficient_evidence",

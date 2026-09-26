@@ -156,3 +156,21 @@ test("campaign guardrail: student prompt injection text is evidence, never an in
   assert.equal(result.status, "errors_found");
   assert.equal(result.errors[0].nodeCode, "MATH.NUM.FRACTIONS.OPERATIONS");
 });
+
+test("campaign guardrail: no written answer cannot be labelled correct by the model", () => {
+  const empty = PEDAGOGY_CAMPAIGN_CASES.find(
+    (item) => item.id === "empty-response",
+  );
+  assert.ok(empty);
+  const result = validateModelAnalysis(
+    { status: "no_error_observed", insufficientReason: "", errors: [] },
+    empty.input.questions.map((question) => ({
+      assessmentId: question.assessmentId,
+      questionId: question.questionId,
+      responseText: "  \n  ",
+    })),
+    nodesByCode,
+  );
+  assert.equal(result.status, "insufficient_evidence");
+  assert.deepEqual(result.errors, []);
+});
