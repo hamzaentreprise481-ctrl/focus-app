@@ -113,3 +113,27 @@ test("every teacher page checks authentication before rendering", () => {
   for (const file of pages)
     assert.match(readFileSync(file, "utf8"), /await requireTeacher\(\)/);
 });
+
+test("the Supabase service role key is only read by the administrator curriculum CLI", () => {
+  const root = path.join(__dirname, "..");
+  const sources = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      if (["node_modules", ".next", ".git", "tests"].includes(entry.name)) return [];
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return sources(full);
+      return /\.(ts|tsx|js|mjs)$/.test(entry.name) ? [full] : [];
+    });
+
+  const offenders = sources(root)
+    .filter((file) => readFileSync(file, "utf8").includes("SUPABASE_SERVICE_ROLE_KEY"))
+    .map((file) => path.relative(root, file));
+  assert.deepEqual(offenders, [path.join("scripts", "curriculum.ts")]);
+
+  // File-system loading, CSV parsing and SQL rendering never reach the app bundle.
+  const appImports = [...sources(path.join(root, "app")), ...sources(path.join(root, "components"))]
+    .filter((file) =>
+      /@\/lib\/curriculum\/(fs|sql|package|csv)["']/.test(readFileSync(file, "utf8")),
+    )
+    .map((file) => path.relative(root, file));
+  assert.deepEqual(appImports, []);
+});

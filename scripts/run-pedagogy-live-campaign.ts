@@ -1,3 +1,4 @@
+import { toAiCurriculum } from "../lib/curriculum/graph";
 import { requestPedagogicalAnalysis } from "../lib/pedagogy/openai-client";
 import {
   confidenceForEvidence,
@@ -54,7 +55,14 @@ async function main() {
     let raw: unknown;
     try {
       raw = modelCalled
-        ? await requestPedagogicalAnalysis(campaignCase.input, { apiKey, model })
+        ? await requestPedagogicalAnalysis(
+            {
+              ...campaignCase.input,
+              // Same compact projection as production (no ids, no URLs).
+              curriculum: toAiCurriculum(campaignCase.input.curriculum),
+            },
+            { apiKey, model },
+          )
         : {
             status: "insufficient_evidence",
             insufficientReason: "Aucune réponse exploitable n’est fournie.",
