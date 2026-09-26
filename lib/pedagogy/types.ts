@@ -20,10 +20,13 @@ export interface CurriculumNodeSummary {
   supports: string[];
 }
 
+export type RecommendationStatus = "pending" | "validated" | "dismissed" | "superseded";
+
 export interface PedagogicalRecommendationView {
   id: string;
   assessmentId: string;
   assessmentTitle: string;
+  assessmentDate: string;
   curriculumNodeCode: string;
   curriculumNodeTitle: string;
   difficulty: string;
@@ -32,6 +35,7 @@ export interface PedagogicalRecommendationView {
     questionLabel: string;
     excerpt: string;
   }>;
+  /** Computed by the database from the evidence history. */
   confidence: PedagogicalConfidence;
   explanation: string;
   recommendedAction: string;
@@ -39,39 +43,113 @@ export interface PedagogicalRecommendationView {
   sourceUrl: string;
   prerequisites: string[];
   competencies: string[];
-  teacherValidated: boolean;
+  status: RecommendationStatus;
+  decidedAt: string | null;
+  teacherNote: string | null;
   createdAt: string;
+  /** Curated catalogue entries (typical error, remediation) for the notion. */
+  catalogue: CatalogueSuggestion[];
+}
+
+export interface CatalogueSuggestion {
+  kind: "typical_error" | "remediation";
+  code: string;
+  title: string;
+  text: string;
+}
+
+/** One notion followed over time for one student. */
+export interface NotionTimeline {
+  code: string;
+  title: string;
+  observations: Array<{
+    assessmentId: string;
+    assessmentTitle: string;
+    assessmentDate: string;
+    /** error: an analysis kept an error on this notion; no_error: a question
+     * assessing it was analysed without an observed error (not mastery). */
+    kind: "error" | "no_error";
+    teacherDecision: "validated" | "dismissed" | null;
+  }>;
+}
+
+export interface AssessmentAnalysisState {
+  assessmentId: string;
+  title: string;
+  date: string;
+  questionCount: number;
+  answeredCount: number;
+  status: ModelAnalysisStatus | null;
+  reason: string | null;
+  analyzedAt: string | null;
+  /** Evidence exists but no current analysis (never run, or superseded). */
+  needsAnalysis: boolean;
 }
 
 export interface PedagogicalSnapshot {
-  recommendations: PedagogicalRecommendationView[];
-  documentedAssessmentCount: number;
-  analyzableAssessmentCount: number;
-  latestAnalyzableAssessmentTitle: string | null;
-  latestAnalysisStatus: ModelAnalysisStatus | null;
-  latestAnalysisReason: string | null;
-  latestAnalysisAt: string | null;
+  active: PedagogicalRecommendationView[];
+  history: PedagogicalRecommendationView[];
+  notions: NotionTimeline[];
+  assessments: AssessmentAnalysisState[];
   aiConfigured: boolean;
 }
 
-export interface EvidenceQuestionDraft {
+export interface NotionOption {
+  code: string;
+  title: string;
+  group: string;
+}
+
+export interface DefinitionQuestionDraft {
   id: string;
-  position: number;
   prompt: string;
   correctionText: string;
   rubricText: string;
   maxPoints: string;
+  nodeCodes: string[];
+}
+
+export interface AssessmentDefinitionDraft {
+  assessmentId: string;
+  contextText: string;
+  instructionsText: string;
+  questions: DefinitionQuestionDraft[];
+}
+
+export interface AssessmentDefinitionView extends AssessmentDefinitionDraft {
+  editable: boolean;
+  notions: NotionOption[];
+  answersByQuestion: Record<string, number>;
+}
+
+export interface StudentResponseDraft {
+  questionId: string;
   responseText: string;
   awardedPoints: string;
   teacherAnnotation: string;
 }
 
-export interface AssessmentEvidenceDraft {
+export interface StudentEvidenceView {
   assessmentId: string;
   studentId: string;
-  contextText: string;
-  instructionsText: string;
-  questions: EvidenceQuestionDraft[];
+  editable: boolean;
+  questions: Array<{
+    id: string;
+    position: number;
+    prompt: string;
+    correctionText: string;
+    maxPoints: number | null;
+  }>;
+  responses: StudentResponseDraft[];
+  analysis: AssessmentAnalysisState | null;
+}
+
+export interface ResponseOverviewRow {
+  studentId: string;
+  answeredCount: number;
+  analysisStatus: ModelAnalysisStatus | null;
+  needsAnalysis: boolean;
+  pendingRecommendations: number;
 }
 
 export interface ModelErrorCandidate {

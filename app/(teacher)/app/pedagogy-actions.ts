@@ -3,13 +3,7 @@
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
-import {
-  buildCurriculumIndex,
-  parseCurriculumGraphPayload,
-  resolveCurriculumScope,
-  toAiCurriculum,
-  type CurriculumIndex,
-} from "@/lib/curriculum/graph";
+import { toAiCurriculum } from "@/lib/curriculum/graph";
 import { validateModelAnalysis } from "@/lib/pedagogy/analysis";
 import {
   analyzePedagogicalEvidence,
@@ -18,737 +12,443 @@ import {
 } from "@/lib/pedagogy/openai";
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
+import {
+  AccessError,
+  assessmentAccess,
+  currentRuns,
+  curriculumGraph,
+  ensureOk,
+  evidenceRows,
+  notionOptions,
+  relatedCodesFor,
+  runStatus,
+  studentMathContext,
+  studentPedagogy,
+  toNumber,
+  UUID_RE,
+  type SupabaseClient,
+} from "@/lib/pedagogy/server";
 import type {
-  AssessmentEvidenceDraft,
-  PedagogicalConfidence,
-  PedagogicalRecommendationView,
+  AssessmentDefinitionDraft,
+  AssessmentDefinitionView,
   PedagogicalSnapshot,
+  ResponseOverviewRow,
+  StudentEvidenceView,
+  StudentResponseDraft,
 } from "@/lib/pedagogy/types";
 
-type SupabaseClient = NonNullable<Awaited<ReturnType<typeof createAuthClient>>>;
+type Failure = { ok: false; error: string };
 
-type AssignmentRow = {
-  school_id: string;
-  class_id: string;
-  subject_id: string;
-};
-type SubjectRow = { id: string; name: string; code: string | null };
-type EnrollmentRow = { school_id: string; class_id: string };
-type AssessmentRow = {
-  id: string;
-  school_id: string;
-  class_id: string;
-  subject_id: string;
-  teacher_id: string;
-  title: string;
-  date: string;
-};
-type MaterialRow = {
-  assessment_id: string;
-  context_text: string | null;
-  instructions_text: string | null;
-};
-type QuestionRow = {
-  id: string;
-  assessment_id: string;
-  position: number;
-  prompt: string;
-  correction_text: string;
-  rubric: { text?: string } | null;
-  max_points: number | string | null;
-};
-type ResponseRow = {
-  id: string;
-  assessment_id: string;
-  question_id: string;
-  student_id: string;
-  response_text: string;
-  awarded_points: number | string | null;
-  teacher_annotation: string | null;
-};
-type CurriculumNodeRefRow = {
-  id: string;
-  code: string;
-  title: string;
-  source_locator: string;
-  source: { source_url: string } | null;
-};
-type RecommendationRow = {
-  id: string;
-  assessment_id: string;
-  curriculum_node_id: string;
-  difficulty: string;
-  evidence: unknown;
-  confidence: PedagogicalConfidence;
-  explanation: string;
-  recommended_action: string;
-  teacher_validated: boolean;
-  created_at: string;
-};
-type PriorErrorRow = {
-  curriculum_node_id: string;
-  assessment_id: string;
-  verified_by_teacher: boolean;
-};
-type AnalysisRunRow = {
-  status: "completed" | "failed" | "no_evidence";
-  failure_reason: string | null;
-  created_at: string;
-};
+const GENERIC_ERROR = "L’opération n’a pas pu aboutir. Réessayez ; si le problème persiste, rechargez la page.";
 
-// The pedagogical AI V1 is limited to mathematics (see teacherMathContext).
-const CURRICULUM_SUBJECT_CODE = "MATH";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function ensureOk(error: { message: string } | null, label: string) {
-  if (error) throw new Error(`${label}: ${error.message}`);
+function failure(error: unknown, fallback = GENERIC_ERROR): Failure {
+  if (error instanceof AccessError) return { ok: false, error: error.message };
+  console.error("FOCUS pedagogy action failed", error instanceof Error ? error.message : error);
+  return { ok: false, error: fallback };
 }
 
-function isMathSubject(subject: SubjectRow) {
-  return (
-    subject.code?.toUpperCase().startsWith("MATH") === true ||
-    subject.name.toLocaleLowerCase("fr").includes("math")
-  );
-}
-
-async function teacherMathContext(
-  supabase: SupabaseClient,
-  teacherId: string,
-  studentId: string,
-) {
-  if (!UUID_RE.test(studentId)) throw new Error("Élève invalide.");
-
-  const assignmentsResponse = await supabase
-    .from("teacher_assignments")
-    .select("school_id,class_id,subject_id")
-    .eq("teacher_id", teacherId);
-  ensureOk(assignmentsResponse.error, "Affectations professeur");
-  const assignments = (assignmentsResponse.data ?? []) as AssignmentRow[];
-  if (!assignments.length)
-    throw new Error("Aucune classe n’est affectée à ce compte professeur.");
-
-  const classIds = [...new Set(assignments.map((row) => row.class_id))];
-  const enrollmentResponse = await supabase
-    .from("student_enrollments")
-    .select("school_id,class_id")
-    .eq("student_id", studentId)
-    .in("class_id", classIds)
-    .limit(1)
-    .maybeSingle();
-  ensureOk(enrollmentResponse.error, "Inscription élève");
-  const enrollment = enrollmentResponse.data as EnrollmentRow | null;
-  if (!enrollment)
-    throw new Error("Cet élève n’appartient pas à une de vos classes.");
-
-  const classResponse = await supabase
-    .from("classes")
-    .select("level")
-    .eq("id", enrollment.class_id)
-    .maybeSingle();
-  ensureOk(classResponse.error, "Classe");
-  const classLevel =
-    (classResponse.data as { level: string | null } | null)?.level ?? null;
-
-  const relevantAssignments = assignments.filter(
-    (row) => row.class_id === enrollment.class_id,
-  );
-  const subjectIds = [
-    ...new Set(relevantAssignments.map((row) => row.subject_id)),
-  ];
-  const subjectsResponse = await supabase
-    .from("subjects")
-    .select("id,name,code")
-    .in("id", subjectIds);
-  ensureOk(subjectsResponse.error, "Matières");
-  const subjects = (subjectsResponse.data ?? []) as SubjectRow[];
-  const mathSubject = subjects.find(isMathSubject);
-  if (!mathSubject)
-    throw new Error("La V1 de l’IA pédagogique est limitée aux mathématiques.");
-
-  const assessmentsResponse = await supabase
-    .from("assessments")
-    .select("id,school_id,class_id,subject_id,teacher_id,title,date")
-    .eq("class_id", enrollment.class_id)
-    .eq("subject_id", mathSubject.id)
-    .order("date", { ascending: false });
-  ensureOk(assessmentsResponse.error, "Évaluations");
-  const assessments = (assessmentsResponse.data ?? []) as AssessmentRow[];
-
-  return {
-    schoolId: enrollment.school_id,
-    classId: enrollment.class_id,
-    classLevel,
-    mathSubject,
-    assessments,
-  };
-}
-
-async function evidenceRows(
-  supabase: SupabaseClient,
-  assessmentIds: string[],
-  studentId: string,
-) {
-  if (!assessmentIds.length)
-    return {
-      materials: [] as MaterialRow[],
-      questions: [] as QuestionRow[],
-      responses: [] as ResponseRow[],
-    };
-
-  const [materialsResponse, questionsResponse, responsesResponse] =
-    await Promise.all([
-      supabase
-        .from("assessment_materials")
-        .select("assessment_id,context_text,instructions_text")
-        .in("assessment_id", assessmentIds),
-      supabase
-        .from("assessment_questions")
-        .select(
-          "id,assessment_id,position,prompt,correction_text,rubric,max_points",
-        )
-        .in("assessment_id", assessmentIds)
-        .order("position", { ascending: true }),
-      supabase
-        .from("student_responses")
-        .select(
-          "id,assessment_id,question_id,student_id,response_text,awarded_points,teacher_annotation",
-        )
-        .eq("student_id", studentId)
-        .in("assessment_id", assessmentIds),
-    ]);
-  ensureOk(materialsResponse.error, "Supports d’évaluation");
-  ensureOk(questionsResponse.error, "Questions");
-  ensureOk(responsesResponse.error, "Réponses élève");
-
-  return {
-    materials: (materialsResponse.data ?? []) as MaterialRow[],
-    questions: (questionsResponse.data ?? []) as QuestionRow[],
-    responses: (responsesResponse.data ?? []) as ResponseRow[],
-  };
-}
-
-export async function loadAssessmentEvidence(
-  assessmentId: string,
-  studentId: string,
-): Promise<AssessmentEvidenceDraft> {
+async function session() {
   const teacher = await requireTeacher();
   const supabase = await createAuthClient();
-  if (!supabase) throw new Error("Supabase n’est pas configuré.");
-
-  const context = await teacherMathContext(supabase, teacher.id, studentId);
-  const assessment = context.assessments.find((a) => a.id === assessmentId);
-  if (!assessment) throw new Error("Évaluation inaccessible.");
-
-  const { materials, questions, responses } = await evidenceRows(
-    supabase,
-    [assessmentId],
-    studentId,
-  );
-  const material = materials.find((row) => row.assessment_id === assessmentId);
-  const responseByQuestion = new Map(
-    responses.map((row) => [row.question_id, row]),
-  );
-
-  return {
-    assessmentId,
-    studentId,
-    contextText: material?.context_text ?? "",
-    instructionsText: material?.instructions_text ?? "",
-    questions: questions.map((question) => {
-      const response = responseByQuestion.get(question.id);
-      return {
-        id: question.id,
-        position: question.position,
-        prompt: question.prompt,
-        correctionText: question.correction_text,
-        rubricText: question.rubric?.text ?? "",
-        maxPoints:
-          question.max_points === null ? "" : String(question.max_points),
-        responseText: response?.response_text ?? "",
-        awardedPoints:
-          response?.awarded_points === null ||
-          response?.awarded_points === undefined
-            ? ""
-            : String(response.awarded_points),
-        teacherAnnotation: response?.teacher_annotation ?? "",
-      };
-    }),
-  };
+  if (!supabase) throw new AccessError("Le service de données n’est pas configuré.");
+  return { teacher, supabase };
 }
 
-export async function saveAssessmentEvidence(
-  input: AssessmentEvidenceDraft,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeacher();
-  const supabase = await createAuthClient();
-  if (!supabase)
-    return { ok: false, error: "Supabase n’est pas configuré." };
+// ---------------------------------------------------------------------------
+// Assessment definition: subject, questions, correction, rubric, notions
+// ---------------------------------------------------------------------------
 
-  if (
-    !UUID_RE.test(input.assessmentId) ||
-    !UUID_RE.test(input.studentId) ||
-    input.contextText.length > 12_000 ||
-    input.instructionsText.length > 12_000 ||
-    !Array.isArray(input.questions) ||
-    input.questions.length > 30
-  )
-    return { ok: false, error: "Les données saisies sont invalides." };
-
-  const positions = new Set<number>();
-  for (const question of input.questions) {
-    if (
-      !UUID_RE.test(question.id) ||
-      !Number.isInteger(question.position) ||
-      question.position <= 0 ||
-      positions.has(question.position) ||
-      !question.prompt.trim() ||
-      !question.correctionText.trim() ||
-      question.prompt.length > 12_000 ||
-      question.correctionText.length > 12_000 ||
-      question.rubricText.length > 8_000 ||
-      question.responseText.length > 20_000 ||
-      question.teacherAnnotation.length > 5_000
-    )
-      return { ok: false, error: "Une question ou une réponse est invalide." };
-    positions.add(question.position);
-  }
-
-  const { error } = await supabase.rpc("focus_save_pedagogical_evidence", {
-    p_assessment_id: input.assessmentId,
-    p_student_id: input.studentId,
-    p_context_text: input.contextText,
-    p_instructions_text: input.instructionsText,
-    p_questions: input.questions.map((question) => ({
-      id: question.id,
-      position: question.position,
-      prompt: question.prompt.trim(),
-      correctionText: question.correctionText.trim(),
-      rubricText: question.rubricText.trim(),
-      maxPoints: question.maxPoints.trim(),
-      responseText: question.responseText.trim(),
-      awardedPoints: question.awardedPoints.trim(),
-      teacherAnnotation: question.teacherAnnotation.trim(),
-    })),
-  });
-
-  if (error) {
-    console.error("FOCUS pedagogical evidence save failed", {
-      code: error.code,
-      message: error.message,
-    });
+export async function loadAssessmentDefinition(
+  assessmentId: string,
+): Promise<{ ok: true; definition: AssessmentDefinitionView } | Failure> {
+  try {
+    const { teacher, supabase } = await session();
+    const access = await assessmentAccess(supabase, teacher.id, assessmentId);
+    const { materials, questions, responses, tags } = await evidenceRows(supabase, [assessmentId]);
+    const graph = await curriculumGraph(supabase, access.classLevel);
+    const answersByQuestion: Record<string, number> = {};
+    for (const response of responses)
+      if (response.response_text.trim() || response.awarded_points !== null)
+        answersByQuestion[response.question_id] = (answersByQuestion[response.question_id] ?? 0) + 1;
     return {
-      ok: false,
-      error:
-        error.code === "42501"
-          ? "Vous n’avez pas les droits nécessaires pour modifier cette évaluation."
-          : "Enregistrement impossible. Vérifiez les questions et les réponses.",
+      ok: true,
+      definition: {
+        assessmentId,
+        editable: access.editable,
+        contextText: materials[0]?.context_text ?? "",
+        instructionsText: materials[0]?.instructions_text ?? "",
+        questions: questions.map((question) => ({
+          id: question.id,
+          prompt: question.prompt,
+          correctionText: question.correction_text,
+          rubricText: question.rubric?.text ?? "",
+          maxPoints: question.max_points === null ? "" : String(Number(question.max_points)),
+          nodeCodes: tags.filter((tag) => tag.question_id === question.id).map((tag) => tag.code).sort(),
+        })),
+        notions: access.isMath ? notionOptions(graph) : [],
+        answersByQuestion,
+      },
     };
+  } catch (error) {
+    return failure(error, "Impossible de charger le sujet et le corrigé.");
   }
-
-  revalidatePath(`/app/evaluations/${input.assessmentId}`);
-  revalidatePath(`/app/eleves/${input.studentId}`);
-  return { ok: true };
 }
 
-export async function reviewPedagogicalRecommendation(
-  recommendationId: string,
-  decision: "validate" | "dismiss",
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeacher();
-  const supabase = await createAuthClient();
-  if (!supabase)
-    return { ok: false, error: "Supabase n’est pas configuré." };
-  if (!UUID_RE.test(recommendationId) || !["validate", "dismiss"].includes(decision))
-    return { ok: false, error: "Décision invalide." };
+function invalidDefinition(input: AssessmentDefinitionDraft): string | null {
+  if (!input || !UUID_RE.test(input.assessmentId)) return "Évaluation invalide.";
+  if ((input.contextText ?? "").length > 12_000 || (input.instructionsText ?? "").length > 12_000)
+    return "Le sujet ou les consignes dépassent 12 000 caractères.";
+  if (!Array.isArray(input.questions) || input.questions.length > 40) return "40 questions au maximum.";
+  const ids = new Set<string>();
+  for (const [index, question] of input.questions.entries()) {
+    const label = `Question ${index + 1}`;
+    if (!question || !UUID_RE.test(question.id) || ids.has(question.id)) return `${label} : identifiant invalide.`;
+    ids.add(question.id);
+    if (!question.prompt?.trim()) return `${label} : l’énoncé est obligatoire.`;
+    if (!question.correctionText?.trim()) return `${label} : le corrigé attendu est obligatoire.`;
+    if (question.prompt.length > 12_000 || question.correctionText.length > 12_000) return `${label} : texte trop long.`;
+    if ((question.rubricText ?? "").length > 8_000) return `${label} : barème trop long.`;
+    const max = question.maxPoints?.trim().replace(",", ".");
+    if (max && !(/^\d+(\.\d{1,2})?$/.test(max) && Number(max) > 0 && Number(max) <= 1000))
+      return `${label} : les points maximum doivent être un nombre positif (1000 au plus).`;
+    if (!Array.isArray(question.nodeCodes) || question.nodeCodes.length > 6 || question.nodeCodes.some((code) => typeof code !== "string"))
+      return `${label} : 6 notions au plus.`;
+  }
+  return null;
+}
 
-  const recommendationResponse = await supabase
-    .from("pedagogical_recommendations")
-    .select("student_id,assessment_id")
-    .eq("id", recommendationId)
-    .maybeSingle();
-  if (recommendationResponse.error || !recommendationResponse.data)
-    return { ok: false, error: "Recommandation introuvable ou inaccessible." };
-
-  const { error } = await supabase.rpc(
-    "focus_review_pedagogical_recommendation",
-    {
-      p_recommendation_id: recommendationId,
-      p_decision: decision,
-    },
-  );
-  if (error) {
-    console.error("FOCUS recommendation review failed", {
-      code: error.code,
-      message: error.message,
+export async function saveAssessmentDefinition(
+  input: AssessmentDefinitionDraft,
+  options: { confirmResponseDeletion?: boolean } = {},
+): Promise<
+  | { ok: true; changed: boolean; supersededAnalyses: number; deletedAnswers: number }
+  | (Failure & { needsConfirmation?: number })
+> {
+  const invalid = invalidDefinition(input);
+  if (invalid) return { ok: false, error: invalid };
+  try {
+    const { supabase } = await session();
+    const { data, error } = await supabase.rpc("focus_save_assessment_questions", {
+      p_assessment_id: input.assessmentId,
+      p_context_text: input.contextText ?? "",
+      p_instructions_text: input.instructionsText ?? "",
+      p_questions: input.questions.map((question) => ({
+        id: question.id,
+        prompt: question.prompt.trim(),
+        correctionText: question.correctionText.trim(),
+        rubricText: (question.rubricText ?? "").trim(),
+        maxPoints: question.maxPoints?.trim().replace(",", ".") ?? "",
+        nodeCodes: question.nodeCodes,
+      })),
+      p_confirm_response_deletion: options.confirmResponseDeletion === true,
     });
-    return { ok: false, error: "La décision n’a pas pu être enregistrée." };
-  }
-
-  const row = recommendationResponse.data as {
-    student_id: string;
-    assessment_id: string;
-  };
-  revalidatePath(`/app/eleves/${row.student_id}`);
-  revalidatePath(`/app/evaluations/${row.assessment_id}`);
-  return { ok: true };
-}
-
-// Reads the official graph for the class level through one RPC returning a
-// single JSON value: no PostgREST row cap, deterministic order, only active
-// nodes of the class's programme plus prior-level prerequisites as context.
-async function curriculumGraph(
-  supabase: SupabaseClient,
-  classLevel: string | null,
-): Promise<CurriculumIndex> {
-  const sourcesResponse = await supabase
-    .from("curriculum_sources")
-    .select("level_code")
-    .eq("subject_code", CURRICULUM_SUBJECT_CODE);
-  ensureOk(sourcesResponse.error, "Sources du programme");
-  const scope = resolveCurriculumScope(
-    classLevel,
-    ((sourcesResponse.data ?? []) as Array<{ level_code: string }>).map(
-      (row) => row.level_code,
-    ),
-  );
-  if (scope.resolution === "subject_fallback")
-    console.warn(
-      "FOCUS curriculum scope: class level not matched to an imported programme; using every level of the subject.",
-    );
-
-  const graphResponse = await supabase.rpc("focus_curriculum_graph", {
-    p_subject_code: CURRICULUM_SUBJECT_CODE,
-    p_level_codes: scope.levelCodes,
-  });
-  ensureOk(graphResponse.error, "Graphe du programme");
-  return buildCurriculumIndex(parseCurriculumGraphPayload(graphResponse.data));
-}
-
-// Recommendations must stay readable even if an import later deactivated or
-// re-scoped their node: resolve those references directly by id.
-async function recommendationNodes(
-  supabase: SupabaseClient,
-  graph: CurriculumIndex,
-  nodeIds: string[],
-) {
-  const resolved = new Map<
-    string,
-    { code: string; title: string; sourceLocator: string; sourceUrl: string }
-  >();
-  const missing: string[] = [];
-  for (const id of new Set(nodeIds)) {
-    const node = graph.nodeById.get(id);
-    if (!node) {
-      missing.push(id);
-      continue;
+    if (error) {
+      const deleted = error.message.match(/deletes (\d+) student answers/);
+      if (error.code === "55000" && deleted)
+        return {
+          ok: false,
+          needsConfirmation: Number(deleted[1]),
+          error: `Supprimer ces questions effacera ${deleted[1]} réponse(s) d’élèves déjà saisie(s).`,
+        };
+      console.error("FOCUS assessment definition save failed", { code: error.code, message: error.message });
+      return {
+        ok: false,
+        error:
+          error.code === "42501"
+            ? "Vous n’avez pas les droits nécessaires pour modifier cette évaluation."
+            : error.code === "23514"
+              ? "Des points déjà attribués dépassent le nouveau maximum d’une question. Ajustez d’abord les points des élèves."
+              : "Enregistrement impossible. Vérifiez les questions et réessayez.",
+      };
     }
-    resolved.set(id, {
-      code: node.code,
-      title: node.title,
-      sourceLocator: node.sourceLocator,
-      sourceUrl: graph.summaryByCode.get(node.code)?.sourceUrl ?? "",
-    });
+    const result = data as { changed: boolean; supersededAnalyses: number; deletedAnswers: number };
+    revalidatePath(`/app/evaluations/${input.assessmentId}`);
+    return { ok: true, ...result };
+  } catch (error) {
+    return failure(error);
   }
-  if (missing.length) {
-    const response = await supabase
-      .from("curriculum_nodes")
-      .select("id,code,title,source_locator,source:curriculum_sources(source_url)")
-      .in("id", missing);
-    ensureOk(response.error, "Notions des recommandations");
-    for (const row of (response.data ?? []) as unknown as CurriculumNodeRefRow[])
-      resolved.set(row.id, {
-        code: row.code,
-        title: row.title,
-        sourceLocator: row.source_locator,
-        sourceUrl: row.source?.source_url ?? "",
-      });
-  }
-  return resolved;
 }
+
+// ---------------------------------------------------------------------------
+// One student's evidence
+// ---------------------------------------------------------------------------
+
+async function analysisStateFor(supabase: SupabaseClient, assessmentId: string, studentId: string, questionCount: number, answered: number) {
+  const runs = await currentRuns(supabase, [assessmentId], studentId);
+  const run = runs[0];
+  let active = 0;
+  if (run?.status === "completed") {
+    const count = await supabase
+      .from("pedagogical_recommendations")
+      .select("id", { count: "exact", head: true })
+      .eq("analysis_run_id", run.id)
+      .is("superseded_at", null);
+    ensureOk(count.error, "Recommandations");
+    active = count.count ?? 0;
+  }
+  return { run, status: runStatus(run, active), questionCount, answered };
+}
+
+export async function loadStudentEvidence(
+  assessmentId: string,
+  studentId: string,
+): Promise<{ ok: true; evidence: StudentEvidenceView } | Failure> {
+  try {
+    const { teacher, supabase } = await session();
+    if (!UUID_RE.test(studentId)) throw new AccessError("Élève invalide.");
+    const access = await assessmentAccess(supabase, teacher.id, assessmentId);
+    const enrolled = await supabase
+      .from("student_enrollments")
+      .select("student_id")
+      .eq("student_id", studentId)
+      .eq("class_id", access.assessment.class_id)
+      .limit(1);
+    ensureOk(enrolled.error, "Inscription élève");
+    if (!(enrolled.data ?? []).length) throw new AccessError("Cet élève n’est pas inscrit dans la classe de l’évaluation.");
+    const { questions, responses } = await evidenceRows(supabase, [assessmentId], studentId);
+    const byQuestion = new Map(responses.map((row) => [row.question_id, row]));
+    const answered = responses.filter((row) => row.response_text.trim()).length;
+    const state = await analysisStateFor(supabase, assessmentId, studentId, questions.length, answered);
+    return {
+      ok: true,
+      evidence: {
+        assessmentId,
+        studentId,
+        editable: access.editable,
+        questions: questions.map((question) => ({
+          id: question.id,
+          position: question.position,
+          prompt: question.prompt,
+          correctionText: question.correction_text,
+          maxPoints: toNumber(question.max_points),
+        })),
+        responses: questions.map((question) => {
+          const row = byQuestion.get(question.id);
+          return {
+            questionId: question.id,
+            responseText: row?.response_text ?? "",
+            awardedPoints: row?.awarded_points === null || row?.awarded_points === undefined ? "" : String(Number(row.awarded_points)),
+            teacherAnnotation: row?.teacher_annotation ?? "",
+          };
+        }),
+        analysis: {
+          assessmentId,
+          title: access.assessment.title,
+          date: access.assessment.date,
+          questionCount: questions.length,
+          answeredCount: answered,
+          status: state.status,
+          reason: state.run?.failure_reason ?? null,
+          analyzedAt: state.run?.created_at ?? null,
+          needsAnalysis: answered > 0 && !state.run,
+        },
+      },
+    };
+  } catch (error) {
+    return failure(error, "Impossible de charger la copie de cet élève.");
+  }
+}
+
+export async function saveStudentEvidence(
+  assessmentId: string,
+  studentId: string,
+  responses: StudentResponseDraft[],
+): Promise<{ ok: true; changed: boolean; supersededAnalyses: number } | Failure> {
+  if (!UUID_RE.test(assessmentId) || !UUID_RE.test(studentId) || !Array.isArray(responses) || responses.length > 40)
+    return { ok: false, error: "Les données saisies sont invalides." };
+  for (const [index, response] of responses.entries()) {
+    const label = `Question ${index + 1}`;
+    if (!response || !UUID_RE.test(response.questionId)) return { ok: false, error: `${label} : question invalide.` };
+    if ((response.responseText ?? "").length > 20_000) return { ok: false, error: `${label} : réponse trop longue (20 000 caractères au plus).` };
+    if ((response.teacherAnnotation ?? "").length > 5_000) return { ok: false, error: `${label} : annotation trop longue (5 000 caractères au plus).` };
+    const points = (response.awardedPoints ?? "").trim().replace(",", ".");
+    if (points && !/^\d+(\.\d{1,2})?$/.test(points)) return { ok: false, error: `${label} : points invalides.` };
+  }
+  try {
+    const { supabase } = await session();
+    const { data, error } = await supabase.rpc("focus_save_student_responses", {
+      p_assessment_id: assessmentId,
+      p_student_id: studentId,
+      p_responses: responses.map((response) => ({
+        questionId: response.questionId,
+        responseText: (response.responseText ?? "").trim(),
+        awardedPoints: (response.awardedPoints ?? "").trim().replace(",", "."),
+        teacherAnnotation: (response.teacherAnnotation ?? "").trim(),
+      })),
+    });
+    if (error) {
+      console.error("FOCUS student evidence save failed", { code: error.code, message: error.message });
+      return {
+        ok: false,
+        error:
+          error.code === "42501"
+            ? "Vous n’avez pas les droits nécessaires pour modifier cette copie."
+            : /points/.test(error.message)
+              ? "Des points dépassent le maximum de la question."
+              : "Enregistrement impossible. Vérifiez les réponses et réessayez.",
+      };
+    }
+    revalidatePath(`/app/evaluations/${assessmentId}`);
+    revalidatePath(`/app/eleves/${studentId}`);
+    return { ok: true, ...(data as { changed: boolean; supersededAnalyses: number }) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function loadResponseOverview(
+  assessmentId: string,
+): Promise<{ ok: true; rows: ResponseOverviewRow[]; questionCount: number } | Failure> {
+  try {
+    const { teacher, supabase } = await session();
+    await assessmentAccess(supabase, teacher.id, assessmentId);
+    const [{ questions, responses }, runs, pending] = await Promise.all([
+      evidenceRows(supabase, [assessmentId]),
+      currentRuns(supabase, [assessmentId]),
+      supabase
+        .from("pedagogical_recommendations")
+        .select("student_id,analysis_run_id")
+        .eq("assessment_id", assessmentId)
+        .is("superseded_at", null)
+        .is("teacher_decision", null),
+    ]);
+    ensureOk(pending.error, "Recommandations");
+    const allActive = await supabase
+      .from("pedagogical_recommendations")
+      .select("analysis_run_id")
+      .eq("assessment_id", assessmentId)
+      .is("superseded_at", null);
+    ensureOk(allActive.error, "Recommandations");
+    const activeByRun = new Map<string, number>();
+    for (const row of (allActive.data ?? []) as Array<{ analysis_run_id: string }>)
+      activeByRun.set(row.analysis_run_id, (activeByRun.get(row.analysis_run_id) ?? 0) + 1);
+    const students = new Map<string, ResponseOverviewRow>();
+    const row = (studentId: string) => {
+      const existing = students.get(studentId) ?? { studentId, answeredCount: 0, analysisStatus: null, needsAnalysis: false, pendingRecommendations: 0 };
+      students.set(studentId, existing);
+      return existing;
+    };
+    for (const response of responses) if (response.response_text.trim()) row(response.student_id).answeredCount++;
+    const seenRun = new Set<string>();
+    for (const run of runs) {
+      if (seenRun.has(run.student_id)) continue;
+      seenRun.add(run.student_id);
+      row(run.student_id).analysisStatus = runStatus(run, activeByRun.get(run.id) ?? 0);
+    }
+    for (const item of (pending.data ?? []) as Array<{ student_id: string }>) row(item.student_id).pendingRecommendations++;
+    for (const value of students.values()) value.needsAnalysis = value.answeredCount > 0 && !seenRun.has(value.studentId);
+    return { ok: true, rows: [...students.values()], questionCount: questions.length };
+  } catch (error) {
+    return failure(error, "Impossible de charger l’état des copies.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Analysis
+// ---------------------------------------------------------------------------
 
 export async function loadPedagogicalSnapshot(
   studentId: string,
-): Promise<PedagogicalSnapshot> {
-  const teacher = await requireTeacher();
-  const supabase = await createAuthClient();
-  if (!supabase) throw new Error("Supabase n’est pas configuré.");
-
-  const context = await teacherMathContext(supabase, teacher.id, studentId);
-  const assessmentIds = context.assessments.map((a) => a.id);
-  const { materials, questions } = await evidenceRows(
-    supabase,
-    assessmentIds,
-    studentId,
-  );
-  const materialIds = new Set(materials.map((row) => row.assessment_id));
-  const questionIdsByAssessment = new Map<string, string[]>();
-  for (const question of questions) {
-    const ids = questionIdsByAssessment.get(question.assessment_id) ?? [];
-    ids.push(question.id);
-    questionIdsByAssessment.set(question.assessment_id, ids);
+): Promise<{ ok: true; snapshot: PedagogicalSnapshot } | Failure> {
+  try {
+    const { teacher, supabase } = await session();
+    const context = await studentMathContext(supabase, teacher.id, studentId);
+    const pedagogy = await studentPedagogy(supabase, context, studentId);
+    return { ok: true, snapshot: { ...pedagogy, aiConfigured: pedagogicalAiConfigured() } };
+  } catch (error) {
+    return failure(error, "Impossible de charger le suivi pédagogique de cet élève.");
   }
-  const analyzable = context.assessments.filter((assessment) => {
-    const questionIds = questionIdsByAssessment.get(assessment.id) ?? [];
-    return materialIds.has(assessment.id) && questionIds.length > 0;
-  });
-
-  const latestRunResponse = await supabase
-    .from("ai_analysis_runs")
-    .select("status,failure_reason,created_at")
-    .eq("student_id", studentId)
-    .is("superseded_at", null)
-    .in(
-      "assessment_id",
-      assessmentIds.length
-        ? assessmentIds
-        : ["00000000-0000-0000-0000-000000000000"],
-    )
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  ensureOk(latestRunResponse.error, "Dernière analyse pédagogique");
-  const latestRun = latestRunResponse.data as AnalysisRunRow | null;
-
-  const recommendationsResponse = await supabase
-    .from("pedagogical_recommendations")
-    .select(
-      "id,assessment_id,curriculum_node_id,difficulty,evidence,confidence,explanation,recommended_action,teacher_validated,created_at",
-    )
-    .eq("student_id", studentId)
-    .is("dismissed_at", null)
-    .order("created_at", { ascending: false })
-    .limit(12);
-  ensureOk(recommendationsResponse.error, "Recommandations pédagogiques");
-  const recRows = (recommendationsResponse.data ?? []) as RecommendationRow[];
-
-  const graph = await curriculumGraph(supabase, context.classLevel);
-  const nodesForRecommendations = await recommendationNodes(
-    supabase,
-    graph,
-    recRows.map((row) => row.curriculum_node_id),
-  );
-  const titlesFor = (codes: string[] | undefined) =>
-    (codes ?? [])
-      .map((code) => graph.nodeByCode.get(code)?.title)
-      .filter((value): value is string => Boolean(value));
-  const assessmentById = new Map(
-    context.assessments.map((assessment) => [assessment.id, assessment]),
-  );
-  const questionById = new Map(questions.map((question) => [question.id, question]));
-
-  const recommendations: PedagogicalRecommendationView[] = recRows.flatMap(
-    (row) => {
-      const node = nodesForRecommendations.get(row.curriculum_node_id);
-      const assessment = assessmentById.get(row.assessment_id);
-      if (!node || !assessment) return [];
-      const summary = graph.summaryByCode.get(node.code);
-      const evidenceRaw = Array.isArray(row.evidence) ? row.evidence : [];
-      const evidence = evidenceRaw.flatMap((item) => {
-        if (!item || typeof item !== "object") return [];
-        const value = item as Record<string, unknown>;
-        const questionId =
-          typeof value.questionId === "string" ? value.questionId : "";
-        const excerpt = typeof value.excerpt === "string" ? value.excerpt : "";
-        const question = questionById.get(questionId);
-        if (!question || !excerpt) return [];
-        return [
-          {
-            questionId,
-            questionLabel: `Question ${question.position}`,
-            excerpt,
-          },
-        ];
-      });
-      return [
-        {
-          id: row.id,
-          assessmentId: assessment.id,
-          assessmentTitle: assessment.title,
-          curriculumNodeCode: node.code,
-          curriculumNodeTitle: node.title,
-          difficulty: row.difficulty,
-          evidence,
-          confidence: row.confidence,
-          explanation: row.explanation,
-          recommendedAction: row.recommended_action,
-          sourceLocator: node.sourceLocator,
-          sourceUrl: node.sourceUrl,
-          prerequisites: titlesFor(summary?.prerequisites),
-          competencies: titlesFor(summary?.competencies),
-          teacherValidated: row.teacher_validated,
-          createdAt: row.created_at,
-        },
-      ];
-    },
-  );
-
-  return {
-    recommendations,
-    documentedAssessmentCount: materialIds.size,
-    analyzableAssessmentCount: analyzable.length,
-    latestAnalyzableAssessmentTitle: analyzable[0]?.title ?? null,
-    latestAnalysisStatus:
-      latestRun?.status === "no_evidence"
-        ? "insufficient_evidence"
-        : latestRun?.status === "completed"
-          ? recommendations.length > 0
-            ? "errors_found"
-            : "no_error_observed"
-          : null,
-    latestAnalysisReason: latestRun?.failure_reason ?? null,
-    latestAnalysisAt: latestRun?.created_at ?? null,
-    aiConfigured: pedagogicalAiConfigured(),
-  };
 }
 
-async function persistNoEvidenceOutcome(params: {
-  supabase: SupabaseClient;
-  schoolId: string;
-  studentId: string;
-  assessmentId: string;
-  model: string;
-  inputHash: string;
-  reason: string;
-}) {
-  const { error } = await params.supabase.rpc("focus_persist_no_evidence", {
-    p_school_id: params.schoolId,
-    p_student_id: params.studentId,
-    p_assessment_id: params.assessmentId,
-    p_model: params.model,
-    p_input_hash: params.inputHash,
-    p_reason: params.reason,
-  });
-  ensureOk(error, "Trace d’analyse insuffisante");
-}
-
-export async function generatePedagogicalAnalysis(
-  studentId: string,
-): Promise<
+type AnalysisOutcome =
   | {
       ok: true;
+      assessmentId: string;
+      assessmentTitle: string;
       recommendationCount: number;
       reused: boolean;
       analysisStatus: "errors_found" | "no_error_observed" | "insufficient_evidence";
       insufficientReason: string;
+      rejectedCandidates: number;
     }
-  | { ok: false; error: string }
-> {
-  const teacher = await requireTeacher();
-  const supabase = await createAuthClient();
-  if (!supabase)
-    return { ok: false, error: "Supabase n’est pas configuré." };
+  | Failure;
 
-  let context: Awaited<ReturnType<typeof teacherMathContext>>;
+export async function generatePedagogicalAnalysis(studentId: string, assessmentId?: string): Promise<AnalysisOutcome> {
+  let teacherId: string;
+  let supabase: SupabaseClient;
+  let context: Awaited<ReturnType<typeof studentMathContext>>;
   try {
-    context = await teacherMathContext(supabase, teacher.id, studentId);
+    const current = await session();
+    teacherId = current.teacher.id;
+    supabase = current.supabase;
+    context = await studentMathContext(supabase, teacherId, studentId);
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Analyse impossible.",
-    };
+    return failure(error, "Analyse impossible.");
   }
+  if (assessmentId !== undefined && !context.assessments.some((assessment) => assessment.id === assessmentId))
+    return { ok: false, error: "Cette évaluation n’est pas une évaluation de mathématiques de la classe de l’élève." };
 
-  const assessmentIds = context.assessments.map((a) => a.id);
-  const { materials, questions, responses } = await evidenceRows(
-    supabase,
-    assessmentIds,
-    studentId,
-  );
-  const materialByAssessment = new Map(
-    materials.map((material) => [material.assessment_id, material]),
-  );
-  const questionsByAssessment = new Map<string, QuestionRow[]>();
-  for (const question of questions) {
-    const list = questionsByAssessment.get(question.assessment_id) ?? [];
-    list.push(question);
-    questionsByAssessment.set(question.assessment_id, list);
-  }
-  const responsesByQuestion = new Map(
-    responses.map((response) => [response.question_id, response]),
-  );
+  try {
+    const candidates = assessmentId ? context.assessments.filter((assessment) => assessment.id === assessmentId) : context.assessments;
+    const { materials, questions, responses, tags } = await evidenceRows(supabase, candidates.map((a) => a.id), studentId);
+    const graph = await curriculumGraph(supabase, context.classLevel);
+    const aiCurriculum = toAiCurriculum(graph.summaries);
+    const model = pedagogicalAiModel();
+    const materialByAssessment = new Map(materials.map((material) => [material.assessment_id, material]));
+    const responsesByQuestion = new Map(responses.map((response) => [response.question_id, response]));
+    const tagsByQuestion = new Map<string, string[]>();
+    for (const tag of tags) tagsByQuestion.set(tag.question_id, [...(tagsByQuestion.get(tag.question_id) ?? []), tag.code].sort());
+    const runs = await currentRuns(supabase, candidates.map((a) => a.id), studentId);
 
-  const graph = await curriculumGraph(supabase, context.classLevel);
-  const aiCurriculum = toAiCurriculum(graph.summaries);
-  const model = pedagogicalAiModel();
-
-  type Prepared = {
-    assessment: AssessmentRow;
-    assessmentQuestions: QuestionRow[];
-    aiInput: {
-      assessment: {
-        id: string;
-        title: string;
-        contextText: string | null;
-        instructionsText: string | null;
+    const prepared = candidates.flatMap((assessment) => {
+      const assessmentQuestions = questions
+        .filter((question) => question.assessment_id === assessment.id)
+        .sort((a, b) => a.position - b.position);
+      if (!assessmentQuestions.length) return [];
+      const material = materialByAssessment.get(assessment.id);
+      const aiInput = {
+        assessment: {
+          id: assessment.id,
+          title: assessment.title,
+          contextText: material?.context_text ?? null,
+          instructionsText: material?.instructions_text ?? null,
+        },
+        questions: assessmentQuestions.map((question) => {
+          const response = responsesByQuestion.get(question.id);
+          return {
+            assessmentId: assessment.id,
+            questionId: question.id,
+            prompt: question.prompt,
+            correctionText: question.correction_text,
+            rubricText: question.rubric?.text ?? "",
+            maxPoints: toNumber(question.max_points),
+            responseText: response?.response_text ?? "",
+            awardedPoints: toNumber(response?.awarded_points),
+            teacherAnnotation: response?.teacher_annotation ?? null,
+            assessedNotions: tagsByQuestion.get(question.id) ?? [],
+          };
+        }),
+        curriculum: aiCurriculum,
       };
-      questions: Array<{
-        assessmentId: string;
-        questionId: string;
-        prompt: string;
-        correctionText: string;
-        rubricText: string;
-        maxPoints: number | null;
-        responseText: string;
-        awardedPoints: number | null;
-        teacherAnnotation: string | null;
-      }>;
-      curriculum: ReturnType<typeof toAiCurriculum>;
-    };
-    inputHash: string;
-    existing: {
-      id: string;
-      status: "completed" | "no_evidence";
-      failure_reason: string | null;
-    } | null;
-  };
+      const inputHash = createHash("sha256").update(JSON.stringify({ model, aiInput })).digest("hex");
+      const run = runs.find((item) => item.assessment_id === assessment.id);
+      const existing = run && run.status !== "failed" ? { run, sameInput: false } : null;
+      return [{ assessment, aiInput, inputHash, existing }];
+    });
 
-  const prepared: Prepared[] = [];
-  for (const assessment of context.assessments) {
-    const material = materialByAssessment.get(assessment.id);
-    const assessmentQuestions = (questionsByAssessment.get(assessment.id) ?? [])
-      .sort((a, b) => a.position - b.position);
+    if (!prepared.length)
+      return { ok: false, error: "Ajoutez d’abord le sujet, le corrigé et au moins une réponse de l’élève à une évaluation." };
 
-    if (!material || !assessmentQuestions.length) continue;
+    // Newest evidence set without a current analysis first; once all are
+    // analysed, re-running reuses the current result.
+    const target = pickNextEvidenceSet(prepared);
+    if (!target) return { ok: false, error: "Aucune évaluation ne contient de preuves exploitables." };
+    const { assessment, aiInput, inputHash } = target;
 
-    const aiInput = {
-      assessment: {
-        id: assessment.id,
-        title: assessment.title,
-        contextText: material.context_text,
-        instructionsText: material.instructions_text,
-      },
-      questions: assessmentQuestions.map((question) => {
-        const response = responsesByQuestion.get(question.id);
-        return {
-          assessmentId: assessment.id,
-          questionId: question.id,
-          prompt: question.prompt,
-          correctionText: question.correction_text,
-          rubricText: question.rubric?.text ?? "",
-          maxPoints:
-            question.max_points === null ? null : Number(question.max_points),
-          responseText: response?.response_text ?? "",
-          awardedPoints:
-            response?.awarded_points === null ||
-            response?.awarded_points === undefined
-              ? null
-              : Number(response.awarded_points),
-          teacherAnnotation: response?.teacher_annotation ?? null,
-        };
-      }),
-      curriculum: aiCurriculum,
-    };
-
-    const inputHash = createHash("sha256")
-      .update(JSON.stringify({ model, aiInput }))
-      .digest("hex");
-
-    const existingResponse = await supabase
+    const existing = await supabase
       .from("ai_analysis_runs")
       .select("id,status,failure_reason")
-      .eq("teacher_id", teacher.id)
+      .eq("teacher_id", teacherId)
       .eq("student_id", studentId)
       .eq("assessment_id", assessment.id)
       .eq("input_hash", inputHash)
@@ -757,235 +457,176 @@ export async function generatePedagogicalAnalysis(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    ensureOk(existingResponse.error, "Historique d’analyse");
-
-    prepared.push({
-      assessment,
-      assessmentQuestions,
-      aiInput,
-      inputHash,
-      existing: existingResponse.data as Prepared["existing"],
-    });
-  }
-
-  if (!prepared.length)
-    return {
-      ok: false,
-      error:
-        "Ajoutez d’abord le sujet, le corrigé/barème et au moins une réponse de l’élève.",
-    };
-
-  // Prefer the newest evidence set that has not yet been analyzed with the
-  // current model. Once it is done, the next click can process older evidence
-  // and build longitudinal confidence instead of looping on the latest run.
-  const target = pickNextEvidenceSet(prepared);
-  if (!target)
-    return {
-      ok: false,
-      error: "Aucune évaluation ne contient de preuves exploitables.",
-    };
-  const {
-    assessment,
-    assessmentQuestions,
-    aiInput,
-    inputHash,
-    existing,
-  } = target;
-
-  if (existing) {
-    if (existing.status === "completed") {
-      const reactivateResponse = await supabase
+    ensureOk(existing.error, "Historique d’analyse");
+    if (existing.data) {
+      // Same evidence, same model: the current result stands, including the
+      // teacher's decisions on it (a dismissed recommendation stays dismissed).
+      const run = existing.data as { id: string; status: "completed" | "no_evidence"; failure_reason: string | null };
+      const count = await supabase
         .from("pedagogical_recommendations")
-        .update({ dismissed_at: null })
-        .eq("analysis_run_id", existing.id);
-      ensureOk(
-        reactivateResponse.error,
-        "Réactivation des recommandations correspondant aux preuves",
-      );
-    }
-
-    const countResponse = await supabase
-      .from("pedagogical_recommendations")
-      .select("id", { count: "exact", head: true })
-      .eq("analysis_run_id", existing.id)
-      .is("dismissed_at", null);
-    ensureOk(countResponse.error, "Recommandations réutilisées");
-
-    return {
-      ok: true,
-      recommendationCount: countResponse.count ?? 0,
-      reused: true,
-      analysisStatus:
-        existing.status === "no_evidence"
-          ? "insufficient_evidence"
-          : (countResponse.count ?? 0) > 0
-            ? "errors_found"
-            : "no_error_observed",
-      insufficientReason: existing.failure_reason ?? "",
-    };
-  }
-
-  const hasStudentAnswer = aiInput.questions.some(
-    (question) => question.responseText.trim().length > 0,
-  );
-  if (!hasStudentAnswer) {
-    const reason =
-      "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
-    await persistNoEvidenceOutcome({
-      supabase,
-      schoolId: context.schoolId,
-      studentId,
-      assessmentId: assessment.id,
-      model,
-      inputHash,
-      reason,
-    });
-
-    revalidatePath(`/app/eleves/${studentId}`);
-    return {
-      ok: true,
-      recommendationCount: 0,
-      reused: false,
-      analysisStatus: "insufficient_evidence",
-      insufficientReason: reason,
-    };
-  }
-
-  let modelResult: Awaited<ReturnType<typeof analyzePedagogicalEvidence>>;
-  try {
-    modelResult = await analyzePedagogicalEvidence(aiInput);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message === "OPENAI_API_KEY_MISSING")
+        .select("id", { count: "exact", head: true })
+        .eq("analysis_run_id", run.id)
+        .is("superseded_at", null);
+      ensureOk(count.error, "Recommandations réutilisées");
       return {
-        ok: false,
-        error:
-          "L’IA n’est pas encore configurée : ajoutez OPENAI_API_KEY à l’environnement serveur.",
+        ok: true,
+        assessmentId: assessment.id,
+        assessmentTitle: assessment.title,
+        recommendationCount: count.count ?? 0,
+        reused: true,
+        analysisStatus: run.status === "no_evidence" ? "insufficient_evidence" : (count.count ?? 0) > 0 ? "errors_found" : "no_error_observed",
+        insufficientReason: run.failure_reason ?? "",
+        rejectedCandidates: 0,
       };
-    console.error("FOCUS pedagogical AI request failed", error);
-    return {
-      ok: false,
-      error: "L’analyse IA a échoué. Aucune recommandation n’a été enregistrée.",
+    }
+
+    const persistNoEvidence = async (reason: string, usedModel: string) => {
+      const { error } = await supabase.rpc("focus_persist_no_evidence", {
+        p_school_id: context.schoolId,
+        p_student_id: studentId,
+        p_assessment_id: assessment.id,
+        p_model: usedModel,
+        p_input_hash: inputHash,
+        p_reason: reason,
+      });
+      ensureOk(error, "Trace d’analyse insuffisante");
     };
-  }
 
-  // Only notions of the class's programme may carry a recommendation;
-  // prior-level prerequisites are context for the model, not targets.
-  const nodesByCode = graph.mappableNotionIdsByCode;
-  const validationQuestions = assessmentQuestions.map((question) => ({
-    assessmentId: assessment.id,
-    questionId: question.id,
-    responseText: responsesByQuestion.get(question.id)?.response_text ?? "",
-  }));
-  const validatedAnalysis = validateModelAnalysis(
-    modelResult.analysis,
-    validationQuestions,
-    nodesByCode,
-  );
+    if (!aiInput.questions.some((question) => question.responseText.trim())) {
+      // No answer: the model is not called at all.
+      const reason = "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
+      await persistNoEvidence(reason, model);
+      revalidatePath(`/app/eleves/${studentId}`);
+      return {
+        ok: true,
+        assessmentId: assessment.id,
+        assessmentTitle: assessment.title,
+        recommendationCount: 0,
+        reused: false,
+        analysisStatus: "insufficient_evidence",
+        insufficientReason: reason,
+        rejectedCandidates: 0,
+      };
+    }
 
-  if (validatedAnalysis.status === "insufficient_evidence") {
-    await persistNoEvidenceOutcome({
-      supabase,
-      schoolId: context.schoolId,
-      studentId,
-      assessmentId: assessment.id,
-      model: modelResult.model,
-      inputHash,
-      reason: validatedAnalysis.insufficientReason,
+    let modelResult: Awaited<ReturnType<typeof analyzePedagogicalEvidence>>;
+    try {
+      modelResult = await analyzePedagogicalEvidence(aiInput);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "OPENAI_API_KEY_MISSING")
+        return { ok: false, error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée." };
+      console.error("FOCUS pedagogical AI request failed", message);
+      return { ok: false, error: "L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard." };
+    }
+
+    // Only notions of the class's programme may carry a recommendation;
+    // prior-level prerequisites are context for the model, not targets.
+    const validated = validateModelAnalysis(
+      modelResult.analysis,
+      aiInput.questions.map((question) => ({
+        assessmentId: assessment.id,
+        questionId: question.questionId,
+        responseText: question.responseText,
+        correctionText: question.correctionText,
+        maxPoints: question.maxPoints,
+        awardedPoints: question.awardedPoints,
+        assessedCodes: question.assessedNotions,
+      })),
+      graph.mappableNotionIdsByCode,
+      { relatedCodes: relatedCodesFor(graph) },
+    );
+    if (validated.rejected.length)
+      console.warn("FOCUS model candidates rejected", validated.rejected.map((item) => item.reason));
+
+    if (validated.status === "insufficient_evidence") {
+      await persistNoEvidence(validated.insufficientReason, modelResult.model);
+      revalidatePath(`/app/eleves/${studentId}`);
+      return {
+        ok: true,
+        assessmentId: assessment.id,
+        assessmentTitle: assessment.title,
+        recommendationCount: 0,
+        reused: false,
+        analysisStatus: "insufficient_evidence",
+        insufficientReason: validated.insufficientReason,
+        rejectedCandidates: validated.rejected.length,
+      };
+    }
+
+    // Confidence is recomputed by the database from the evidence history.
+    const payload = buildAnalysisPersistence({
+      validated: validated.errors,
+      responseIdByQuestion: new Map(responses.map((response) => [response.question_id, response.id])),
+      priorErrors: [],
     });
-
-    revalidatePath(`/app/eleves/${studentId}`);
-    return {
-      ok: true,
-      recommendationCount: 0,
-      reused: false,
-      analysisStatus: "insufficient_evidence",
-      insufficientReason: validatedAnalysis.insufficientReason,
-    };
-  }
-
-  const validated = validatedAnalysis.errors;
-  const nodeIds = [...new Set(validated.map((error) => error.nodeId))];
-  let priorErrors: PriorErrorRow[] = [];
-
-  if (nodeIds.length) {
-    const priorRunsResponse = await supabase
-      .from("ai_analysis_runs")
-      .select("id,assessment_id,created_at")
-      .eq("student_id", studentId)
-      .eq("status", "completed")
-      .is("superseded_at", null)
-      .neq("assessment_id", assessment.id)
-      .order("created_at", { ascending: false });
-    ensureOk(priorRunsResponse.error, "Historique des analyses");
-
-    const latestRunByAssessment = new Map<string, string>();
-    for (const run of (priorRunsResponse.data ?? []) as Array<{
-      id: string;
-      assessment_id: string;
-      created_at: string;
-    }>) {
-      if (!latestRunByAssessment.has(run.assessment_id))
-        latestRunByAssessment.set(run.assessment_id, run.id);
-    }
-    const activeRunIds = [...latestRunByAssessment.values()];
-
-    if (activeRunIds.length) {
-      const priorResponse = await supabase
-        .from("error_observations")
-        .select("curriculum_node_id,assessment_id,verified_by_teacher")
-        .eq("student_id", studentId)
-        .in("analysis_run_id", activeRunIds)
-        .in("curriculum_node_id", nodeIds);
-      ensureOk(priorResponse.error, "Historique des erreurs");
-      priorErrors = (priorResponse.data ?? []) as PriorErrorRow[];
-    }
-  }
-
-  const { errors: persistedErrors, recommendations } = buildAnalysisPersistence({
-    validated,
-    responseIdByQuestion: new Map(
-      responses.map((response) => [response.question_id, response.id]),
-    ),
-    priorErrors: priorErrors.map((row) => ({
-      nodeId: row.curriculum_node_id,
-      assessmentId: row.assessment_id,
-      verifiedByTeacher: row.verified_by_teacher,
-    })),
-  });
-
-  const persistResponse = await supabase.rpc(
-    "focus_persist_pedagogical_analysis",
-    {
+    const { error } = await supabase.rpc("focus_persist_pedagogical_analysis", {
       p_school_id: context.schoolId,
       p_student_id: studentId,
       p_assessment_id: assessment.id,
       p_model: modelResult.model,
       p_input_hash: inputHash,
-      p_errors: persistedErrors,
-      p_recommendations: recommendations,
-    },
-  );
-  if (persistResponse.error) {
-    console.error("FOCUS pedagogical analysis persistence failed", {
-      code: persistResponse.error.code,
-      message: persistResponse.error.message,
+      p_errors: payload.errors,
+      p_recommendations: payload.recommendations,
     });
+    if (error) {
+      console.error("FOCUS pedagogical analysis persistence failed", { code: error.code, message: error.message });
+      return { ok: false, error: "L’analyse a été produite mais n’a pas pu être enregistrée de façon sûre. Aucune recommandation n’a été conservée." };
+    }
+    revalidatePath(`/app/eleves/${studentId}`);
+    revalidatePath(`/app/evaluations/${assessment.id}`);
     return {
-      ok: false,
-      error:
-        "L’analyse a été produite mais n’a pas pu être enregistrée de façon sûre.",
+      ok: true,
+      assessmentId: assessment.id,
+      assessmentTitle: assessment.title,
+      recommendationCount: payload.recommendations.length,
+      reused: false,
+      analysisStatus: payload.recommendations.length > 0 ? "errors_found" : "no_error_observed",
+      insufficientReason: "",
+      rejectedCandidates: validated.rejected.length,
     };
+  } catch (error) {
+    return failure(error, "L’analyse n’a pas pu être préparée. Aucune recommandation n’a été enregistrée.");
   }
+}
 
-  revalidatePath(`/app/eleves/${studentId}`);
-  revalidatePath(`/app/evaluations/${assessment.id}`);
-  return {
-    ok: true,
-    recommendationCount: recommendations.length,
-    reused: false,
-    analysisStatus:
-      recommendations.length > 0 ? "errors_found" : "no_error_observed",
-    insufficientReason: "",
-  };
+// ---------------------------------------------------------------------------
+// Teacher review
+// ---------------------------------------------------------------------------
+
+export async function reviewPedagogicalRecommendation(
+  recommendationId: string,
+  decision: "validate" | "dismiss",
+  note = "",
+): Promise<{ ok: true } | Failure> {
+  if (!UUID_RE.test(recommendationId) || !["validate", "dismiss"].includes(decision))
+    return { ok: false, error: "Décision invalide." };
+  if (typeof note !== "string" || note.length > 1000) return { ok: false, error: "La note est limitée à 1 000 caractères." };
+  try {
+    const { supabase } = await session();
+    const { data, error } = await supabase.rpc("focus_review_pedagogical_recommendation", {
+      p_recommendation_id: recommendationId,
+      p_decision: decision,
+      p_note: note.trim(),
+    });
+    if (error) {
+      console.error("FOCUS recommendation review failed", { code: error.code, message: error.message });
+      return {
+        ok: false,
+        error:
+          error.code === "55000"
+            ? "Cette recommandation a été remplacée : les preuves de l’élève ont changé depuis l’analyse. Relancez l’analyse."
+            : error.code === "42501"
+              ? "Vous n’avez pas les droits nécessaires pour décider de cette recommandation."
+              : "La décision n’a pas pu être enregistrée.",
+      };
+    }
+    const row = data as { studentId: string; assessmentId: string };
+    revalidatePath(`/app/eleves/${row.studentId}`);
+    revalidatePath(`/app/evaluations/${row.assessmentId}`);
+    revalidatePath("/app");
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
 }

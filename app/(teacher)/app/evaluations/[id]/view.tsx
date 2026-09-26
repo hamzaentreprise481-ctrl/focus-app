@@ -10,7 +10,7 @@ import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
-import { AssessmentPedagogyEditor } from "@/components/evaluations/assessment-pedagogy-editor";
+import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment-evidence-workspace";
 
 export default function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -75,12 +75,7 @@ export default function EvaluationDetailPage() {
         absence.
       </p>
 
-      {editableEvaluationIds.includes(id) && (
-        <AssessmentPedagogyEditor
-          assessmentId={id}
-          students={classStudents}
-        />
-      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
           <p className="text-sm text-ink-soft">Moyenne de classe</p>
@@ -201,6 +196,8 @@ export default function EvaluationDetailPage() {
           </div>
         )}
       </section>
+
+      <AssessmentEvidenceWorkspace assessmentId={id} students={classStudents} />
     </div>
   );
 }

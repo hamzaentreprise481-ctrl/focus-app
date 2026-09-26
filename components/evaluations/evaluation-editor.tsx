@@ -45,6 +45,7 @@ export function EvaluationEditor({
   const classStudents = useMemo(() => dataset.students.filter((s) => s.classId === classId), [dataset.students, classId]);
   const [name, setName] = useState(initialEvaluation?.name ?? "");
   const [date, setDate] = useState(initialEvaluation?.date ?? "");
+  const [important, setImportant] = useState(initialEvaluation?.important ?? false);
   const [selectedSkills, setSelectedSkills] = useState<string[]>(
     initialEvaluation?.skillIds ?? [],
   );
@@ -159,7 +160,7 @@ export function EvaluationEditor({
       date,
       classId: classId!,
       skillIds: selectedSkills,
-      important: initialEvaluation?.important ?? false,
+      important,
     };
     const grades = parsedRows.flatMap(({ student, row }) => {
       const grade = gradeFromRow(student.id, evaluationId.current, row, selectedSkills);
@@ -184,6 +185,7 @@ export function EvaluationEditor({
     evaluationId.current = "";
     setName("");
     setDate("");
+    setImportant(false);
     setSelectedSkills([]);
     setRows({});
     setSavedEvaluation(null);
@@ -210,6 +212,11 @@ export function EvaluationEditor({
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Button asChild>
+            <Link href={`/app/evaluations/${savedEvaluation.id}#copies-title`}>
+              Ajouter le sujet et les copies
+            </Link>
+          </Button>
+          <Button variant="secondary" asChild>
             <Link href={`/app/evaluations/${savedEvaluation.id}`}>
               Voir l&rsquo;évaluation
             </Link>
@@ -267,6 +274,22 @@ export function EvaluationEditor({
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="inline-flex items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={important}
+              onChange={(event) => setImportant(event.target.checked)}
+            />
+            <span>
+              Séquence charnière
+              <span className="block text-xs text-ink-soft">
+                Une absence à cette évaluation laisse un manque à rattraper, pas seulement une note en moins.
+              </span>
+            </span>
+          </label>
         </div>
         <div>
           <Label htmlFor="eval-class">Classe</Label>

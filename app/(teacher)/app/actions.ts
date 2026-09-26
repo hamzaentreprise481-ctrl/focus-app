@@ -131,6 +131,7 @@ export async function saveEvaluationAction(
     p_subject_id: subjectId,
     p_competency_ids: evaluation.skillIds,
     p_results: results,
+    p_important: evaluation.important === true,
   });
 
   if (error) {

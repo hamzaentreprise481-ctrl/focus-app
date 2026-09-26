@@ -33,6 +33,7 @@ type AssessmentRow = {
   teacher_id: string;
   title: string;
   date: string;
+  important: boolean | null;
 };
 type AssessmentCompetencyRow = {
   assessment_id: string;
@@ -139,7 +140,7 @@ export async function loadSupabaseSchoolData(options: {
       .in("subject_id", subjectIds),
     supabase
       .from("assessments")
-      .select("id,class_id,subject_id,teacher_id,title,date")
+      .select("id,class_id,subject_id,teacher_id,title,date,important")
       .in("class_id", classIds)
       .in("subject_id", subjectIds),
   ]);
@@ -266,7 +267,7 @@ export async function loadSupabaseSchoolData(options: {
     date: row.date,
     classId: row.class_id,
     skillIds: skillIdsByAssessment.get(row.id) ?? [],
-    important: false,
+    important: row.important === true,
   }));
 
   const levelsByResult = new Map<

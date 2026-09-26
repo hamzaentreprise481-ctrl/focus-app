@@ -22,7 +22,7 @@ import {
   type CurriculumIndex,
 } from "../lib/curriculum/graph";
 import { validateCurriculumPackage } from "../lib/curriculum/package";
-import { validateModelAnalysis } from "../lib/pedagogy/analysis";
+import { relatedNotionCodes, validateModelAnalysis } from "../lib/pedagogy/analysis";
 import { buildAnalysisPersistence } from "../lib/pedagogy/pipeline";
 import { createMigratedDatabase, seedSchoolFixture } from "./helpers/pg";
 import {
@@ -118,6 +118,10 @@ interface QuestionInput {
   prompt: string;
   correction: string;
   response: string;
+  /** Notions the teacher tags as assessed by the question. */
+  nodeCodes?: string[];
+  maxPoints?: string;
+  awardedPoints?: string;
 }
 
 interface AnalysisContext {
@@ -136,23 +140,34 @@ async function runAnalysis(
   const assessmentId = await createAssessment(title);
   const questionIds = questions.map(() => randomUUID());
 
-  // 1. Teacher records the subject, correction and the student's exact answers.
+  // 1. Teacher records the subject and correction (shared by the class), then
+  //    the student's exact answers.
   await asTeacher(() =>
-    db.query("select public.focus_save_pedagogical_evidence($1, $2, $3, $4, $5::jsonb)", [
+    db.query("select public.focus_save_assessment_questions($1, $2, $3, $4::jsonb)", [
       assessmentId,
-      ids.student,
       "Évaluation de seconde.",
       "Justifier les étapes.",
       JSON.stringify(
         questions.map((question, index) => ({
           id: questionIds[index],
-          position: index + 1,
           prompt: question.prompt,
           correctionText: question.correction,
           rubricText: "",
-          maxPoints: "2",
+          maxPoints: question.maxPoints ?? "2",
+          nodeCodes: question.nodeCodes ?? [],
+        })),
+      ),
+    ]),
+  );
+  await asTeacher(() =>
+    db.query("select public.focus_save_student_responses($1, $2, $3::jsonb)", [
+      assessmentId,
+      ids.student,
+      JSON.stringify(
+        questions.map((question, index) => ({
+          questionId: questionIds[index],
           responseText: question.response,
-          awardedPoints: "",
+          awardedPoints: question.awardedPoints ?? "",
           teacherAnnotation: "",
         })),
       ),
@@ -190,10 +205,11 @@ async function runAnalysis(
       prompt: question.prompt,
       correctionText: question.correction,
       rubricText: "",
-      maxPoints: 2,
+      maxPoints: Number(question.maxPoints ?? "2"),
       responseText: responseByQuestion.get(questionIds[position])?.response_text ?? "",
-      awardedPoints: null,
+      awardedPoints: question.awardedPoints ? Number(question.awardedPoints) : null,
       teacherAnnotation: null,
+      assessedNotions: [...(question.nodeCodes ?? [])].sort(),
     })),
     curriculum: toAiCurriculum(index.summaries),
   };
@@ -202,6 +218,10 @@ async function runAnalysis(
     assessmentId,
     questionId: question.questionId,
     responseText: question.responseText,
+    correctionText: question.correctionText,
+    maxPoints: question.maxPoints,
+    awardedPoints: question.awardedPoints,
+    assessedCodes: question.assessedNotions,
   }));
 
   const persistNoEvidence = (reason: string) =>
@@ -225,7 +245,9 @@ async function runAnalysis(
 
   // 4. Model output (simulated) → FOCUS guardrails.
   const raw = model({ assessmentId, questionIds, index, aiInput });
-  const validated = validateModelAnalysis(raw, validationQuestions, index.mappableNotionIdsByCode);
+  const validated = validateModelAnalysis(raw, validationQuestions, index.mappableNotionIdsByCode, {
+    relatedCodes: (codes) => relatedNotionCodes(index.summaries, codes),
+  });
   if (validated.status === "insufficient_evidence") {
     await persistNoEvidence(validated.insufficientReason);
     return { assessmentId, status: validated.status, reason: validated.insufficientReason, index, modelCalled: true };
@@ -379,11 +401,10 @@ test("distributivity error from the Work catalogue: answer → error → notion 
   assert.equal(saved.recommendations.length, 1);
   assert.equal(saved.recommendations[0].action, remediation);
   assert.equal(saved.recommendations[0].confidence, "limitee");
-  // Prerequisites attached to the question are exactly the notion's prerequisites in the graph.
-  assert.deepEqual(saved.links, [
-    { code: "MATH.ALG.DISTRIBUTIVITE", relation: "assesses" },
-    ...[...node.prerequisite_codes].sort().map((code) => ({ code, relation: "prerequisite" })),
-  ]);
+  // An AI diagnosis never tags the teacher's question: assessed notions are
+  // teacher-authored. The notion's prerequisites come from the graph.
+  assert.deepEqual(saved.links, []);
+  assert.deepEqual(result.index.summaryByCode.get("MATH.ALG.DISTRIBUTIVITE")!.prerequisites, [...node.prerequisite_codes].sort());
   // The teacher view resolves competencies from the same graph.
   const summary = result.index.summaryByCode.get("MATH.ALG.DISTRIBUTIVITE")!;
   assert.deepEqual(summary.competencies.map((code) => result.index.nodeByCode.get(code)!.title), ["Calculer"]);
@@ -451,10 +472,7 @@ test("a new Work notion (produit nul) works end to end, and a teacher-validated 
   let saved = await persisted(first.assessmentId);
   assert.equal(saved.recommendations[0].code, "MATH.ALG.PRODUIT_NUL");
   assert.equal(saved.recommendations[0].confidence, "limitee");
-  assert.deepEqual(
-    saved.links.filter((link) => link.relation === "prerequisite").map((link) => link.code),
-    [...node.prerequisite_codes].sort(),
-  );
+  assert.deepEqual(first.index.summaryByCode.get("MATH.ALG.PRODUIT_NUL")!.prerequisites, [...node.prerequisite_codes].sort());
   assert.deepEqual(
     first.index.summaryByCode.get("MATH.ALG.PRODUIT_NUL")!.competencies,
     [...node.competency_codes].sort(),
@@ -588,7 +606,7 @@ test("a malformed model output falls back to insufficient_evidence", async () =>
     "Sortie invalide",
     [{ ...EVOLUTION_QUESTION, response: "+20 % puis -20 % donc on revient au prix de départ" }],
     () => ({ status: "probable_error", errors: [] }),
-    /statut d’analyse valide/,
+    /sortie d’analyse valide/,
   );
 });
 
@@ -596,10 +614,16 @@ test("the database refuses a non-notion or a fabricated excerpt even if client v
   const assessmentId = await createAssessment("Contournement");
   const questionId = randomUUID();
   await asTeacher(() =>
-    db.query("select public.focus_save_pedagogical_evidence($1, $2, 'c', 'i', $3::jsonb)", [
+    db.query("select public.focus_save_assessment_questions($1, 'c', 'i', $2::jsonb)", [
+      assessmentId,
+      JSON.stringify([{ id: questionId, prompt: "Développer 3(x+2).", correctionText: "3x+6", rubricText: "", maxPoints: "" }]),
+    ]),
+  );
+  await asTeacher(() =>
+    db.query("select public.focus_save_student_responses($1, $2, $3::jsonb)", [
       assessmentId,
       ids.student,
-      JSON.stringify([{ id: questionId, position: 1, prompt: "Développer 3(x+2).", correctionText: "3x+6", rubricText: "", maxPoints: "", responseText: "3(x+2)=3x+2", awardedPoints: "", teacherAnnotation: "" }]),
+      JSON.stringify([{ questionId, responseText: "3(x+2)=3x+2", awardedPoints: "", teacherAnnotation: "" }]),
     ]),
   );
   const [{ id: responseId }] = (
@@ -612,7 +636,7 @@ test("the database refuses a non-notion or a fabricated excerpt even if client v
         ids.school,
         ids.student,
         assessmentId,
-        randomUUID(),
+        createHash("sha256").update(randomUUID()).digest("hex"),
         JSON.stringify([{ questionId, responseId, nodeId: nodeId(node), errorType: "calcul", evidenceExcerpt: excerpt, explanation: "x", confidence: "limitee" }]),
       ]),
     );
