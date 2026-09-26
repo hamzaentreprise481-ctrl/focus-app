@@ -71,8 +71,9 @@ export function listWorkDisputes(
     }),
   );
   const sourceEdges = Array.isArray(document.edges) ? (document.edges as Array<Record<string, unknown>>) : [];
-  const edges: WorkDisputeEdge[] = conversion.raw.edges.map(({ value }, index) => {
+  const edges: WorkDisputeEdge[] = conversion.raw.edges.map(({ value }, position) => {
     const edge = value as { from: string; to: string; relation: string };
+    const index = conversion.edgeSourceIndexes[position]; // index in the Work document
     const provenance = sourceEdges[index]?.provenance;
     return { index, ...edge, provenance: typeof provenance === "string" ? provenance : null };
   });
@@ -218,6 +219,10 @@ export function applyWorkDecisions(
       fail("WORK_DECISIONS", `Litige inconnu : ${String(decision?.id)}.`);
       continue;
     }
+    if (seen.has(dispute.id)) {
+      fail("WORK_DECISIONS", `${dispute.id} : décision en double — une seule entrée par litige.`);
+      continue;
+    }
     seen.add(dispute.id);
     if (decision.keep === null || decision.keep === undefined) {
       pending++;
@@ -239,11 +244,17 @@ export function applyWorkDecisions(
   }
   for (const id of current.keys())
     if (!seen.has(id)) fail("WORK_DECISIONS", `Litige sans entrée dans le document de décisions : ${id}.`);
+  // Any problem in the decisions document: apply nothing at all.
+  if (issues.length) return { conversion, applied: 0, pending: current.size, issues };
 
+  const keepPositions = conversion.edgeSourceIndexes
+    .map((index, position) => ({ index, position }))
+    .filter(({ index }) => !drop.has(index));
   return {
     conversion: {
       ...conversion,
-      raw: { ...conversion.raw, edges: conversion.raw.edges.filter((_, index) => !drop.has(index)) },
+      raw: { ...conversion.raw, edges: keepPositions.map(({ position }) => conversion.raw.edges[position]) },
+      edgeSourceIndexes: keepPositions.map(({ index }) => index),
     },
     applied,
     pending,

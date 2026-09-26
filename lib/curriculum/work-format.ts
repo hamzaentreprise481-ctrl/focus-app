@@ -12,6 +12,8 @@ import type { CurriculumIssue, RawCurriculumPackage } from "./types";
 
 export interface WorkConversion {
   raw: RawCurriculumPackage;
+  /** Position in the document's `edges` array of each edge of `raw.edges`. */
+  edgeSourceIndexes: number[];
   program: { id: string; title: string; status: string; dataVersion: string };
   counts: { nodes: number; edges: number; legacyNodes: number; newNodes: number };
   notImported: {
@@ -74,15 +76,27 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
   if (!primary)
     issue("error", "WORK_SOURCE", `Source principale ${String(primaryId)} introuvable.`, `${origin}#program.source_ids`);
 
-  const nodes = list(doc.nodes).filter(isRecord);
-  const edges = list(doc.edges).filter(isRecord);
+  // Malformed entries are blocking errors, never silently dropped: a missing
+  // edge in a complete package would release a declaration on import.
+  const indexedNodes: Array<{ node: Json; index: number }> = [];
+  list(doc.nodes).forEach((node, index) => {
+    if (isRecord(node)) indexedNodes.push({ node, index });
+    else issue("error", "WORK_MALFORMED", `nodes[${index}] n’est pas un objet.`, `${origin}#nodes[${index}]`);
+  });
+  const indexedEdges: Array<{ edge: Json; index: number }> = [];
+  list(doc.edges).forEach((edge, index) => {
+    if (isRecord(edge)) indexedEdges.push({ edge, index });
+    else issue("error", "WORK_MALFORMED", `edges[${index}] n’est pas un objet.`, `${origin}#edges[${index}]`);
+  });
+  const nodes = indexedNodes.map(({ node }) => node);
+  const edges = indexedEdges.map(({ edge }) => edge);
   const codes = new Set(nodes.map((node) => String(node.code)));
 
   // Node-level lists duplicate the edge list; they must agree with it.
   const edgeKeys = new Set(
     edges.map((edge) => `${String(edge.from_code)}|${String(edge.to_code)}|${String(edge.relation)}`),
   );
-  nodes.forEach((node, index) => {
+  indexedNodes.forEach(({ node, index }) => {
     const at = `${origin}#nodes[${index}]`;
     for (const competency of list(node.competency_codes).map(String)) {
       if (competency === node.code) continue; // competency nodes tag themselves
@@ -95,7 +109,7 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
     if (node.active === false)
       issue("warning", "WORK_INACTIVE_NODE", `${String(node.code)} est inactif dans le document : il ne sera pas importé (donc désactivé s’il existe).`, at);
   });
-  edges.forEach((edge, index) => {
+  indexedEdges.forEach(({ edge, index }) => {
     for (const code of [edge.from_code, edge.to_code])
       if (!codes.has(String(code)))
         issue("error", "WORK_EDGE_NODE", `Relation vers un code absent du document : ${String(code)}.`, `${origin}#edges[${index}]`);
@@ -124,8 +138,7 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
           publishedOn: primary.published_on ?? null,
         }
       : null,
-    nodes: nodes
-      .map((node, index) => ({ node, index }))
+    nodes: indexedNodes
       .filter(({ node }) => node.active !== false)
       .map(({ node, index }) => ({
         at: `${origin}#nodes[${index}] ${String(node.code)}`,
@@ -137,7 +150,7 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
           sourceLocator: node.source_locator,
         },
       })),
-    edges: edges.map((edge, index) => ({
+    edges: indexedEdges.map(({ edge, index }) => ({
       at: `${origin}#edges[${index}]`,
       value: { from: edge.from_code, to: edge.to_code, relation: edge.relation },
     })),
@@ -148,6 +161,7 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
 
   return {
     raw,
+    edgeSourceIndexes: indexedEdges.map(({ index }) => index),
     program: {
       id: programId,
       title: String(program.title ?? ""),

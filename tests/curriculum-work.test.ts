@@ -3,6 +3,7 @@
 
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -15,6 +16,7 @@ import {
   listWorkDisputes,
   workDecisionsTemplate,
 } from "../lib/curriculum/work-decisions";
+import { convertWorkCurriculum } from "../lib/curriculum/work-format";
 import { createMigratedDatabase } from "./helpers/pg";
 import {
   LEGACY_CODES,
@@ -324,4 +326,58 @@ test("mechanism only — TEST-ONLY decisions (first option everywhere, not a cur
   await serverImport(result.package, false);
   assert.deepEqual(await legacyFingerprint(db), { nodes: 44, fingerprint: LIVE.fingerprint });
   assert.equal((await serverImport(result.package, false)).changed, false);
+});
+
+// ---------------------------------------------------------------------------
+// Codex review of 68c681d
+// ---------------------------------------------------------------------------
+
+test("P1: malformed Work entries are blocking errors, never silently dropped, and indexes stay aligned", () => {
+  const document = workDocument();
+  const edges = [...(document.edges as unknown[])];
+  const nodes = [...(document.nodes as unknown[])];
+  edges[5] = 42;
+  nodes[3] = "pas un objet";
+  const conversion = convertWorkCurriculum({ ...document, edges, nodes }, "malformed.json");
+  assert.deepEqual(
+    conversion.issues.filter((issue) => issue.code === "WORK_MALFORMED").map((issue) => issue.at),
+    ["malformed.json#nodes[3]", "malformed.json#edges[5]"],
+  );
+  assert.equal(conversion.raw.edges.length, 347);
+  assert.equal(conversion.raw.edges[5].at, "malformed.json#edges[6]");
+  assert.equal(conversion.edgeSourceIndexes[5], 6);
+  // Dispute indexes still point at the document's own positions (edge only
+  // corrupted here, so that every competency node still exists).
+  const edgeOnly = { ...document, edges };
+  const competencyDisputes = listWorkDisputes(convertWorkCurriculum(edgeOnly, "malformed.json"), edgeOnly)
+    .disputes.filter((dispute) => dispute.kind === "competency_support")
+    .map((dispute) => dispute.edges[0].index);
+  assert.deepEqual(competencyDisputes, [68, 69, 70, 71, 72, 73]);
+});
+
+test("P2: a decisions file cannot decide the same dispute twice", () => {
+  const work = loadedWork();
+  const decisions = JSON.parse(JSON.stringify(workDecisionsTemplate(work, work.document, "x.json", work.fileSha256)));
+  const pair = decisions.decisions.find((decision: { kind: string }) => decision.kind === "support_and_prerequisite");
+  pair.keep = pair.options[0].keep;
+  pair.decidedBy = "Professeur A";
+  decisions.decisions.push({ ...pair, keep: pair.options[1].keep, decidedBy: "Professeur B" });
+  const applied = applyWorkDecisions(work, work.document, decisions, work.fileSha256);
+  assert.match(applied.issues.map((issue) => issue.message).join("\n"), /décision en double/);
+  assert.equal(applied.applied, 0);
+  assert.equal(applied.conversion.raw.edges.length, 348); // nothing removed
+});
+
+test("P2: `validate --json` keeps stdout pure JSON for Work documents", () => {
+  const run = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/curriculum.ts", "validate", WORK_FILE, "--json", "--decisions", DECISIONS_FILE],
+    { cwd: path.join(__dirname, ".."), encoding: "utf8" },
+  );
+  assert.equal(run.status, 1);
+  const parsed = JSON.parse(run.stdout);
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.errors.length, 16);
+  assert.match(run.stderr, /Document Work/);
+  assert.match(run.stderr, /Décisions .* 0 appliquée\(s\), 16 en attente/);
 });

@@ -85,8 +85,8 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-// Diagnostics go to stderr except for `validate`, so that `sql --out -` can
-// be piped safely.
+// Human-readable diagnostics (stdout by default; stderr when stdout must stay
+// machine-readable — see main()).
 let log: (...values: unknown[]) => void = console.log;
 
 function printIssues(issues: CurriculumIssue[]) {
@@ -154,7 +154,8 @@ function validateWithContext(args: Args): CurriculumValidationResult {
 
 function report(result: CurriculumValidationResult, json: boolean) {
   if (json) {
-    log(
+    // The only thing written to stdout with --json.
+    console.log(
       JSON.stringify(
         {
           ok: result.ok,
@@ -214,7 +215,9 @@ function defaultMigrationPath(result: CurriculumValidationResult) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.command !== "validate") log = console.error;
+  // Diagnostics go to stderr except for a human-readable `validate`, so that
+  // `sql --out -` and `validate --json` keep stdout machine-readable.
+  if (args.command !== "validate" || args.json) log = console.error;
 
   if (args.command === "export") {
     if (!args.out) usage("export attend --out <dossier>");
