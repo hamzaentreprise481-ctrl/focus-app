@@ -4,10 +4,7 @@ import type {
   CurriculumNodeSummary,
   ModelPedagogicalAnalysis,
 } from "@/lib/pedagogy/types";
-import {
-  PEDAGOGICAL_OUTPUT_SCHEMA,
-  PEDAGOGICAL_SYSTEM_PROMPT,
-} from "@/lib/pedagogy/prompt";
+import { requestPedagogicalAnalysis } from "@/lib/pedagogy/openai-client";
 
 interface AnalyzeQuestionInput {
   assessmentId: string;
@@ -30,28 +27,6 @@ export interface PedagogicalAiInput {
   };
   questions: AnalyzeQuestionInput[];
   curriculum: CurriculumNodeSummary[];
-}
-
-function outputText(payload: unknown): string {
-  if (!payload || typeof payload !== "object") return "";
-  const response = payload as { output?: unknown[] };
-  if (!Array.isArray(response.output)) return "";
-  const chunks: string[] = [];
-  for (const item of response.output) {
-    if (!item || typeof item !== "object") continue;
-    const content = (item as { content?: unknown[] }).content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (
-        part &&
-        typeof part === "object" &&
-        (part as { type?: unknown }).type === "output_text" &&
-        typeof (part as { text?: unknown }).text === "string"
-      )
-        chunks.push((part as { text: string }).text);
-    }
-  }
-  return chunks.join("\n");
 }
 
 export function pedagogicalAiModel() {
@@ -126,53 +101,6 @@ export async function analyzePedagogicalEvidence(
   if (!apiKey) throw new Error("OPENAI_API_KEY_MISSING");
 
   const model = pedagogicalAiModel();
-  const system = PEDAGOGICAL_SYSTEM_PROMPT;
-  const schema = PEDAGOGICAL_OUTPUT_SCHEMA;
-
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      reasoning: { effort: "low" },
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: system }],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: JSON.stringify(input),
-            },
-          ],
-        },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "focus_pedagogical_analysis",
-          strict: true,
-          schema,
-        },
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const body = (await response.text()).slice(0, 1000);
-    throw new Error(`OPENAI_REQUEST_FAILED:${response.status}:${body}`);
-  }
-
-  const payload = (await response.json()) as unknown;
-  const text = outputText(payload);
-  if (!text) throw new Error("OPENAI_EMPTY_OUTPUT");
-
-  const parsed = JSON.parse(text) as ModelPedagogicalAnalysis;
-  return { model, analysis: parsed };
+  const analysis = await requestPedagogicalAnalysis(input, { apiKey, model });
+  return { model, analysis };
 }
