@@ -115,6 +115,23 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
         issue("error", "WORK_EDGE_NODE", `Relation vers un code absent du document : ${String(code)}.`, `${origin}#edges[${index}]`);
   });
 
+  // An inactive node is not imported (it is deactivated if it exists), so its
+  // relationships cannot be either: each one is reported, never silently lost.
+  const inactiveCodes = new Set(
+    nodes.filter((node) => node.active === false).map((node) => String(node.code)),
+  );
+  const importedEdges = indexedEdges.filter(({ edge, index }) => {
+    const inactive = [edge.from_code, edge.to_code].map(String).filter((code) => inactiveCodes.has(code));
+    if (!inactive.length) return true;
+    issue(
+      "warning",
+      "WORK_INACTIVE_EDGE",
+      `${String(edge.from_code)} —${String(edge.relation)}→ ${String(edge.to_code)} n’est pas importée : ${inactive.join(", ")} est inactif dans le document.`,
+      `${origin}#edges[${index}]`,
+    );
+    return false;
+  });
+
   const legacyNodes = nodes.filter((node) => node.existing_node === true).length;
   const provenance: Record<string, number> = {};
   for (const edge of edges) {
@@ -150,7 +167,7 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
           sourceLocator: node.source_locator,
         },
       })),
-    edges: indexedEdges.map(({ edge, index }) => ({
+    edges: importedEdges.map(({ edge, index }) => ({
       at: `${origin}#edges[${index}]`,
       value: { from: edge.from_code, to: edge.to_code, relation: edge.relation },
     })),
@@ -161,7 +178,7 @@ export function convertWorkCurriculum(doc: Json, origin = "work.json"): WorkConv
 
   return {
     raw,
-    edgeSourceIndexes: indexedEdges.map(({ index }) => index),
+    edgeSourceIndexes: importedEdges.map(({ index }) => index),
     program: {
       id: programId,
       title: String(program.title ?? ""),

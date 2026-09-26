@@ -231,3 +231,48 @@ test("`validate --json` returns JSON when a context package is invalid or unread
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Codex review of 270d9b1
+// ---------------------------------------------------------------------------
+
+test("P2: a validation chain cannot repeat a source URL (the importer would merge them)", () => {
+  const split = premierePackage();
+  split.source.sourceUrl = secondePackage().source.sourceUrl;
+  const chain = validateCurriculumChain([raw(secondePackage(), "seconde.json")], raw(split, "split.json"));
+  assert.equal(chain.context[0].ok, true);
+  assert.ok(chain.target);
+  assert.equal(chain.target.ok, false);
+  assert.equal(chain.target.package, null);
+  assert.ok(chain.target.errors.some((issue) => issue.code === "SOURCE_REPEATED" && issue.at === "split.json"));
+  // A repeated URL between two context packages stops the chain too.
+  const twice = validateCurriculumChain(
+    [raw(secondePackage(), "a.json"), raw(split, "b.json")],
+    raw(terminalePackage(), "t.json"),
+  );
+  assert.equal(twice.target, null);
+  assert.ok(twice.context[1].errors.some((issue) => issue.code === "SOURCE_REPEATED"));
+  // Distinct URLs are still accepted.
+  const ok = validateCurriculumChain([raw(secondePackage(), "seconde.json")], raw(premierePackage(), "premiere.json"));
+  assert.equal(ok.target?.ok, true, JSON.stringify(ok.target?.errors));
+});
+
+test("P2: prerequisite redundancy on a 5,000-node chain returns a result instead of overflowing", () => {
+  const pkg = secondePackage();
+  const chain = Array.from({ length: 4990 }, (_, index) => `MATH.T2.CHAIN.N${String(index).padStart(4, "0")}`);
+  pkg.nodes.push(
+    ...chain.map((code, index) => ({ code, type: "notion", title: `Étape ${index}`, sourceLocator: "Chaîne" })),
+  );
+  pkg.edges.push(
+    ...chain.slice(1).map((code, index) => ({ from: chain[index], to: code, relation: "prerequisite_of" })),
+    { from: chain[0], to: chain[chain.length - 1], relation: "prerequisite_of" }, // implied by the chain
+  );
+  assert.ok(pkg.nodes.length <= 5000);
+  const result = validateCurriculumPackage(raw(pkg, "chain.json"));
+  assert.equal(result.ok, true, JSON.stringify(result.errors.slice(0, 3)));
+  assert.ok(
+    result.warnings.some(
+      (issue) => issue.code === "PREREQUISITE_REDUNDANT" && issue.message.startsWith(`${chain[0]} → ${chain[chain.length - 1]}`),
+    ),
+  );
+});

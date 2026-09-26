@@ -748,25 +748,32 @@ export function validateCurriculumPackage(
   }
   // Transitive redundancy: A → C is redundant when A → B → … → C exists.
   if (!errors.some((issue) => issue.code === "PREREQUISITE_CYCLE")) {
-    const ancestors = new Map<string, Set<string>>();
-    const collect = (code: string, visiting: Set<string>): Set<string> => {
-      const cached = ancestors.get(code);
-      if (cached) return cached;
-      const result = new Set<string>();
-      visiting.add(code);
-      for (const parent of directPrerequisites.get(code) ?? []) {
-        if (visiting.has(parent)) continue;
-        result.add(parent);
-        for (const grand of collect(parent, visiting)) result.add(grand);
+    // Iterative upward search (a 5,000-node chain must not overflow the
+    // call stack): every node reachable from `start` through prerequisites.
+    const reachableFrom = (start: string): Set<string> => {
+      const seen = new Set<string>();
+      const stack = [start];
+      while (stack.length) {
+        const code = stack.pop()!;
+        for (const parent of directPrerequisites.get(code) ?? [])
+          if (parent !== start && !seen.has(parent)) {
+            seen.add(parent);
+            stack.push(parent);
+          }
       }
-      visiting.delete(code);
-      ancestors.set(code, result);
-      return result;
+      return seen;
+    };
+    const reachableCache = new Map<string, Set<string>>();
+    const reachable = (code: string) => {
+      let set = reachableCache.get(code);
+      if (!set) reachableCache.set(code, (set = reachableFrom(code)));
+      return set;
     };
     for (const [target, direct] of directPrerequisites) {
+      if (direct.size < 2) continue;
       for (const candidate of direct) {
         const viaOther = [...direct].some(
-          (other) => other !== candidate && collect(other, new Set()).has(candidate),
+          (other) => other !== candidate && reachable(other).has(candidate),
         );
         if (viaOther)
           warn(
@@ -829,11 +836,42 @@ export function validateCurriculumChain(
   const externalNodes: ExternalCurriculumNode[] = [];
   const externalEdges: CanonicalCurriculumEdge[] = [];
   const results: CurriculumValidationResult[] = [];
+  // The importer identifies a source by its URL: two packages of one chain
+  // with the same URL would be one source, and importing either would
+  // deactivate the nodes only the other one declares.
+  const urls = new Map<string, string>();
+  const rejectRepeatedSource = (result: CurriculumValidationResult, origin: string) => {
+    if (!result.package) return result;
+    const url = result.package.source.sourceUrl;
+    const first = urls.get(url);
+    if (first === undefined) {
+      urls.set(url, origin);
+      return result;
+    }
+    return {
+      ...result,
+      ok: false,
+      package: null,
+      hash: null,
+      errors: [
+        ...result.errors,
+        {
+          severity: "error" as const,
+          code: "SOURCE_REPEATED",
+          message: `La source ${url} est déjà celle de ${first} : un même programme doit tenir dans un seul paquet (l’importer désactiverait les nœuds de l’autre).`,
+          at: origin,
+        },
+      ],
+    };
+  };
   for (const raw of context) {
-    const result = validateCurriculumPackage(raw, {
-      externalNodes: [...externalNodes],
-      externalEdges: [...externalEdges],
-    });
+    const result = rejectRepeatedSource(
+      validateCurriculumPackage(raw, {
+        externalNodes: [...externalNodes],
+        externalEdges: [...externalEdges],
+      }),
+      raw.origin,
+    );
     results.push(result);
     if (!result.package) return { context: results, target: null };
     externalNodes.push(...result.package.nodes);
@@ -841,7 +879,10 @@ export function validateCurriculumChain(
   }
   return {
     context: results,
-    target: validateCurriculumPackage(target, { externalNodes, externalEdges }),
+    target: rejectRepeatedSource(
+      validateCurriculumPackage(target, { externalNodes, externalEdges }),
+      target.origin,
+    ),
   };
 }
 

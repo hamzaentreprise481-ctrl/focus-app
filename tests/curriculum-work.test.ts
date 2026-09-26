@@ -359,6 +359,35 @@ test("P1: malformed Work entries are blocking errors, never silently dropped, an
   assert.deepEqual(competencyEdges, [68, 69, 70, 71, 72, 73]);
 });
 
+// Codex review of 270d9b1.
+test("P2: relationships of an inactive Work node are reported and left out, not blocking", () => {
+  const document = workDocument();
+  const nodes = (document.nodes as Array<Record<string, unknown>>).map((node) => ({ ...node }));
+  const edges = document.edges as Array<Record<string, unknown>>;
+  // A new (non-legacy) notion that is the endpoint of relationships.
+  const inactive = nodes.find(
+    (node) => node.existing_node !== true && node.node_type === "notion" && edges.some((edge) => edge.to_code === node.code),
+  )!;
+  inactive.active = false;
+  const incident = edges
+    .map((edge, index) => ({ edge, index }))
+    .filter(({ edge }) => edge.from_code === inactive.code || edge.to_code === inactive.code);
+  assert.ok(incident.length > 0);
+  const conversion = convertWorkCurriculum({ ...document, nodes }, "inactive.json");
+  const reported = conversion.issues.filter((issue) => issue.code === "WORK_INACTIVE_EDGE");
+  assert.deepEqual(reported.map((issue) => issue.at), incident.map(({ index }) => `inactive.json#edges[${index}]`));
+  assert.ok(reported.every((issue) => issue.severity === "warning"));
+  assert.equal(conversion.raw.edges.length, 348 - incident.length);
+  assert.equal(conversion.edgeSourceIndexes.length, conversion.raw.edges.length);
+  assert.ok(conversion.edgeSourceIndexes.every((index) => !incident.some((item) => item.index === index)));
+  // Positions stay aligned with the document.
+  conversion.raw.edges.forEach((edge, position) =>
+    assert.equal(edge.at, `inactive.json#edges[${conversion.edgeSourceIndexes[position]}]`),
+  );
+  const validation = validateCurriculumPackage(conversion.raw);
+  assert.ok(!validation.errors.some((issue) => issue.code === "EDGE_UNKNOWN_NODE"), JSON.stringify(validation.errors.slice(0, 3)));
+});
+
 test("P2: a decisions file cannot decide the same dispute twice", () => {
   const work = loadedWork();
   const decisions = JSON.parse(JSON.stringify(workDecisionsTemplate(work, work.document, "x.json", work.fileSha256)));
