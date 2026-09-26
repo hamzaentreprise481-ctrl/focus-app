@@ -12,7 +12,7 @@
 // key must only ever be set in an administrator's local shell for this
 // command: never in Vercel, never in the application, never committed.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -27,6 +27,7 @@ import {
   validateCurriculumPackage,
 } from "../lib/curriculum/package";
 import { renderCurriculumImportMigration } from "../lib/curriculum/sql";
+import { applyWorkDecisions, workDecisionsTemplate } from "../lib/curriculum/work-decisions";
 import type {
   CurriculumIssue,
   CurriculumValidationResult,
@@ -36,6 +37,7 @@ interface Args {
   command: string;
   target: string;
   with: string[];
+  decisions: string | null;
   out: string | null;
   json: boolean;
   commit: boolean;
@@ -51,6 +53,8 @@ function usage(message?: string): never {
       "  npm run curriculum -- sql <paquet> [--with <paquet>]... [--out <fichier>|-] [--allow-mass-deactivation]",
       "  npm run curriculum -- apply <paquet> [--with <paquet>]... [--commit] [--allow-mass-deactivation]",
       "  npm run curriculum -- export <sourceUrl> --out <dossier>",
+      "  npm run curriculum -- work-disputes <document-work.json> [--out <fichier>|-]",
+      "  (validate/sql/apply acceptent --decisions <fichier> pour un document Work)",
     ].join("\n"),
   );
   process.exit(2);
@@ -63,6 +67,7 @@ function parseArgs(argv: string[]): Args {
     command,
     target,
     with: [],
+    decisions: null,
     out: null,
     json: false,
     commit: false,
@@ -72,6 +77,7 @@ function parseArgs(argv: string[]): Args {
     const flag = rest[i];
     if (flag === "--with") args.with.push(rest[++i] ?? usage("--with attend un chemin"));
     else if (flag === "--out") args.out = rest[++i] ?? usage("--out attend un chemin");
+    else if (flag === "--decisions") args.decisions = rest[++i] ?? usage("--decisions attend un chemin");
     else if (flag === "--json") args.json = true;
     else if (flag === "--commit") args.commit = true;
     else if (flag === "--allow-mass-deactivation") args.allowMassDeactivation = true;
@@ -93,6 +99,21 @@ function printIssues(issues: CurriculumIssue[]) {
 
 function validateWithContext(args: Args): CurriculumValidationResult {
   const input = loadCurriculumInput(args.target);
+  let decisionIssues: CurriculumIssue[] = [];
+  if (args.decisions) {
+    if (!input.work) usage("--decisions ne s’applique qu’à un document Work");
+    const applied = applyWorkDecisions(
+      input.work,
+      input.work.document,
+      JSON.parse(readFileSync(args.decisions, "utf8")),
+      input.work.fileSha256,
+    );
+    input.raw = applied.conversion.raw;
+    decisionIssues = applied.issues;
+    log(
+      `Décisions ${args.decisions} : ${applied.applied} appliquée(s), ${applied.pending} en attente.`,
+    );
+  }
   // Context packages are validated cumulatively, in the order given.
   const chain = validateCurriculumChain(args.with.map(loadCurriculumPackage), input.raw);
   if (!chain.target) {
@@ -116,7 +137,11 @@ function validateWithContext(args: Args): CurriculumValidationResult {
   log(
     `  Validations enseignant : ${notImported.teacherValidatedNodes}/${counts.nodes} nœuds, ${notImported.teacherValidatedEdges}/${counts.edges} relations.`,
   );
-  const errors = [...issues.filter((item) => item.severity === "error"), ...result.errors];
+  const errors = [
+    ...decisionIssues,
+    ...issues.filter((item) => item.severity === "error"),
+    ...result.errors,
+  ];
   const warnings = [...issues.filter((item) => item.severity === "warning"), ...result.warnings];
   return {
     ...result,
@@ -206,6 +231,22 @@ async function main() {
     if (!result.package) process.exit(1);
     writeCsvCurriculumPackage(args.out, result.package);
     console.log(`\nExporté dans ${args.out}`);
+    return;
+  }
+
+  if (args.command === "work-disputes") {
+    const input = loadCurriculumInput(args.target);
+    if (!input.work) usage("work-disputes attend un document Work");
+    const template = workDecisionsTemplate(
+      input.work,
+      input.work.document,
+      path.basename(args.target),
+      input.work.fileSha256,
+    );
+    const json = JSON.stringify(template, null, 2) + "\n";
+    if (args.out === "-" || !args.out) process.stdout.write(json);
+    else writeFileSync(args.out, json);
+    console.error(`${template.decisions.length} litige(s) listé(s), tous en attente de décision.`);
     return;
   }
 

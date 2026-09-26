@@ -10,11 +10,17 @@ import {
   serializeCsvCurriculumPackage,
 } from "./package";
 import type { CanonicalCurriculumPackage, RawCurriculumPackage } from "./types";
+import { sha256 } from "./work-decisions";
 import {
   convertWorkCurriculum,
   isWorkCurriculumDocument,
   type WorkConversion,
 } from "./work-format";
+
+export type LoadedWorkDocument = WorkConversion & {
+  document: Record<string, unknown>;
+  fileSha256: string;
+};
 
 /**
  * Loads either a JSON package file or a CSV package directory containing
@@ -30,14 +36,15 @@ export function loadCurriculumPackage(target: string): RawCurriculumPackage {
  */
 export function loadCurriculumInput(target: string): {
   raw: RawCurriculumPackage;
-  work: WorkConversion | null;
+  work: LoadedWorkDocument | null;
 } {
   if (
     existsSync(target) &&
     !statSync(target).isDirectory() &&
     target.toLowerCase().endsWith(".json")
   ) {
-    const text = readFileSync(target, "utf8");
+    const bytes = readFileSync(target);
+    const text = bytes.toString("utf8");
     let parsed: unknown;
     try {
       parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
@@ -46,7 +53,7 @@ export function loadCurriculumInput(target: string): {
     }
     if (isWorkCurriculumDocument(parsed)) {
       const work = convertWorkCurriculum(parsed, target);
-      return { raw: work.raw, work };
+      return { raw: work.raw, work: { ...work, document: parsed, fileSha256: sha256(bytes) } };
     }
   }
   return { raw: loadPackageFile(target), work: null };

@@ -105,25 +105,42 @@ The 25,000-relationship limit counts every relationship, inline ones
 
 `curriculum/work/FOCUS_Maths_Seconde_2026-2027.json` is the full Maths Seconde
 document produced by Work (`schema_version` 1.0.0, status
-`draft_for_teacher_review`). The CLI recognizes this format and converts only
-its graph — 99 nodes and 348 relationships, codes, types and relations
-unchanged — to a package; everything else (domains, chapters, 272 objectives,
-99 typical errors, 99 remediations, coverage rows, relationship provenance) has
-no table yet and is reported as not imported.
+`draft_for_teacher_review`, SHA-256 `7a7a49ac…abbd37fe3`, pinned in tests). The
+CLI recognizes this format and converts only its graph — codes, types and
+relations unchanged — to a package.
+
+**A. Graph data the importer can take** (`curriculum_nodes`, relationships):
+99 nodes (89 notions, 6 competencies, 4 prerequisites; the 44 existing codes
+keep their type and UUID) and 348 relationships, of which 322 are undisputed.
+
+**B. Work data with no database schema yet** (reported, never imported):
+8 domains, 14 chapters, 272 objectives, 99 typical errors, 99 remediations
+(with their control questions), 308 coverage rows, relationship provenance and
+normative flags, teacher-validation flags (0/99 nodes, 0/348 relationships).
+
+### Disputed relationships
+
+16 relationships break the importer rules, so the exact file is rejected:
+
+- 6 `supports` links between two competencies (`competency_support`);
+- 7 node pairs where an existing `supports` was kept next to a new
+  `prerequisite_of` (`support_and_prerequisite`);
+- 3 node pairs where a node is `part_of` a parent that is also declared its
+  prerequisite (`part_of_and_prerequisite`: `FONC.TABLEAU_SIGNES`/`FONC.SIGNES`,
+  `STAT.POURCENTAGE_POURCENTAGE` and `STAT.EVOLUTIONS` under `STAT.PROPORTIONS`).
+
+FOCUS does not choose between them. `FOCUS_Maths_Seconde_2026-2027.decisions.json`
+lists each dispute with its edges (index, relation, Work provenance) and the only
+options that make it valid; every `keep` is `null` (pending). To decide, copy an
+option's `keep` array into `keep` and sign `decidedBy`. A decision is applied
+only if it matches a listed option, is signed, and the file's SHA-256 still
+matches; pending disputes stay blocking.
 
 ```bash
-npm run curriculum -- validate curriculum/work/FOCUS_Maths_Seconde_2026-2027.json
+npm run curriculum -- work-disputes curriculum/work/FOCUS_Maths_Seconde_2026-2027.json --out decisions.json
+npm run curriculum -- validate curriculum/work/FOCUS_Maths_Seconde_2026-2027.json \
+  --decisions curriculum/work/FOCUS_Maths_Seconde_2026-2027.decisions.json
 ```
-
-Current result: the 99 nodes are valid (all 44 existing codes kept with their
-type), but 16 relationships block the import — 6 `supports` links between two
-competencies, and 10 node pairs that carry two relationships: 7 where an
-existing `supports` was kept next to a new `prerequisite_of` on the same pair,
-and 3 where a node is `part_of` a parent that is also declared its
-prerequisite (`FONC.TABLEAU_SIGNES`/`FONC.SIGNES`, and
-`STAT.POURCENTAGE_POURCENTAGE`, `STAT.EVOLUTIONS` under `STAT.PROPORTIONS`).
-They need an author decision; the importer never picks one.
-`tests/curriculum-work.test.ts` pins these facts to the file's SHA-256.
 
 ## Commands
 
