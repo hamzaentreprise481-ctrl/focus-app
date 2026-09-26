@@ -855,3 +855,53 @@ test("P2: validator fingerprint, migration header and audit row share one canoni
   );
   assert.equal(hash, expected);
 });
+
+// Codex review of 4a8568a — server/validator parity. Every value below is
+// rejected by BOTH the TypeScript validator and focus_import_curriculum, so
+// nothing the database accepts can fail validation when exported.
+test("P2: the database and the validator reject the same source and node values", async () => {
+  const url = "https://www.education.gouv.fr/bo/test/seconde";
+  const cases: Array<[string, (pkg: TestPackage) => void]> = [
+    ["source URL over 300 characters", (pkg) => (pkg.source.sourceUrl = `${url}/${"a".repeat(300)}`)],
+    ["source title made of Unicode spaces", (pkg) => (pkg.source.title = "  ")],
+    ["control character in publisher", (pkg) => (pkg.source.publisher = "Ministère\u000b")],
+    ["control character in the URL", (pkg) => (pkg.source.sourceUrl = `${url}/\u0007`)],
+    ["vertical tab in a node title", (pkg) => (pkg.nodes[4].title = "Distributivité\u000b")],
+    ["bell in a description", (pkg) => (pkg.nodes[4].description = "Distribuer\u0007")],
+    ["unit separator in a locator", (pkg) => (pkg.nodes[4].sourceLocator = "Algèbre\u001f")],
+    ["title made of Unicode spaces", (pkg) => (pkg.nodes[4].title = "   ﻿")],
+    ["title of 161 characters", (pkg) => (pkg.nodes[4].title = "t".repeat(161))],
+    ["description of 301 characters", (pkg) => (pkg.nodes[4].description = "d".repeat(301))],
+    ["locator of 201 characters", (pkg) => (pkg.nodes[4].sourceLocator = "l".repeat(201))],
+    ["non-consecutive school year", (pkg) => (pkg.source.schoolYear = "2026-2099")],
+  ];
+  const before = await snapshot();
+  for (const [label, mutate] of cases) {
+    const pkg = clone(secondePackage());
+    mutate(pkg);
+    const offline = validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(pkg), "parity.json"));
+    assert.equal(offline.ok, false, `validator accepted: ${label}`);
+    // The database receives the same values without client-side normalization.
+    const serverPackage = {
+      formatVersion: 1,
+      source: pkg.source,
+      nodes: pkg.nodes.map(({ code, type, title, description, sourceLocator }) => ({
+        code,
+        type,
+        title,
+        description: description ?? null,
+        sourceLocator,
+      })),
+      edges: canonical(secondePackage()).edges,
+    };
+    assert.match(await importError(serverPackage), /curriculum import: (source fields|invalid nodes|invalid schoolYear)/, label);
+  }
+  assert.deepEqual(await snapshot(), before);
+
+  // And what normalization makes equivalent is accepted by both.
+  const spaced = clone(secondePackage());
+  spaced.nodes[4].title = "  Développement   par\tdistributivité  ";
+  assert.equal(validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(spaced), "ok.json")).ok, true);
+  const accepted = await importPackage({ ...canonical(secondePackage()), nodes: canonical(secondePackage()).nodes.map((node) => (node.code === "MATH.T2.ALG.DISTRIBUTIVITE" ? { ...node, title: spaced.nodes[4].title } : node)) });
+  assert.equal(accepted.nodes.inserted, 7);
+});

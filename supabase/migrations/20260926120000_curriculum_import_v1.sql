@@ -146,6 +146,53 @@ revoke all on public.curriculum_import_runs from authenticated;
 
 -- 4. Import -------------------------------------------------------------------
 
+-- Text rules shared with the TypeScript validator (lib/curriculum/package.ts):
+-- the length and emptiness limits apply to the normalized form (NFC, runs of
+-- JavaScript whitespace collapsed to one space, trimmed), and the same control
+-- characters are refused. Anything the database accepts therefore validates
+-- again when exported.
+create or replace function public.focus_curriculum_text(p_value text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select btrim(
+    regexp_replace(
+      normalize(p_value, NFC),
+      '[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+',
+      ' ',
+      'g'
+    ),
+    ' '
+  )
+$$;
+
+create or replace function public.focus_curriculum_text_ok(
+  p_value text,
+  p_max integer,
+  p_required boolean
+)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when p_value is null then not p_required
+    when p_value ~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]' then false
+    when public.focus_curriculum_text(p_value) = '' then not p_required
+    else char_length(public.focus_curriculum_text(p_value)) <= p_max
+  end
+$$;
+
+revoke all on function public.focus_curriculum_text(text) from public;
+revoke all on function public.focus_curriculum_text(text) from anon;
+revoke all on function public.focus_curriculum_text(text) from authenticated;
+revoke all on function public.focus_curriculum_text_ok(text, integer, boolean) from public;
+revoke all on function public.focus_curriculum_text_ok(text, integer, boolean) from anon;
+revoke all on function public.focus_curriculum_text_ok(text, integer, boolean) from authenticated;
+
 create or replace function public.focus_import_curriculum(
   p_package jsonb,
   p_dry_run boolean default true,
@@ -249,13 +296,16 @@ begin
     raise exception 'curriculum import: sourceUrl must be an https URL on an official domain'
       using errcode = '22023';
   end if;
-  if coalesce(btrim(v_source->>'title'), '') = ''
-     or coalesce(btrim(v_source->>'publisher'), '') = ''
-     or coalesce(btrim(v_source->>'officialReference'), '') = ''
-     or char_length(v_source->>'title') > 300
-     or char_length(v_source->>'publisher') > 300
-     or char_length(v_source->>'officialReference') > 300 then
-    raise exception 'curriculum import: source title, publisher and officialReference are required (300 characters max)'
+  if not (
+       public.focus_curriculum_text_ok(v_source->>'subjectCode', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'levelCode', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'schoolYear', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'title', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'publisher', 300, true)
+       and public.focus_curriculum_text_ok(v_source->>'officialReference', 300, true)
+       and public.focus_curriculum_text_ok(v_url, 300, true)
+     ) then
+    raise exception 'curriculum import: source fields are required, 300 characters max, without control characters'
       using errcode = '22023';
   end if;
   if jsonb_typeof(v_source->'publishedOn') = 'string'
@@ -274,11 +324,9 @@ begin
      or split_part(n.code, '.', 1) <> v_subject
      or n.type is null
      or n.type not in ('domain', 'notion', 'competency', 'prerequisite')
-     or coalesce(btrim(n.title), '') = ''
-     or char_length(n.title) > 160
-     or char_length(coalesce(n.description, '')) > 300
-     or coalesce(btrim(n."sourceLocator"), '') = ''
-     or char_length(n."sourceLocator") > 200;
+     or not public.focus_curriculum_text_ok(n.title, 160, true)
+     or not public.focus_curriculum_text_ok(n.description, 300, false)
+     or not public.focus_curriculum_text_ok(n."sourceLocator", 200, true);
   if v_bad is not null then
     raise exception 'curriculum import: invalid nodes: %', left(v_bad, 2000)
       using errcode = '22023';
