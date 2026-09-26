@@ -27,7 +27,20 @@ export type LoadedWorkDocument = WorkConversion & {
  * source.json, nodes.csv and optionally edges.csv.
  */
 export function loadCurriculumPackage(target: string): RawCurriculumPackage {
-  return loadCurriculumInput(target).raw;
+  const input = loadCurriculumInput(target);
+  // A Work document whose conversion has blocking issues (malformed entries,
+  // unknown level, list mismatches…) is never handed out as a plain package:
+  // the raw form would silently lack what the adapter could not convert.
+  const blocking = input.work?.issues.filter((issue) => issue.severity === "error") ?? [];
+  if (blocking.length)
+    throw new CurriculumParseError(
+      `Document Work non convertible (${blocking.length} erreur(s)) : ${blocking
+        .slice(0, 5)
+        .map((issue) => `[${issue.code}] ${issue.message}`)
+        .join(" ; ")}`,
+      target,
+    );
+  return input.raw;
 }
 
 /**

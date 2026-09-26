@@ -5,7 +5,8 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { loadCurriculumInput, loadCurriculumPackage } from "../lib/curriculum/fs";
@@ -17,6 +18,7 @@ import {
   workDecisionsTemplate,
 } from "../lib/curriculum/work-decisions";
 import { convertWorkCurriculum } from "../lib/curriculum/work-format";
+import { premierePackage } from "./fixtures/curriculum";
 import { createMigratedDatabase } from "./helpers/pg";
 import {
   LEGACY_CODES,
@@ -418,4 +420,38 @@ test("P2: an invalid competency link and another relationship of the same pair f
   const applied = applyWorkDecisions(conversion, mixed, decisions, "sha");
   assert.match(applied.issues[0].message, /aucune option proposée/);
   assert.equal(applied.applied, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Codex review of a566f6d
+// ---------------------------------------------------------------------------
+
+test("P2: a Work document with blocking adapter issues is refused as a --with context package", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "focus-work-context-"));
+  try {
+    const document = workDocument();
+    const edges = [...(document.edges as unknown[])];
+    edges[5] = 42;
+    const malformed = path.join(dir, "malformed-work.json");
+    writeFileSync(malformed, JSON.stringify({ ...document, edges }));
+    // The malformed entry, and the node list that still names the lost edge.
+    assert.throws(
+      () => loadCurriculumPackage(malformed),
+      /Document Work non convertible \(2 erreur\(s\)\) : \[WORK_MALFORMED\] edges\[5\].*\[WORK_LIST_MISMATCH\]/,
+    );
+
+    const target = path.join(dir, "premiere.json");
+    writeFileSync(target, JSON.stringify(premierePackage()));
+    const run = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "scripts/curriculum.ts", "validate", target, "--with", malformed],
+      { cwd: path.join(__dirname, ".."), encoding: "utf8" },
+    );
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /WORK_MALFORMED/);
+    // The exact (well-formed) Work file still loads as a plain package.
+    assert.equal(loadCurriculumPackage(WORK_FILE).nodes.length, 99);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
