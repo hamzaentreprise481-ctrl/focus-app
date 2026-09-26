@@ -256,7 +256,7 @@ function loadedWork() {
   return input.work;
 }
 
-test("the committed decisions file lists the 16 disputes of the exact file, all pending", () => {
+test("the committed decisions file lists the 15 disputes (one per node pair, 26 relationships) of the exact file, all pending", () => {
   const work = loadedWork();
   assert.equal(work.fileSha256, WORK_FILE_SHA256);
   const committed = JSON.parse(readFileSync(DECISIONS_FILE, "utf8"));
@@ -265,7 +265,8 @@ test("the committed decisions file lists the 16 disputes of the exact file, all 
   assert.equal(committed.status, "pending_author_decisions");
   const kinds: Record<string, number> = {};
   for (const decision of committed.decisions) kinds[decision.kind] = (kinds[decision.kind] ?? 0) + 1;
-  assert.deepEqual(kinds, { support_and_prerequisite: 7, competency_support: 6, part_of_and_prerequisite: 3 });
+  assert.deepEqual(kinds, { support_and_prerequisite: 7, competency_support: 5, part_of_and_prerequisite: 3 });
+  assert.equal(committed.decisions.reduce((total: number, decision: { edges: unknown[] }) => total + decision.edges.length, 0), 26);
   assert.ok(committed.decisions.every((decision: { keep: unknown; decidedBy: unknown }) => decision.keep === null && decision.decidedBy === null));
   // Same neutral split as the diagnostic helper used by the dry-run tests.
   assert.deepEqual(listWorkDisputes(work, work.document).undisputed, splitWorkEdges().undisputed.map((edge) => edge.index));
@@ -275,7 +276,7 @@ test("pending decisions change nothing: the exact file is still rejected on the 
   const work = loadedWork();
   const applied = applyWorkDecisions(work, work.document, JSON.parse(readFileSync(DECISIONS_FILE, "utf8")), work.fileSha256);
   assert.deepEqual(applied.issues, []);
-  assert.deepEqual([applied.applied, applied.pending], [0, 16]);
+  assert.deepEqual([applied.applied, applied.pending], [0, 15]);
   assert.equal(applied.conversion.raw.edges.length, 348);
   const result = validateCurriculumPackage(applied.conversion.raw);
   assert.equal(result.ok, false);
@@ -312,7 +313,7 @@ test("mechanism only — TEST-ONLY decisions (first option everywhere, not a cur
     decision.decidedBy = "test automatique — pas une décision pédagogique";
   }
   const applied = applyWorkDecisions(work, work.document, decisions, work.fileSha256);
-  assert.deepEqual([applied.issues, applied.applied, applied.pending], [[], 16, 0]);
+  assert.deepEqual([applied.issues, applied.applied, applied.pending], [[], 15, 0]);
   const result = validateCurriculumPackage(applied.conversion.raw);
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   assert.equal(result.package!.nodes.length, 99);
@@ -349,10 +350,11 @@ test("P1: malformed Work entries are blocking errors, never silently dropped, an
   // Dispute indexes still point at the document's own positions (edge only
   // corrupted here, so that every competency node still exists).
   const edgeOnly = { ...document, edges };
-  const competencyDisputes = listWorkDisputes(convertWorkCurriculum(edgeOnly, "malformed.json"), edgeOnly)
+  const competencyEdges = listWorkDisputes(convertWorkCurriculum(edgeOnly, "malformed.json"), edgeOnly)
     .disputes.filter((dispute) => dispute.kind === "competency_support")
-    .map((dispute) => dispute.edges[0].index);
-  assert.deepEqual(competencyDisputes, [68, 69, 70, 71, 72, 73]);
+    .flatMap((dispute) => dispute.edges.map((edge) => edge.index))
+    .sort((a, b) => a - b);
+  assert.deepEqual(competencyEdges, [68, 69, 70, 71, 72, 73]);
 });
 
 test("P2: a decisions file cannot decide the same dispute twice", () => {
@@ -379,5 +381,41 @@ test("P2: `validate --json` keeps stdout pure JSON for Work documents", () => {
   assert.equal(parsed.ok, false);
   assert.equal(parsed.errors.length, 16);
   assert.match(run.stderr, /Document Work/);
-  assert.match(run.stderr, /Décisions .* 0 appliquée\(s\), 16 en attente/);
+  assert.match(run.stderr, /Décisions .* 0 appliquée\(s\), 15 en attente/);
+});
+
+// ---------------------------------------------------------------------------
+// Codex review of 784f14e
+// ---------------------------------------------------------------------------
+
+test("P2: an invalid competency link and another relationship of the same pair form ONE dispute", () => {
+  // Exact file: RAISONNER -supports-> COMMUNIQUER (#71) and the reverse (#73)
+  // are one pair, decided together.
+  const work = loadedWork();
+  const exact = listWorkDisputes(work, work.document).disputes;
+  const reverse = exact.filter((dispute) => dispute.edges.some((edge) => edge.index === 71 || edge.index === 73));
+  assert.equal(reverse.length, 1);
+  assert.deepEqual(reverse[0].edges.map((edge) => edge.index), [71, 73]);
+
+  // Codex scenario: an invalid competency `supports` plus a valid edge on the
+  // same pair. One dispute, whose only option keeps the valid edge.
+  const document = workDocument();
+  const edges = [...(document.edges as unknown[]), { from_code: "MATH.COMP.RAISONNER", to_code: "MATH.COMP.CHERCHER", relation: "part_of", provenance: "test" }];
+  const mixed = { ...document, edges };
+  const conversion = convertWorkCurriculum(mixed, "mixed.json");
+  const disputes = listWorkDisputes(conversion, mixed).disputes.filter((dispute) =>
+    dispute.edges.some((edge) => edge.index === 68 || edge.index === 348),
+  );
+  assert.equal(disputes.length, 1);
+  assert.deepEqual(disputes[0].edges.map((edge) => edge.index), [68, 348]);
+  assert.deepEqual(disputes[0].options.map((option) => option.keep), [[348]]);
+
+  // "Remove both" cannot be signed: it is not a listed option.
+  const decisions = JSON.parse(JSON.stringify(workDecisionsTemplate(conversion, mixed, "mixed.json", "sha")));
+  const target = decisions.decisions.find((decision: { id: string }) => decision.id === disputes[0].id);
+  target.keep = [];
+  target.decidedBy = "Professeur";
+  const applied = applyWorkDecisions(conversion, mixed, decisions, "sha");
+  assert.match(applied.issues[0].message, /aucune option proposée/);
+  assert.equal(applied.applied, 0);
 });

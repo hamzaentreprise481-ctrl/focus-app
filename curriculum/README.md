@@ -130,8 +130,11 @@ normative flags, teacher-validation flags (0/99 nodes, 0/348 relationships).
   `STAT.POURCENTAGE_POURCENTAGE` and `STAT.EVOLUTIONS` under `STAT.PROPORTIONS`).
 
 FOCUS does not choose between them. `FOCUS_Maths_Seconde_2026-2027.decisions.json`
-lists each dispute with its edges (index, relation, Work provenance) and the only
-options that make it valid; every `keep` is `null` (pending). To decide, copy an
+lists 15 disputes — one per node pair, 26 relationships in all (the 16 rejected
+ones and the relationships they conflict with; `RAISONNER`/`COMMUNIQUER` has a
+competency link in each direction) — with each edge (index, relation, Work
+provenance) and the only options that make the pair valid; every `keep` is
+`null` (pending). To decide, copy an
 option's `keep` array into `keep` and sign `decidedBy`. A decision is applied
 only if it matches a listed option, is signed, and the file's SHA-256 still
 matches; pending disputes stay blocking.

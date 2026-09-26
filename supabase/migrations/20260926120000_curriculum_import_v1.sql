@@ -238,8 +238,12 @@ begin
   if coalesce(v_subject, '') !~ c_scope_re or coalesce(v_level, '') !~ c_scope_re then
     raise exception 'curriculum import: invalid subjectCode or levelCode' using errcode = '22023';
   end if;
-  if coalesce(v_source->>'schoolYear', '') !~ '^\d{4}-\d{4}$' then
-    raise exception 'curriculum import: invalid schoolYear' using errcode = '22023';
+  -- Same invariant as the offline validator: two consecutive years.
+  if coalesce(v_source->>'schoolYear', '') !~ '^\d{4}-\d{4}$'
+     or split_part(v_source->>'schoolYear', '-', 2)::integer
+        <> split_part(v_source->>'schoolYear', '-', 1)::integer + 1 then
+    raise exception 'curriculum import: invalid schoolYear (expected two consecutive years, e.g. 2026-2027)'
+      using errcode = '22023';
   end if;
   if coalesce(v_url, '') !~* c_official_url_re then
     raise exception 'curriculum import: sourceUrl must be an https URL on an official domain'

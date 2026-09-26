@@ -13,6 +13,7 @@ import type { WorkConversion } from "./work-format";
 
 export type WorkDisputeKind =
   | "competency_support"
+  | "invalid_types"
   | "support_and_prerequisite"
   | "part_of_and_prerequisite"
   | "multiple_relations";
@@ -83,75 +84,95 @@ export function listWorkDisputes(
 
   const disputes: WorkDispute[] = [];
   const undisputed: number[] = [];
-  const seenPairs = new Set<string>();
-  for (const edge of edges) {
-    const allowed = (RELATION_RULES[edge.relation as CurriculumRelation] ?? []).some(
+  // One dispute per node pair: a type-invalid edge and another edge of the
+  // same pair are decided together, so signed choices can never combine into
+  // an outcome no listed option describes.
+  const isAllowed = (edge: WorkDisputeEdge) =>
+    (RELATION_RULES[edge.relation as CurriculumRelation] ?? []).some(
       ([from, to]) => from === typeByCode.get(edge.from) && to === typeByCode.get(edge.to),
     );
+  const seenPairs = new Set<string>();
+  for (const edge of edges) {
+    if (seenPairs.has(pairKey(edge))) continue;
+    seenPairs.add(pairKey(edge));
     const pair = byPair.get(pairKey(edge)) ?? [edge];
-    if (!allowed && typeByCode.get(edge.from) === "competency" && typeByCode.get(edge.to) === "competency") {
+
+    if (pair.length === 1) {
+      if (isAllowed(edge)) {
+        undisputed.push(edge.index);
+        continue;
+      }
+      const competencies =
+        typeByCode.get(edge.from) === "competency" && typeByCode.get(edge.to) === "competency";
       disputes.push({
         id: `TYPES:${edge.from}>${edge.to}:${edge.relation}`,
-        kind: "competency_support",
+        kind: competencies ? "competency_support" : "invalid_types",
         edges: [edge],
         options: [
           {
             keep: [],
-            meaning:
-              "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici).",
+            meaning: competencies
+              ? "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
+              : "Retirer ce lien, non autorisé entre ces types de nœuds.",
           },
         ],
       });
       continue;
     }
-    if (pair.length === 1) {
-      if (allowed) undisputed.push(edge.index);
-      else
-        disputes.push({
-          id: `TYPES:${edge.from}>${edge.to}:${edge.relation}`,
-          kind: "multiple_relations",
-          edges: [edge],
-          options: [{ keep: [], meaning: "Retirer ce lien, non autorisé entre ces types de nœuds." }],
-        });
-      continue;
-    }
-    if (seenPairs.has(pairKey(edge))) continue;
-    seenPairs.add(pairKey(edge));
+
+    const valid = pair.filter(isAllowed);
     const relations = pair.map((item) => item.relation).sort().join("+");
     const find = (relation: string) => pair.find((item) => item.relation === relation)!;
     let kind: WorkDisputeKind = "multiple_relations";
-    let options: WorkDisputeOption[] = pair.map((item) => ({
-      keep: [item.index],
-      meaning: `Garder seulement ${item.from} —${item.relation}→ ${item.to}.`,
-    }));
-    if (relations === "prerequisite_of+supports") {
-      kind = "support_and_prerequisite";
-      const prerequisite = find("prerequisite_of");
-      const support = find("supports");
-      options = [
-        {
-          keep: [prerequisite.index],
-          meaning: `Garder ${prerequisite.from} —prerequisite_of→ ${prerequisite.to} : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré.`,
-        },
-        {
-          keep: [support.index],
-          meaning: `Garder ${support.from} —supports→ ${support.to} : simple appui, pas de prérequis.`,
-        },
-      ];
-    } else if (relations === "part_of+prerequisite_of") {
-      kind = "part_of_and_prerequisite";
-      const partOf = find("part_of");
-      const prerequisite = find("prerequisite_of");
-      options = [
-        {
-          keep: [partOf.index],
-          meaning: `Garder ${partOf.from} —part_of→ ${partOf.to} : ${partOf.from} est une sous-notion de ${partOf.to}.`,
-        },
-        {
-          keep: [prerequisite.index],
-          meaning: `Garder ${prerequisite.from} —prerequisite_of→ ${prerequisite.to} : ${prerequisite.from} doit être acquis avant ${prerequisite.to}, sans relation de hiérarchie.`,
-        },
-      ];
+    // Only outcomes that keep exactly one type-valid edge (or none, when no
+    // edge of the pair is valid) are offered.
+    const competencyPair = pair.every(
+      (item) => typeByCode.get(item.from) === "competency" && typeByCode.get(item.to) === "competency",
+    );
+    if (!valid.length && competencyPair) kind = "competency_support";
+    let options: WorkDisputeOption[] = valid.length
+      ? valid.map((item) => ({
+          keep: [item.index],
+          meaning: `Garder seulement ${item.from} —${item.relation}→ ${item.to} ; les autres liens de cette paire sont retirés.`,
+        }))
+      : [
+          {
+            keep: [],
+            meaning: competencyPair
+              ? "Retirer ces liens : les règles actuelles n’autorisent pas « supports » entre deux compétences (dans un sens ou dans l’autre). Les garder exigerait de changer ces règles (décision produit, non proposée ici)."
+              : "Retirer tous les liens de cette paire, aucun n’est autorisé entre ces types de nœuds.",
+          },
+        ];
+    if (valid.length === pair.length) {
+      if (relations === "prerequisite_of+supports") {
+        kind = "support_and_prerequisite";
+        const prerequisite = find("prerequisite_of");
+        const support = find("supports");
+        options = [
+          {
+            keep: [prerequisite.index],
+            meaning: `Garder ${prerequisite.from} —prerequisite_of→ ${prerequisite.to} : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré.`,
+          },
+          {
+            keep: [support.index],
+            meaning: `Garder ${support.from} —supports→ ${support.to} : simple appui, pas de prérequis.`,
+          },
+        ];
+      } else if (relations === "part_of+prerequisite_of") {
+        kind = "part_of_and_prerequisite";
+        const partOf = find("part_of");
+        const prerequisite = find("prerequisite_of");
+        options = [
+          {
+            keep: [partOf.index],
+            meaning: `Garder ${partOf.from} —part_of→ ${partOf.to} : ${partOf.from} est une sous-notion de ${partOf.to}.`,
+          },
+          {
+            keep: [prerequisite.index],
+            meaning: `Garder ${prerequisite.from} —prerequisite_of→ ${prerequisite.to} : ${prerequisite.from} doit être acquis avant ${prerequisite.to}, sans relation de hiérarchie.`,
+          },
+        ];
+      }
     }
     disputes.push({ id: `PAIR:${pairKey(edge)}`, kind, edges: pair, options });
   }

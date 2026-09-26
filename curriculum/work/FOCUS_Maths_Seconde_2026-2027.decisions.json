@@ -367,7 +367,7 @@
       "rationale": null
     },
     {
-      "id": "TYPES:MATH.COMP.RAISONNER>MATH.COMP.COMMUNIQUER:supports",
+      "id": "PAIR:MATH.COMP.COMMUNIQUER|MATH.COMP.RAISONNER",
       "kind": "competency_support",
       "edges": [
         {
@@ -376,12 +376,19 @@
           "to": "MATH.COMP.COMMUNIQUER",
           "relation": "supports",
           "provenance": "affectation_pedagogique_FOCUS"
+        },
+        {
+          "index": 73,
+          "from": "MATH.COMP.COMMUNIQUER",
+          "to": "MATH.COMP.RAISONNER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
         }
       ],
       "options": [
         {
           "keep": [],
-          "meaning": "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
+          "meaning": "Retirer ces liens : les règles actuelles n’autorisent pas « supports » entre deux compétences (dans un sens ou dans l’autre). Les garder exigerait de changer ces règles (décision produit, non proposée ici)."
         }
       ],
       "keep": null,
@@ -395,28 +402,6 @@
         {
           "index": 72,
           "from": "MATH.COMP.CALCULER",
-          "to": "MATH.COMP.RAISONNER",
-          "relation": "supports",
-          "provenance": "affectation_pedagogique_FOCUS"
-        }
-      ],
-      "options": [
-        {
-          "keep": [],
-          "meaning": "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
-        }
-      ],
-      "keep": null,
-      "decidedBy": null,
-      "rationale": null
-    },
-    {
-      "id": "TYPES:MATH.COMP.COMMUNIQUER>MATH.COMP.RAISONNER:supports",
-      "kind": "competency_support",
-      "edges": [
-        {
-          "index": 73,
-          "from": "MATH.COMP.COMMUNIQUER",
           "to": "MATH.COMP.RAISONNER",
           "relation": "supports",
           "provenance": "affectation_pedagogique_FOCUS"

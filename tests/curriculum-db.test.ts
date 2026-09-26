@@ -409,6 +409,7 @@ test("the database re-validates packages that bypass the TypeScript validator", 
   const cases: Array<[string, (pkg: CanonicalCurriculumPackage) => void, RegExp]> = [
     ["format", (pkg) => ((pkg as { formatVersion: number }).formatVersion = 2), /unsupported formatVersion/],
     ["url", (pkg) => (pkg.source.sourceUrl = "https://manuel.example.com/x"), /official domain/],
+    ["school year", (pkg) => (pkg.source.schoolYear = "2026-2099"), /invalid schoolYear \(expected two consecutive years/],
     ["spoofed url", (pkg) => (pkg.source.sourceUrl = "https://education.gouv.fr.example.com/x"), /official domain/],
     ["code", (pkg) => (pkg.nodes[0].code = "math.lower"), /invalid nodes: math\.lower/],
     ["subject", (pkg) => (pkg.nodes[0].code = "PHYS.X.Y"), /invalid nodes: PHYS\.X\.Y/],
