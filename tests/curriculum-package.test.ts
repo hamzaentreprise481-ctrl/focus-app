@@ -270,6 +270,16 @@ test("P2: lone UTF-16 surrogates are refused (PostgreSQL could never import them
   assert.ok(!errorCodes(emoji).includes("INVALID_UNICODE"));
 });
 
+// Codex review of 209e7b0.
+test("P2: publishedOn year 0000 is refused (PostgreSQL has no year zero)", () => {
+  const zero = clone(secondePackage());
+  zero.source.publishedOn = "0000-01-01";
+  assert.equal(validate(zero).ok, false);
+  const first = clone(secondePackage());
+  first.source.publishedOn = "0001-01-01";
+  assert.equal(validate(first).ok, true, JSON.stringify(validate(first).errors));
+});
+
 test("the source must be official, dated correctly and complete", () => {
   assert.equal(isOfficialSourceUrl("https://www.education.gouv.fr/bo/2026/Hebdo14/X"), true);
   assert.equal(isOfficialSourceUrl("https://eduscol.education.fr/document/1"), true);
