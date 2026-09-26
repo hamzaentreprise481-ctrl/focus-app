@@ -1,51 +1,53 @@
 # Validation de l’IA pédagogique — état au 26 septembre 2026
 
-Cette note permet de reprendre la validation sans confondre les tests simulés et
-une analyse réelle d’une copie sur Vercel. La branche de travail est
-`codex/pedagogical-ai-math-v1` ; aucune modification de production n’a été faite
-pour cette note.
+Cette note sépare ce qui est prouvé par des tests simulés de ce qui reste à
+prouver avec le vrai modèle. Branche : `claude/finish-focus-v1`.
 
-## Vérifications locales
+## Ce qui est vérifié (sans le vrai modèle)
 
-- `npm run test` exerce les copies fictives avec des sorties de modèle simulées :
-  réponse correcte, calcul, raisonnement, prérequis, fonctions, erreur répétée,
-  copie partielle, vide et ambiguë, ainsi que preuve ou notion inventée.
-- `npm run test:routes` démarre le serveur de production : exécuter
-  `npm run build` **avant** cette commande.
-- `npm run test:ai-live` est le test opt-in qui envoie les copies fictives au
-  véritable modèle si `OPENAI_API_KEY` est présent. Le script emprunte le même
-  client Responses API que l’action professeur. Il ne sollicite pas le modèle
-  pour une copie entièrement vide, comme le parcours professeur.
-- Les preuves textuelles sont contrôlées littéralement. Cela ne valide pas, à
-  lui seul, l’exactitude pédagogique d’une explication : une revue humaine
-  en aveugle reste nécessaire.
+- **Contrôles de sortie** (`tests/pedagogy.test.ts`) : extrait non littéral ou
+  trop court, question inconnue, notion hors programme ou sans lien avec les
+  notions de la question, points maximum déjà attribués, réponse identique au
+  corrigé, formulation excessive ou non pédagogique (y compris une consigne
+  injectée dans la copie), doublons, « aucune erreur » contradictoire, code
+  d’erreur type d’une autre notion. Les propositions refusées sont comptées,
+  jamais affichées comme constats.
+- **Base de données** (`tests/teacher-workflow-db.test.ts`,
+  `tests/curriculum-catalogue.test.ts`, schéma réel avec RLS) : écritures IA
+  uniquement par les fonctions auditées, confiance calculée par la base à
+  partir de l’historique, remplacement des analyses quand la copie, une
+  question ou ses notions changent, décisions et historique du professeur,
+  même règle de parenté des notions en TypeScript et en SQL.
+- **Parcours complet** dans Chromium sur l’environnement local
+  (`scripts/local-stack.ts`) : connexion → « À traiter » → sujet et notions →
+  copie → analyse → hypothèse → confirmation ou rejet, avec note → rechargement
+  → modification de la copie → hypothèse remplacée → PDF. Le modèle y est un
+  **double scripté** : cela prouve le câblage et les garde-fous, pas la
+  qualité des analyses.
+- **Client du modèle** (`tests/pedagogy-openai-client.test.ts`) : schéma JSON
+  strict, aucune donnée d’élève dans les erreurs journalisées, délai maximal de
+  90 s, erreurs réseau distinguées.
 
-## Ce qui reste à démontrer
+## Ce qui n’est pas vérifié
 
-La clé `OPENAI_API_KEY` n’est **pas vérifiée** : elle n’est pas disponible dans
-l’environnement de cette validation. Le projet Vercel et ses Previews ne sont
-pas accessibles via la connexion actuelle : le projet sous le scope
-`hamzaentreprise481-8876s-projects` répond avec une erreur d’autorisation 403.
-Les anciennes Previews ne prouvent pas l’exécution des derniers commits.
+- **Aucun appel réel au modèle n’a réussi depuis cet environnement** : aucune
+  `OPENAI_API_KEY` n’y est disponible et le réseau n’autorise pas
+  `api.openai.com`. `npm run test:ai-live` s’arrête donc avec « BLOCKED ».
+- Aucune Preview Vercel de cette branche n’a été testée : l’accès au projet
+  Vercel est refusé (403) et `*.vercel.app` n’est pas joignable d’ici.
+- La route `/api/ai-health` (Preview seulement) contrôle l’accès au modèle par
+  `GET /v1/models/{model}` ; un succès ne prouve pas qu’une analyse réussit.
 
-La route Preview `/api/ai-health` contrôle l’accès à un modèle par `GET
-/v1/models/{model}`. Un résultat positif sur cette route ne démontre **pas**
-que la génération Responses API réussit. Il faut ensuite exécuter la campagne
-live avec une clé autorisée, puis tester, sur une Preview correspondant au SHA
-de la branche, le parcours professeur authentifié, l’analyse et la
-recommandation avec une évaluation fictive. Les identifiants professeur n’ont
-pas été essayés dans cette validation ; les tests de routes utilisent des
-fournisseurs simulés. Ne placer aucun secret ni aucune vraie copie dans les
-fixtures ou les journaux.
+## À faire, dans cet ordre
 
-## À reprendre après rétablissement des accès
-
-1. Vérifier le SHA de la Preview et réautoriser la connexion Vercel au bon
-   scope ; ne pas déployer en production.
-2. Exécuter `npm run test:ai-live` dans un environnement disposant de la clé
-   et conserver les résultats, cas par cas, avec les échecs et latences.
-3. Utiliser un compte professeur de test et des données fictives sur Preview ;
-   vérifier connexion → classe → élève → évaluation → analyse → recommandation.
+1. Appliquer les migrations sur une branche ou une copie du projet Supabase
+   (voir README, « Base de données »), puis sur une Preview liée à ce SHA.
+2. Définir `OPENAI_API_KEY` (serveur, Preview) et exécuter
+   `npm run test:ai-live` ; conserver les résultats cas par cas, échecs et
+   latences compris.
+3. Sur la Preview, avec un compte professeur de test et des données fictives :
+   parcours complet jusqu’à la décision et au PDF.
 4. Faire annoter en aveugle 20 à 50 réponses fictives ou consenties par un
-   professeur, puis comparer erreur, notion, prérequis, faux positifs et
-   réponses « preuves insuffisantes ».
+   professeur ; comparer erreurs, notions, faux positifs et « preuves
+   insuffisantes ». Ne jamais assouplir les contrôles pour faire passer une
+   sortie du modèle.

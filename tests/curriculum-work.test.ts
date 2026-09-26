@@ -11,15 +11,17 @@ import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { loadCurriculumInput, loadCurriculumPackage } from "../lib/curriculum/fs";
 import { buildCurriculumIndex, parseCurriculumGraphPayload } from "../lib/curriculum/graph";
-import { validateCurriculumPackage } from "../lib/curriculum/package";
+import { validateCurriculumPackage, validateExportedCurriculum } from "../lib/curriculum/package";
 import {
   applyWorkDecisions,
+  deferWorkDisputes,
   listWorkDisputes,
   workDecisionsTemplate,
 } from "../lib/curriculum/work-decisions";
 import { convertWorkCurriculum } from "../lib/curriculum/work-format";
 import { premierePackage } from "./fixtures/curriculum";
-import { createMigratedDatabase } from "./helpers/pg";
+import { readFileSync as readMigration } from "node:fs";
+import { BEFORE_WORK_IMPORT, WORK_IMPORT_MIGRATION, createMigratedDatabase } from "./helpers/pg";
 import {
   LEGACY_CODES,
   LIVE,
@@ -28,15 +30,19 @@ import {
   legacyFingerprint,
   splitWorkEdges,
   useLiveIdentifiers,
+  workConversion,
   workDocument,
   workServerPackage,
 } from "./helpers/work-curriculum";
 
-const REFERENCE_PACKAGE = path.join(__dirname, "..", "curriculum", "packages", "math", "seconde-gt-2026-2027");
+// The graph seeded on the live project before the Work import (44 nodes).
+const REFERENCE_PACKAGE = path.join(__dirname, "fixtures", "seeded-44-package");
 
 let db: PGlite;
+// A replica of the live project as it is before the Work import: same schema,
+// same 44 node UUIDs and source UUID.
 before(async () => {
-  db = await createMigratedDatabase();
+  db = await createMigratedDatabase({ upTo: BEFORE_WORK_IMPORT });
   await useLiveIdentifiers(db);
 });
 after(async () => {
@@ -500,4 +506,85 @@ test("P2: a Work document with blocking adapter issues is refused as a --with co
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// The committed import: supabase/migrations/20260926160000_curriculum_work_seconde_2026.sql
+// ---------------------------------------------------------------------------
+
+const CURRENT_PACKAGE = path.join(__dirname, "..", "curriculum", "packages", "math", "seconde-gt-2026-2027");
+
+function statusQuoDeferral() {
+  const seeded = validateCurriculumPackage(loadCurriculumPackage(REFERENCE_PACKAGE)).package!;
+  return deferWorkDisputes(workConversion(), workDocument(), seeded.edges);
+}
+
+test("undecided disputes keep the relationship already live and defer everything else — no new meaning", () => {
+  const { kept, deferred, conversion } = statusQuoDeferral();
+  const seeded = validateCurriculumPackage(loadCurriculumPackage(REFERENCE_PACKAGE)).package!;
+  const live = new Set(seeded.edges.map((edge) => `${edge.from}|${edge.relation}|${edge.to}`));
+  // Kept: exactly the live side of the 8 pairs where one side is live.
+  assert.equal(kept.length, 8);
+  assert.ok(kept.every((item) => live.has(`${item.from}|${item.relation}|${item.to}`)));
+  assert.ok(kept.every((item) => item.provenance === "relation_existante_conservee_a_revoir"));
+  // Deferred: the 8 new proposals opposite them, both sides of the 2 new
+  // statistics pairs, and the 6 competency → competency relationships.
+  assert.equal(deferred.length, 18);
+  assert.ok(deferred.every((item) => !live.has(`${item.from}|${item.relation}|${item.to}`)));
+  assert.equal(deferred.filter((item) => item.kind === "competency_support").length, 6);
+  assert.equal(conversion.raw.edges.length, 348 - 18);
+  // The author decisions document stays pending: nothing was decided for the author.
+  const committed = JSON.parse(readFileSync(DECISIONS_FILE, "utf8"));
+  assert.equal(committed.status, "pending_author_decisions");
+  assert.ok(committed.decisions.every((decision: { keep: unknown }) => decision.keep === null));
+  // The generated package is valid and is the one committed as a migration.
+  const pkg = validateCurriculumPackage(conversion.raw);
+  assert.equal(pkg.ok, true, JSON.stringify(pkg.errors.slice(0, 3)));
+  const migration = readMigration(path.join(__dirname, "..", "supabase", "migrations", WORK_IMPORT_MIGRATION), "utf8");
+  assert.match(migration, new RegExp(`-- Package hash: ${pkg.hash}`));
+  assert.match(migration, /--defer-disputes curriculum\/packages\/math\/seconde-gt-2026-2027/);
+});
+
+test("the committed Work import on the live replica keeps the 44 UUIDs, adds 55 nodes, deactivates nothing, and is idempotent", async () => {
+  assert.deepEqual(await legacyFingerprint(db), { nodes: 44, fingerprint: LIVE.fingerprint });
+  const migration = readMigration(path.join(__dirname, "..", "supabase", "migrations", WORK_IMPORT_MIGRATION), "utf8");
+  await db.exec(migration);
+
+  assert.deepEqual(await legacyFingerprint(db), { nodes: 44, fingerprint: LIVE.fingerprint });
+  const { rows: counts } = await db.query<{ total: number; active: number; edges: number; runs: number }>(
+    `select (select count(*)::int from public.curriculum_nodes) as total,
+            (select count(*)::int from public.curriculum_nodes where active) as active,
+            (select count(*)::int from public.curriculum_edge_declarations d where d.source_id = $1) as edges,
+            (select count(*)::int from public.curriculum_import_runs) as runs`,
+    [LIVE.source.id],
+  );
+  assert.deepEqual(counts[0], { total: 99, active: 99, edges: 330, runs: 1 });
+  const { kept, deferred } = statusQuoDeferral();
+  const present = async (item: { from: string; to: string; relation: string }) =>
+    (
+      await db.query(
+        `select 1 from public.curriculum_edges e
+           join public.curriculum_nodes f on f.id = e.from_node_id
+           join public.curriculum_nodes t on t.id = e.to_node_id
+          where f.code = $1 and t.code = $2 and e.relation = $3`,
+        [item.from, item.to, item.relation],
+      )
+    ).rows.length > 0;
+  for (const item of kept) assert.equal(await present(item), true, `${item.from} ${item.relation} ${item.to}`);
+  for (const item of deferred) assert.equal(await present(item), false, `${item.from} ${item.relation} ${item.to}`);
+
+  // Re-running the migration rewrites nothing and adds no audit row.
+  const settled = await tableSnapshot();
+  await db.exec(migration);
+  assert.deepEqual(await tableSnapshot(), settled);
+
+  // The committed reference package is exactly what the database now holds.
+  await db.exec("savepoint export");
+  await db.exec("set local role service_role");
+  const { rows } = await db.query<{ pkg: unknown }>("select public.focus_export_curriculum($1) as pkg", [LIVE.source.sourceUrl]);
+  await db.exec("reset role");
+  await db.exec("release savepoint export");
+  const exported = validateExportedCurriculum(rows[0].pkg, "export");
+  const current = validateCurriculumPackage(loadCurriculumPackage(CURRENT_PACKAGE));
+  assert.equal(exported.hash, current.hash);
 });

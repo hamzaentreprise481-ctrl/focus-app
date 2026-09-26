@@ -34,7 +34,7 @@ export function EvaluationEditor({
   initialGrades?: RawGrade[];
   initialClassId?: string;
 }) {
-  const { dataset, source, saveEvaluation, loaded, storageError } = useSchoolData();
+  const { dataset, saveEvaluation, loaded, storageError } = useSchoolData();
 
   const { classes, skills } = dataset;
   const [selectedClassId, setSelectedClassId] = useState(initialEvaluation?.classId ?? initialClassId ?? "");
@@ -45,6 +45,7 @@ export function EvaluationEditor({
   const classStudents = useMemo(() => dataset.students.filter((s) => s.classId === classId), [dataset.students, classId]);
   const [name, setName] = useState(initialEvaluation?.name ?? "");
   const [date, setDate] = useState(initialEvaluation?.date ?? "");
+  const [important, setImportant] = useState(initialEvaluation?.important ?? false);
   const [selectedSkills, setSelectedSkills] = useState<string[]>(
     initialEvaluation?.skillIds ?? [],
   );
@@ -152,14 +153,14 @@ export function EvaluationEditor({
     setSaving(true);
     setSaveError(null);
     try {
-    if (!evaluationId.current) evaluationId.current = source === "demo" ? `demo-${crypto.randomUUID()}` : crypto.randomUUID();
+    if (!evaluationId.current) evaluationId.current = crypto.randomUUID();
     const evaluation: Evaluation = {
       id: evaluationId.current,
       name: name.trim(),
       date,
       classId: classId!,
       skillIds: selectedSkills,
-      important: initialEvaluation?.important ?? false,
+      important,
     };
     const grades = parsedRows.flatMap(({ student, row }) => {
       const grade = gradeFromRow(student.id, evaluationId.current, row, selectedSkills);
@@ -184,6 +185,7 @@ export function EvaluationEditor({
     evaluationId.current = "";
     setName("");
     setDate("");
+    setImportant(false);
     setSelectedSkills([]);
     setRows({});
     setSavedEvaluation(null);
@@ -203,13 +205,18 @@ export function EvaluationEditor({
               : "Évaluation enregistrée"}
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
-            « {savedEvaluation.name} » est enregistrée {source === "demo" ? "sur cet appareil" : "dans votre espace professeur"}.
+            « {savedEvaluation.name} » est enregistrée dans votre espace professeur.
             Les statistiques et les fiches élèves concernées sont à jour.
-            {source === "demo" && " Cet essai reste local et n’est pas synchronisé avec d’autres appareils."}
+            
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Button asChild>
+            <Link href={`/app/evaluations/${savedEvaluation.id}#copies-title`}>
+              Ajouter le sujet et les copies
+            </Link>
+          </Button>
+          <Button variant="secondary" asChild>
             <Link href={`/app/evaluations/${savedEvaluation.id}`}>
               Voir l&rsquo;évaluation
             </Link>
@@ -244,7 +251,7 @@ export function EvaluationEditor({
             : "Nouvelle évaluation"}
         </h1>
         <p className="mt-1 text-sm text-ink-soft">
-          {source === "demo" ? "Utilisez uniquement des données fictives. Vos essais restent sur cet appareil ; ils ne sont pas synchronisés." : "Les notes et les compétences sont enregistrées dans votre espace professeur."}
+          Les notes et les compétences sont enregistrées dans votre espace professeur.
         </p>
       </div>
 
@@ -267,6 +274,22 @@ export function EvaluationEditor({
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="inline-flex items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={important}
+              onChange={(event) => setImportant(event.target.checked)}
+            />
+            <span>
+              Séquence charnière
+              <span className="block text-xs text-ink-soft">
+                Une absence à cette évaluation laisse un manque à rattraper, pas seulement une note en moins.
+              </span>
+            </span>
+          </label>
         </div>
         <div>
           <Label htmlFor="eval-class">Classe</Label>

@@ -22,6 +22,7 @@ export interface PersistedErrorPayload {
   evidenceExcerpt: string;
   explanation: string;
   confidence: PedagogicalConfidence;
+  catalogueErrorCode: string;
 }
 
 export interface PersistedRecommendationPayload {
@@ -73,6 +74,7 @@ export function buildAnalysisPersistence(params: {
       evidenceExcerpt: error.evidenceExcerpt,
       explanation: error.explanation,
       confidence: confidenceByNode.get(error.nodeId) ?? "limitee",
+      catalogueErrorCode: error.catalogueErrorCode ?? "",
     };
   });
 

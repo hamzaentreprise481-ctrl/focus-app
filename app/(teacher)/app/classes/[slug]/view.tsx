@@ -6,7 +6,7 @@ import { notFound, useParams } from "next/navigation";
 import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { analyzeClass } from "@/lib/analysis";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { useSchoolData } from "@/lib/school-data-context";
 import { StudentRoster } from "@/components/students/student-roster";
 
@@ -14,7 +14,7 @@ export default function ClassRosterPage() {
   const { slug } = useParams<{ slug: string }>();
   const { dataset, loaded, storageError } = useSchoolData();
 
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
   if (!dataset.classes.some((c) => c.id === slug)) notFound();
 
   const { classInfo, studentAnalyses, weakestSkills } = analyzeClass(
@@ -25,7 +25,7 @@ export default function ClassRosterPage() {
 
   return (
     <div className="space-y-6">
-      <DemoDataState />
+      <DataLoadState />
       <div>
         <p className="text-sm text-ink-soft">{classInfo.subject}</p>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">

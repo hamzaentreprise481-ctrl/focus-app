@@ -5,7 +5,6 @@ import type { Evaluation, EvaluationDataset, RawGrade } from "@/lib/types";
 export type SaveResult = { ok: true } | { ok: false; error: string };
 export interface SchoolData {
   dataset: EvaluationDataset;
-  source: "demo" | "supabase";
   loaded: boolean;
   storageError: string | null;
   retryStorage: () => void;

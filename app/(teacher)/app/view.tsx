@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,21 +13,25 @@ import { analyzeClass, getAttentionFeed } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
 import { useTeacher } from "@/components/layout/teacher-context";
 import { AttentionCard } from "@/components/dashboard/attention-card";
+import { WorkQueue } from "@/components/dashboard/work-queue";
+import { classWorkItems } from "@/lib/pedagogy/work-queue";
+import type { loadTeacherWorkQueue } from "./pedagogy-actions";
 import { MasteryBar } from "@/components/ui/mastery-bar";
 import { formatDate } from "@/lib/utils";
 
-export default function DashboardPage() {
-  const { dataset, source, loaded, storageError } = useSchoolData();
+export default function DashboardPage({ workQueue }: { workQueue: Awaited<ReturnType<typeof loadTeacherWorkQueue>> }) {
+  const { dataset, loaded, storageError } = useSchoolData();
   const { name } = useTeacher();
   const [selectedClass, setSelectedClass] = useState("");
   const activeClass = dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
   if (!activeClass) return <p className="text-ink-soft">Aucune classe disponible dans cet espace.</p>;
   const { classInfo, counts, weakestSkills } = analyzeClass(
     activeClass.id,
     dataset,
   );
   const feed = getAttentionFeed(activeClass.id, 4, dataset);
+  const workItems = workQueue.ok ? classWorkItems(workQueue.queue, activeClass.id, dataset) : null;
   const classEvaluations = dataset.evaluations.filter((e) => e.classId === activeClass.id);
   const recent = [...classEvaluations]
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -88,6 +92,11 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+      <WorkQueue
+        items={workItems}
+        aiConfigured={workQueue.ok && workQueue.queue.aiConfigured}
+        error={workQueue.ok ? undefined : workQueue.error}
+      />
       <section aria-labelledby="recent-title">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -95,10 +104,7 @@ export default function DashboardPage() {
               Le fil de votre classe
             </h2>
             <p className="mt-1 text-sm text-ink-soft">
-              {counts.total} élèves · {classEvaluations.length} évaluations{" "}
-              {source === "demo"
-                ? "dans cet espace de démonstration"
-                : "synchronisées avec l’établissement"}
+              {counts.total} élèves · {classEvaluations.length} évaluations
             </p>
           </div>
           <Link

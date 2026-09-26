@@ -3,10 +3,11 @@ import { useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSchoolData } from "@/lib/school-data-context";
+import { loadPedagogicalSnapshot } from "@/app/(teacher)/app/pedagogy-actions";
 import { buildSchoolReport, type ReportTarget } from "@/lib/reports/school-report";
 
 export function ExportPdfButton({ target }: { target: ReportTarget }) {
-  const { dataset, source, loaded, storageError } = useSchoolData();
+  const { dataset, loaded, storageError } = useSchoolData();
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,10 +17,12 @@ export function ExportPdfButton({ target }: { target: ReportTarget }) {
     setBusy(true);
     setError(null);
     try {
-      const report = buildSchoolReport(dataset, target, source);
-      const [{ renderSchoolPdf }, response] = await Promise.all([
-        import("@/lib/reports/pdf"), fetch("/fonts/DejaVuSans.ttf"),
+      const [{ renderSchoolPdf }, response, pedagogy] = await Promise.all([
+        import("@/lib/reports/pdf"),
+        fetch("/fonts/DejaVuSans.ttf"),
+        target.kind === "student" ? loadPedagogicalSnapshot(target.id) : undefined,
       ]);
+      const report = buildSchoolReport(dataset, target, pedagogy);
       if (!response.ok) throw new Error("Police indisponible");
       const bytes = await renderSchoolPdf(report, new Uint8Array(await response.arrayBuffer()));
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));

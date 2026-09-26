@@ -2,10 +2,6 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth/config";
 import { isTeacher, safeNext } from "@/lib/auth/policy";
-import {
-  isValidTestTeacherCookie,
-  TEST_TEACHER_COOKIE,
-} from "@/lib/auth/test-login";
 
 export async function proxy(request: NextRequest) {
   const config = authConfig();
@@ -28,14 +24,6 @@ export async function proxy(request: NextRequest) {
     redirected.headers.set("Cache-Control", "private, no-store");
     return redirected;
   };
-  if (
-    protectedRoute &&
-    isValidTestTeacherCookie(request.cookies.get(TEST_TEACHER_COOKIE)?.value)
-  ) {
-    response.headers.set("Cache-Control", "private, no-store");
-    return response;
-  }
-
   if (!config) return protectedRoute ? deny() : response;
   const supabase = createServerClient(config.url, config.key, {
     cookieOptions: {

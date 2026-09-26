@@ -26,6 +26,7 @@ const REFERENCE_PACKAGE = path.join(
   "math",
   "seconde-gt-2026-2027",
 );
+const SEEDED_44_PACKAGE = path.join(__dirname, "fixtures", "seeded-44-package");
 
 function validate(pkg: TestPackage, options?: Parameters<typeof validateCurriculumPackage>[1]) {
   return validateCurriculumPackage(
@@ -374,8 +375,17 @@ test("CSV headers are checked and errors point to file and line", () => {
   assert.equal(raw.nodes[2].at, "nodes.csv:4");
 });
 
-test("the committed reference package (current 44-node graph) is valid", () => {
+test("the committed reference package (Work import, 99 nodes) is valid", () => {
   const result = validateCurriculumPackage(loadCurriculumPackage(REFERENCE_PACKAGE));
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(result.package?.nodes.length, 99);
+  assert.equal(result.package?.edges.length, 330);
+  assert.deepEqual(result.stats.nodes, { domain: 0, notion: 89, competency: 6, prerequisite: 4 });
+  assert.deepEqual(result.stats.edges, { prerequisite_of: 117, supports: 178, part_of: 35 });
+});
+
+test("the previously seeded 44-node graph (kept as a fixture) is valid", () => {
+  const result = validateCurriculumPackage(loadCurriculumPackage(SEEDED_44_PACKAGE));
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   assert.equal(result.package?.nodes.length, 44);
   assert.equal(result.package?.edges.length, 68);

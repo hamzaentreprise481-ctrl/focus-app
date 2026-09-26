@@ -123,7 +123,7 @@ const questions = [
   ],
   [
     "Que peut-on essayer aujourd’hui ?",
-    "L’espace professeur présente une classe fictive, ses évaluations, des profils et des pistes d’accompagnement. Les ajouts d’évaluations restent sur l’appareil. Les pistes d’accompagnement ne sont pas enregistrées ; la mesure de leur effet et les connexions aux outils scolaires restent à développer.",
+    "L’espace professeur, sur invitation : vos classes, les évaluations, le sujet et le corrigé, les réponses exactes des élèves, puis des hypothèses d’analyse en mathématiques que vous confirmez ou écartez. Tout est enregistré et réservé à vos classes. La mesure de l’effet des pistes et les connexions aux outils scolaires restent à développer.",
   ],
   [
     "Les élèves et les parents peuvent-ils se connecter ici ?",
@@ -131,7 +131,7 @@ const questions = [
   ],
   [
     "Peut-on déjà importer des données réelles d’élèves ?",
-    "Pas dans cette version de démonstration. Le stockage métier sécurisé, les droits par établissement et les modalités de conservation doivent être mis en place et vérifiés avant tout usage avec des données réelles.",
+    "Pas encore. Les comptes et les classes sont créés par l’administrateur, sans import depuis les outils scolaires. Le stockage et les droits par établissement sont en place ; l’hébergement, la durée de conservation et le cadre RGPD doivent encore être validés avec l’établissement avant tout usage avec des données réelles d’élèves.",
   ],
 ];
 export default function PresentationPage() {

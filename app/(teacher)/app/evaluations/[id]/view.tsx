@@ -6,28 +6,26 @@ import Link from "next/link";
 import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
 import { Button } from "@/components/ui/button";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
-import { AssessmentPedagogyEditor } from "@/components/evaluations/assessment-pedagogy-editor";
+import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment-evidence-workspace";
 
-export default function EvaluationDetailPage() {
+export default function EvaluationDetailPage({ initialStudentId }: { initialStudentId?: string }) {
   const { id } = useParams<{ id: string }>();
-  const { dataset, source, loaded, storageError, editableEvaluationIds } = useSchoolData();
+  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
 
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
 
   if (!dataset.evaluations.some((e) => e.id === id)) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">
-{source === "demo" ? "Évaluation introuvable sur cet appareil" : "Évaluation introuvable dans votre espace"}
+          Évaluation introuvable dans votre espace
         </h1>
         <p className="text-ink-soft">
-          {source === "demo"
-            ? "Les essais sont conservés dans le navigateur utilisé pour les créer. Vérifiez le compte professeur et l’appareil."
-            : "Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès."}
+          Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès.
         </p>
         <Link className="text-brand" href="/app/evaluations">
           Retour aux évaluations
@@ -77,12 +75,7 @@ export default function EvaluationDetailPage() {
         absence.
       </p>
 
-      {editableEvaluationIds.includes(id) && (
-        <AssessmentPedagogyEditor
-          assessmentId={id}
-          students={classStudents}
-        />
-      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
           <p className="text-sm text-ink-soft">Moyenne de classe</p>
@@ -203,6 +196,8 @@ export default function EvaluationDetailPage() {
           </div>
         )}
       </section>
+
+      <AssessmentEvidenceWorkspace assessmentId={id} students={classStudents} initialStudentId={initialStudentId} />
     </div>
   );
 }

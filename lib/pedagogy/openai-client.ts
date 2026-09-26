@@ -23,16 +23,44 @@ function outputText(payload: unknown): string {
   return chunks.join("\n");
 }
 
+const DEFAULT_BASE_URL = "https://api.openai.com/v1";
+
+/** Model calls a teacher may trigger per hour (cost guard). */
+export function pedagogicalAiHourlyLimit(value = process.env.FOCUS_AI_HOURLY_LIMIT) {
+  const limit = Number(value);
+  return Number.isInteger(limit) && limit > 0 ? limit : 150;
+}
+
+/**
+ * Server-only API base. HTTPS is required; a loopback HTTP address is accepted
+ * outside Vercel so that local end-to-end tests can use a scripted stand-in.
+ * Anything else falls back to the provider's public API.
+ */
+export function openAiBaseUrl(value = process.env.OPENAI_BASE_URL) {
+  if (!value) return DEFAULT_BASE_URL;
+  try {
+    const url = new URL(value);
+    const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+    if (url.protocol === "https:" || (url.protocol === "http:" && loopback && !process.env.VERCEL))
+      return url.toString().replace(/\/+$/, "");
+  } catch {
+    /* invalid value: use the default */
+  }
+  return DEFAULT_BASE_URL;
+}
+
 // Shared by the server action and the opt-in live campaign. Never log the
 // provider's error body: it may echo text from a student's response.
 export async function requestPedagogicalAnalysis(
   input: unknown,
-  options: { apiKey: string; model: string; fetchImpl?: typeof fetch },
+  options: { apiKey: string; model: string; fetchImpl?: typeof fetch; baseUrl?: string; timeoutMs?: number },
 ): Promise<ModelPedagogicalAnalysis> {
-  const response = await (options.fetchImpl ?? fetch)(
-    "https://api.openai.com/v1/responses",
-    {
+  let response: Response;
+  try {
+    response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
       method: "POST",
+      // A stuck provider must not hold the teacher's request indefinitely.
+      signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
       headers: {
         Authorization: `Bearer ${options.apiKey}`,
         "Content-Type": "application/json",
@@ -59,8 +87,11 @@ export async function requestPedagogicalAnalysis(
           },
         },
       }),
-    },
-  );
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    throw new Error(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+  }
   if (!response.ok) throw new Error(`OPENAI_REQUEST_FAILED:${response.status}`);
 
   let payload: unknown;

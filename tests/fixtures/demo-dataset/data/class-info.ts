@@ -1,5 +1,5 @@
 import type { ClassInfo } from "@/lib/types";
-import { students } from "@/lib/data/students";
+import { students } from "./students";
 
 export const currentTeacher = "Mme Martin";
 

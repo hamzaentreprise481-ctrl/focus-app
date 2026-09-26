@@ -29,22 +29,18 @@ import {
   secondePackage,
   type TestPackage,
 } from "./fixtures/curriculum";
-import { createMigratedDatabase } from "./helpers/pg";
+import { BEFORE_WORK_IMPORT, createMigratedDatabase } from "./helpers/pg";
 
 const SEEDED_URL = "https://www.education.gouv.fr/bo/2026/Hebdo14/MENE2602914A";
-const REFERENCE_PACKAGE = path.join(
-  __dirname,
-  "..",
-  "curriculum",
-  "packages",
-  "math",
-  "seconde-gt-2026-2027",
-);
+// The graph seeded on the live project before the Work import (44 nodes).
+const REFERENCE_PACKAGE = path.join(__dirname, "fixtures", "seeded-44-package");
 
 let db: PGlite;
 
+// Importer mechanics on the seeded 44-node graph, i.e. every migration before
+// the Work curriculum import (that import is tested in curriculum-work).
 before(async () => {
-  db = await createMigratedDatabase();
+  db = await createMigratedDatabase({ upTo: BEFORE_WORK_IMPORT });
 });
 after(async () => {
   await db.close();
@@ -157,7 +153,9 @@ async function referenceNode(code: string) {
     "postgres",
     `with u as (insert into auth.users default values returning id),
           s as (insert into public.schools(name) values ('École test') returning id),
-          c as (insert into public.classes(school_id, name, level) select s.id, 'Seconde 1', 'Seconde' from s returning id, school_id),
+          y as (insert into public.academic_years(school_id, name, starts_at, ends_at)
+                select s.id, '2026-2027', '2026-09-01', '2027-07-04' from s returning id, school_id),
+          c as (insert into public.classes(school_id, academic_year_id, name, level) select y.school_id, y.id, 'Seconde 1', 'Seconde' from y returning id, school_id),
           sub as (insert into public.subjects(name, code) values ('Mathématiques', 'MATH') returning id),
           a as (insert into public.assessments(school_id, class_id, subject_id, teacher_id, title, date)
                 select c.school_id, c.id, sub.id, u.id, 'Évaluation', current_date from c, sub, u returning id),
@@ -173,7 +171,7 @@ async function referenceNode(code: string) {
 
 // ---------------------------------------------------------------------------
 
-test("all migrations apply on PostgreSQL and keep the seeded 44-node graph, each edge declared by its source", async () => {
+test("migrations up to the importer keep the seeded 44-node graph, each edge declared by its source", async () => {
   assert.equal(await count("select count(*) from public.curriculum_nodes where active"), 44);
   assert.equal(await count("select count(*) from public.curriculum_edges"), 68);
   assert.equal(
@@ -188,20 +186,17 @@ test("all migrations apply on PostgreSQL and keep the seeded 44-node graph, each
   assert.equal(await count("select count(*) from public.curriculum_edge_declarations"), 68);
 });
 
-test("the committed reference package is exactly the seeded graph: importing it changes nothing", async () => {
-  const reference = validateCurriculumPackage(loadCurriculumPackage(REFERENCE_PACKAGE));
-  assert.ok(reference.package);
-
+test("the seeded graph exports as a valid package: importing that export changes nothing", async () => {
   const [exported] = await call<{ pkg: unknown }>(
     "service_role",
     "select public.focus_export_curriculum($1) as pkg",
     [SEEDED_URL],
   );
   const fromDatabase = validateExportedCurriculum(exported.pkg, "export");
-  assert.equal(fromDatabase.hash, reference.hash);
+  assert.ok(fromDatabase.package, JSON.stringify(fromDatabase.errors));
 
   const before = await snapshot();
-  const report = await importPackage(reference.package);
+  const report = await importPackage(fromDatabase.package);
   assert.equal(report.changed, false);
   assert.deepEqual(report.nodes, {
     inserted: 0,
@@ -663,7 +658,7 @@ test("a JSON package file on disk imports end to end, then re-imports as a no-op
 
 test("applying the importer migration to the existing database keeps the 44 node rows untouched", async () => {
   const migration = "20260926120000_curriculum_import_v1.sql";
-  const previous = await createMigratedDatabase({ upTo: "20260926003500_supersede_edited_analysis_runs.sql" });
+  const previous = await createMigratedDatabase({ upTo: "20260925214642_supersede_edited_analysis_runs.sql" });
   try {
     const nodes = async () =>
       (

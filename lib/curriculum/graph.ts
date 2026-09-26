@@ -182,6 +182,8 @@ export function buildCurriculumIndex(payload: CurriculumGraphPayload): Curriculu
 
 /** Compact projection sent to the model: no database ids, no URLs. */
 export interface AiCurriculumNode {
+  /** Catalogue typical errors (in-scope notions only, when provided). */
+  typicalErrors?: Array<{ code: string; description: string }>;
   code: string;
   nodeType: CurriculumNodeType;
   title: string;
@@ -193,8 +195,14 @@ export interface AiCurriculumNode {
   supports: string[];
 }
 
-export function toAiCurriculum(summaries: CurriculumNodeSummary[]): AiCurriculumNode[] {
+export function toAiCurriculum(
+  summaries: CurriculumNodeSummary[],
+  typicalErrors: Map<string, Array<{ code: string; description: string }>> = new Map(),
+): AiCurriculumNode[] {
   return summaries.map((summary) => ({
+    ...(summary.inScope && summary.nodeType === "notion" && typicalErrors.get(summary.code)?.length
+      ? { typicalErrors: typicalErrors.get(summary.code) }
+      : {}),
     code: summary.code,
     nodeType: summary.nodeType,
     title: summary.title,

@@ -11,14 +11,14 @@ import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
 import { CreateAccompagnementDialog } from "@/components/students/create-accompagnement-dialog";
 import { EvidenceTimeline } from "@/components/students/evidence-timeline";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { formatScore } from "@/lib/utils";
 import { PedagogicalAiPanel } from "@/components/students/pedagogical-ai-panel";
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const { dataset, loaded, storageError } = useSchoolData();
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
   const student = dataset.students.find((s) => s.id === id);
   if (!student) notFound();
   const analysis = analyzeStudent(id, dataset);
@@ -41,7 +41,7 @@ export default function StudentProfilePage() {
 
   return (
     <div className="space-y-8">
-      <DemoDataState />
+      <DataLoadState />
       <header>
         <Link
           href={`/app/classes/${student.classId}`}
