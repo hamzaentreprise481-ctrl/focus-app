@@ -195,3 +195,39 @@ test("a package that redeclares a node of an earlier context package is rejected
   assert.equal(midChain.target, null);
   assert.deepEqual(midChain.context[1].errors.map((issue) => issue.code), ["NODE_OWNED_ELSEWHERE"]);
 });
+
+// Codex review of 1a2162a — `validate --json` always prints a JSON result.
+test("`validate --json` returns JSON when a context package is invalid or unreadable", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "focus-json-"));
+  try {
+    const premiere = path.join(dir, "premiere.json");
+    const terminale = path.join(dir, "terminale.json");
+    const broken = path.join(dir, "broken.json");
+    writeFileSync(premiere, JSON.stringify(premierePackage()));
+    writeFileSync(terminale, JSON.stringify(terminalePackage()));
+    writeFileSync(broken, "{ not json");
+    const run = (...args: string[]) =>
+      spawnSync(process.execPath, ["--import", "tsx", "scripts/curriculum.ts", "validate", ...args, "--json"], {
+        cwd: ROOT,
+        encoding: "utf8",
+      });
+
+    // Première as context without Seconde: invalid context.
+    const invalidContext = run(terminale, "--with", premiere);
+    assert.equal(invalidContext.status, 1);
+    const result = JSON.parse(invalidContext.stdout);
+    assert.equal(result.ok, false);
+    assert.equal(result.failedContext, premiere);
+    assert.deepEqual(result.errors.map((issue: { code: string }) => issue.code), ["EDGE_UNKNOWN_NODE"]);
+    assert.match(result.errors[0].message, /^\[contexte .*premiere\.json\]/);
+
+    // Unreadable context file: still JSON on stdout.
+    const unreadable = run(terminale, "--with", broken);
+    assert.equal(unreadable.status, 1);
+    const parsed = JSON.parse(unreadable.stdout);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.errors[0].code, "PARSE_ERROR");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

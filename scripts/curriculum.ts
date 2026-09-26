@@ -117,8 +117,22 @@ function validateWithContext(args: Args): CurriculumValidationResult {
   const chain = validateCurriculumChain(args.with.map(loadCurriculumPackage), input.raw);
   if (!chain.target) {
     const failed = chain.context.length - 1;
+    const context = chain.context[failed];
+    if (args.json)
+      // Machine-readable failure: the context package's own issues, marked.
+      return {
+        ...context,
+        ok: false,
+        package: null,
+        hash: null,
+        failedContext: args.with[failed],
+        errors: context.errors.map((issue) => ({
+          ...issue,
+          message: `[contexte ${args.with[failed]}] ${issue.message}`,
+        })),
+      } as CurriculumValidationResult;
     console.error(`Le paquet de contexte ${args.with[failed]} est invalide :`);
-    printIssues(chain.context[failed].errors);
+    printIssues(context.errors);
     process.exit(1);
   }
   const result = chain.target;
@@ -159,6 +173,7 @@ function report(result: CurriculumValidationResult, json: boolean) {
       JSON.stringify(
         {
           ok: result.ok,
+          ...("failedContext" in result ? { failedContext: result.failedContext } : {}),
           hash: result.hash,
           stats: result.stats,
           errors: result.errors,
@@ -213,8 +228,11 @@ function defaultMigrationPath(result: CurriculumValidationResult) {
   return path.join("supabase", "migrations", `${stamp}_curriculum_${slug}.sql`);
 }
 
+let jsonOutput = false;
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  jsonOutput = args.json && args.command === "validate";
   // Diagnostics go to stderr except for a human-readable `validate`, so that
   // `sql --out -` and `validate --json` keep stdout machine-readable.
   if (args.command !== "validate" || args.json) log = console.error;
@@ -289,6 +307,29 @@ async function main() {
 }
 
 main().catch((error) => {
+  if (jsonOutput) {
+    // --json always yields a JSON document on stdout, even for unreadable input.
+    console.log(
+      JSON.stringify(
+        {
+          ok: false,
+          hash: null,
+          errors: [
+            {
+              severity: "error",
+              code: error instanceof CurriculumParseError ? "PARSE_ERROR" : "INTERNAL_ERROR",
+              message: error instanceof Error ? error.message : String(error),
+              at: error instanceof CurriculumParseError ? error.at : "",
+            },
+          ],
+          warnings: [],
+        },
+        null,
+        2,
+      ),
+    );
+    process.exit(1);
+  }
   if (error instanceof CurriculumParseError)
     console.error(`✗ ${error.message}\n    ↳ ${error.at}`);
   else console.error(`✗ ${error instanceof Error ? error.message : String(error)}`);
