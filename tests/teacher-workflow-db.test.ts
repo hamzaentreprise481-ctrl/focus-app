@@ -457,3 +457,29 @@ test("the dashboard work queue follows evidence, analyses and decisions, through
     /permission denied/,
   );
 });
+
+test("a teacher of another subject in the same class cannot record or supersede an analysis", async () => {
+  const assessmentId = await assessment();
+  const [q] = (await saveQuestions(assessmentId, [{}])).questionIds;
+  await saveResponses(assessmentId, a.students[0], [{ questionId: q, responseText: "3(x+2)=3x+2" }]);
+  await analyse(assessmentId, a.students[0], [{ questionId: q, node: "MATH.ALG.DISTRIBUTIVITE", excerpt: "3x+2" }]);
+
+  const one = async (sql: string, params: unknown[] = []) => (await db.query<{ id: string }>(sql, params)).rows[0].id;
+  const physics = await one("insert into public.subjects(school_id, name, code) values ($1, 'Physique-chimie', 'PC') returning id", [a.school]);
+  const colleague = await one(`insert into auth.users(email, raw_app_meta_data) values ('pc@example.test', '{"role":"teacher"}') returning id`);
+  await db.query("insert into public.school_memberships(school_id, user_id, role) values ($1, $2, 'teacher')", [a.school, colleague]);
+  await db.query("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [a.school, colleague, a.classId, physics]);
+
+  // The colleague teaches the class (and may read it), but not this subject.
+  assert.equal((await as(colleague, "select 1 from public.assessments where id = $1", [assessmentId])).length, 1);
+  await assert.rejects(
+    as(colleague, "select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'r')", [a.school, a.students[0], assessmentId, hash()]),
+    /not accessible/,
+  );
+  await assert.rejects(
+    as(colleague, "select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, '[]'::jsonb, '[]'::jsonb)", [a.school, a.students[0], assessmentId, hash()]),
+    /not accessible/,
+  );
+  // The maths teacher's analysis is untouched.
+  assert.equal(await activeRuns(assessmentId, a.students[0]), 1);
+});

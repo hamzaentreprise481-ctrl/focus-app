@@ -721,11 +721,13 @@ grant execute on function public.focus_save_student_responses(uuid, uuid, jsonb)
 -- A diagnosed notion must relate to what the question assesses when the
 -- teacher tagged it: the tagged notion itself, a notion above or below it
 -- (part_of) or one of its prerequisites, within three steps.
+-- SECURITY INVOKER: a direct caller only sees the tags RLS lets them read;
+-- inside the analysis write function it runs with that function's rights.
 create or replace function public.focus_notion_related_to_question(p_node_id uuid, p_question_id uuid)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   with recursive tags as (
@@ -799,12 +801,24 @@ begin
     raise exception 'authentication required' using errcode = '42501';
   end if;
   select * into v_assessment from public.assessments where id = p_assessment_id;
-  if not found or v_assessment.school_id <> p_school_id or not public.teaches_class(v_assessment.class_id) then
+  -- Teaching the class is not enough: only a teacher of this subject in this
+  -- class (or a school admin) may record, and thereby supersede, an analysis.
+  if not found or v_assessment.school_id <> p_school_id or not (
+    exists (
+      select 1 from public.teacher_assignments ta
+      where ta.teacher_id = auth.uid()
+        and ta.class_id = v_assessment.class_id
+        and ta.subject_id = v_assessment.subject_id
+    )
+    or public.is_school_admin(v_assessment.school_id)
+  ) then
     raise exception 'assessment not accessible' using errcode = '42501';
   end if;
   if not exists (
     select 1 from public.student_enrollments se
+    join public.classes c on c.id = se.class_id
     where se.student_id = p_student_id and se.class_id = v_assessment.class_id and se.school_id = p_school_id
+      and se.academic_year_id = c.academic_year_id
   ) then
     raise exception 'student not enrolled' using errcode = '42501';
   end if;
