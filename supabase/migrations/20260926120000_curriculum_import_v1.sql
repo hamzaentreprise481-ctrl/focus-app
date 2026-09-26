@@ -284,6 +284,26 @@ begin
      or exists (select 1 from jsonb_array_elements(v_edges) x where jsonb_typeof(x) <> 'object') then
     raise exception 'curriculum import: nodes and edges must be objects' using errcode = '22023';
   end if;
+  -- Canonical form only: the inline JSON form (partOf, prerequisites,
+  -- competencies on nodes) is expanded by the validator. Dropping those keys
+  -- here would silently release every relationship they express.
+  select string_agg(distinct k, ', ' order by k)
+  into v_bad
+  from (
+    select k from jsonb_object_keys(p_package) k
+    where k not in ('formatVersion', 'source', 'nodes', 'edges')
+    union all
+    select k from jsonb_array_elements(v_nodes) x, jsonb_object_keys(x) k
+    where k not in ('code', 'type', 'title', 'description', 'sourceLocator')
+    union all
+    select k from jsonb_array_elements(v_edges) x, jsonb_object_keys(x) k
+    where k not in ('from', 'to', 'relation')
+  ) u;
+  if v_bad is not null then
+    raise exception 'curriculum import: only the canonical package is accepted (validate it with scripts/curriculum.ts); unexpected keys: %',
+      left(v_bad, 2000)
+      using errcode = '22023';
+  end if;
 
   -- Text rules on the values as received: control characters are refused
   -- before normalization, lengths are measured after it (validator rules).
@@ -450,9 +470,10 @@ begin
   end if;
 
   -- Hash of the canonical serialization, byte-identical to the validator's
-  -- JSON.stringify of the canonical package (fixed key order, arrays in the
-  -- order received): the audit row matches the CLI fingerprint and the
-  -- "-- Package hash" of a generated migration.
+  -- JSON.stringify of the canonical package (fixed key order, nodes sorted by
+  -- code, edges by from/to/relation, in code-unit order like the validator's
+  -- compareCodes): the audit row matches the CLI fingerprint, the "-- Package
+  -- hash" of a generated migration and the export, whatever the input order.
   v_hash := encode(sha256(convert_to(
     '{"formatVersion":1,"source":{'
       || '"subjectCode":' || to_json(v_source->>'subjectCode')::text
@@ -472,8 +493,8 @@ begin
             || ',"description":' || coalesce(to_json(x->>'description')::text, 'null')
             || ',"sourceLocator":' || to_json(x->>'sourceLocator')::text
             || '}',
-          ',' order by i)
-        from jsonb_array_elements(v_nodes) with ordinality as t(x, i)
+          ',' order by x->>'code' collate "C")
+        from jsonb_array_elements(v_nodes) as t(x)
       ), '')
       || '],"edges":['
       || coalesce((
@@ -482,8 +503,8 @@ begin
             || ',"to":' || to_json(x->>'to')::text
             || ',"relation":' || to_json(x->>'relation')::text
             || '}',
-          ',' order by i)
-        from jsonb_array_elements(v_edges) with ordinality as t(x, i)
+          ',' order by x->>'from' collate "C", x->>'to' collate "C", x->>'relation' collate "C")
+        from jsonb_array_elements(v_edges) as t(x)
       ), '')
       || ']}',
     'UTF8')), 'hex');

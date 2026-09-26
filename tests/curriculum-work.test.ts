@@ -372,6 +372,23 @@ test("P2: a decisions file cannot decide the same dispute twice", () => {
   assert.equal(applied.conversion.raw.edges.length, 348); // nothing removed
 });
 
+// Codex review of f455c1f.
+test("P2: a non-array « keep » is a blocking WORK_DECISIONS issue, not a crash", () => {
+  const work = loadedWork();
+  for (const keep of [3, { 0: 1 }, "12", [1.5], ["1"], true]) {
+    const decisions = JSON.parse(JSON.stringify(workDecisionsTemplate(work, work.document, "x.json", work.fileSha256)));
+    decisions.decisions[0].keep = keep;
+    decisions.decisions[0].decidedBy = "Professeur";
+    const applied = applyWorkDecisions(work, work.document, decisions, work.fileSha256);
+    assert.ok(
+      applied.issues.some((issue) => issue.code === "WORK_DECISIONS" && /doit être null ou une liste/.test(issue.message)),
+      JSON.stringify(keep),
+    );
+    assert.equal(applied.applied, 0);
+    assert.equal(applied.conversion.raw.edges.length, 348);
+  }
+});
+
 test("P2: `validate --json` keeps stdout pure JSON for Work documents", () => {
   const run = spawnSync(
     process.execPath,

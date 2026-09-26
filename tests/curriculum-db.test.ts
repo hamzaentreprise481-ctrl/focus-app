@@ -966,3 +966,37 @@ test("P2: NULL safety flags are refused before any write", async () => {
   }
   assert.deepEqual(await snapshot(), before);
 });
+
+// Codex review of f455c1f.
+test("P2: the RPC refuses the inline JSON form instead of releasing its relationships", async () => {
+  const base = canonical(secondePackage());
+  await importPackage(base);
+  const before = await snapshot();
+  // The documented inline form: relationships on the nodes, no edges array.
+  const inline = { ...clone(secondePackage()), edges: [] };
+  assert.ok(inline.nodes.some((node) => node.partOf || node.prerequisites || node.competencies));
+  assert.match(await importError(inline), /only the canonical package is accepted.*competencies, partOf, prerequisites/);
+  assert.match(await importError(inline, { dryRun: true }), /only the canonical package is accepted/);
+  // Any other non-canonical key is refused too, at every level.
+  const extraEdgeKey = clone(base) as unknown as TestPackage;
+  extraEdgeKey.edges[0].weight = 1;
+  assert.match(await importError(extraEdgeKey), /unexpected keys: weight/);
+  assert.match(await importError({ ...clone(base), inline: true }), /unexpected keys: inline/);
+  assert.deepEqual(await snapshot(), before);
+  // The canonical package still re-imports as a no-op: nothing was released.
+  assert.equal((await importPackage(base)).changed, false);
+});
+
+test("P2: the audit hash is the canonical fingerprint whatever the order of nodes and edges", async () => {
+  const base = canonical(secondePackage());
+  const expected = hashCurriculumPackage(base);
+  const shuffled = { ...clone(base), nodes: [...base.nodes].reverse(), edges: [...base.edges].reverse() };
+  assert.notDeepEqual(shuffled.nodes, base.nodes);
+  assert.notDeepEqual(shuffled.edges, base.edges);
+  const report = (await importPackage(shuffled)) as ImportReport & { packageHash: string };
+  assert.equal(report.packageHash, expected);
+  const [row] = await call<{ payload: unknown }>("service_role", "select public.focus_export_curriculum($1) as payload", [base.source.sourceUrl]);
+  const exported = validateExportedCurriculum(row.payload, "export");
+  assert.equal(exported.ok, true, JSON.stringify(exported.errors));
+  assert.equal(exported.hash, expected);
+});

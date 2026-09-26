@@ -249,6 +249,10 @@ export function applyWorkDecisions(
       pending++;
       continue;
     }
+    if (!Array.isArray(decision.keep) || !decision.keep.every((index) => Number.isInteger(index))) {
+      fail("WORK_DECISIONS", `${dispute.id} : « keep » doit être null ou une liste d'indices de relations.`);
+      continue;
+    }
     const chosen = dispute.options.find(
       (option) => JSON.stringify([...option.keep].sort()) === JSON.stringify([...(decision.keep as number[])].sort()),
     );
