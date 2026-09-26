@@ -174,3 +174,24 @@ test("writing a package over an existing export removes a now-empty edges.csv", 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// P2 (review of b6f16ee) — node codes cannot overlap across a --with chain
+// ---------------------------------------------------------------------------
+
+test("a package that redeclares a node of an earlier context package is rejected offline", () => {
+  const overlapping = premierePackage();
+  overlapping.nodes.push({ code: "MATH.T2.ALG.EQUATION", type: "notion", title: "Redéfinition", sourceLocator: "x" });
+  const chain = validateCurriculumChain([raw(secondePackage(), "seconde.json")], raw(overlapping, "premiere.json"));
+  assert.ok(chain.target);
+  assert.equal(chain.target.ok, false);
+  assert.deepEqual(chain.target.errors.map((issue) => issue.code), ["NODE_OWNED_ELSEWHERE"]);
+  assert.match(chain.target.errors[0].message, /MATH\.T2\.ALG\.EQUATION est déjà déclaré/);
+
+  const midChain = validateCurriculumChain(
+    [raw(secondePackage(), "seconde.json"), raw(overlapping, "premiere.json")],
+    raw(terminalePackage(), "terminale.json"),
+  );
+  assert.equal(midChain.target, null);
+  assert.deepEqual(midChain.context[1].errors.map((issue) => issue.code), ["NODE_OWNED_ELSEWHERE"]);
+});

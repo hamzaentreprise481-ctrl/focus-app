@@ -13,8 +13,11 @@ import {
   parseCurriculumGraphPayload,
 } from "../lib/curriculum/graph";
 import {
+  canonicalCurriculumText,
+  hashCurriculumPackage,
   parseJsonCurriculumPackage,
   validateCurriculumPackage,
+  validateExportedCurriculum,
 } from "../lib/curriculum/package";
 import { renderCurriculumImportMigration } from "../lib/curriculum/sql";
 import type { CanonicalCurriculumPackage } from "../lib/curriculum/types";
@@ -194,9 +197,7 @@ test("the committed reference package is exactly the seeded graph: importing it 
     "select public.focus_export_curriculum($1) as pkg",
     [SEEDED_URL],
   );
-  const fromDatabase = validateCurriculumPackage(
-    parseJsonCurriculumPackage(JSON.stringify(exported.pkg), "export"),
-  );
+  const fromDatabase = validateExportedCurriculum(exported.pkg, "export");
   assert.equal(fromDatabase.hash, reference.hash);
 
   const before = await snapshot();
@@ -714,12 +715,12 @@ test("a relationship shared by two sources survives until its last declaring sou
       [shared.from, shared.to],
     );
   const exported = async (url: string) => {
-    const [row] = await call<{ pkg: CanonicalCurriculumPackage }>(
+    const [row] = await call<{ pkg: { package: CanonicalCurriculumPackage } }>(
       "service_role",
       "select public.focus_export_curriculum($1) as pkg",
       [url],
     );
-    return row.pkg.edges.some((edge) => edge.from === shared.from && edge.to === shared.to);
+    return row.pkg.package.edges.some((edge) => edge.from === shared.from && edge.to === shared.to);
   };
   assert.equal(await exported(PREMIERE_URL), true);
   assert.equal(await exported(SECONDE_TEST_URL), true);
@@ -764,4 +765,92 @@ test("mass-deactivation guard enforces 20 percent exactly, including small progr
   assert.equal((await importPackage(small(4))).nodes.deactivated, 1);
   // 1 of 4 = 25 percent: refused.
   assert.match(await importError(small(3)), /1 of 4 active nodes would be deactivated/);
+});
+
+// ---------------------------------------------------------------------------
+// Codex review of b6f16ee (PR #6)
+// ---------------------------------------------------------------------------
+
+async function secondeAndPremiere() {
+  const seconde = canonical(secondePackage());
+  await importPackage(seconde);
+  const premiere = canonical(premierePackage(), [seconde]);
+  await importPackage(premiere);
+  return { seconde, premiere };
+}
+
+test("P1: a cross-level package exports and validates without extra context", async () => {
+  await secondeAndPremiere();
+  const [row] = await call<{ payload: { package: CanonicalCurriculumPackage; externalNodes: unknown[] } }>(
+    "service_role",
+    "select public.focus_export_curriculum($1) as payload",
+    [PREMIERE_URL],
+  );
+  assert.deepEqual(row.payload.externalNodes, [{ code: "MATH.T2.ALG.EQUATION", type: "notion" }]);
+  // Before: context-free validation reported EDGE_UNKNOWN_NODE and aborted the export.
+  assert.deepEqual(
+    validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(row.payload.package), "export")).errors.map((issue) => issue.code),
+    ["EDGE_UNKNOWN_NODE"],
+  );
+  const exported = validateExportedCurriculum(row.payload, "export");
+  assert.equal(exported.ok, true, JSON.stringify(exported.errors));
+  assert.deepEqual(exported.package, canonical(premierePackage(), [canonical(secondePackage())]));
+});
+
+test("P1: a node used by another source's relationships cannot be deactivated", async () => {
+  const { seconde, premiere } = await secondeAndPremiere();
+  // Seconde drops MATH.T2.ALG.EQUATION, which Première's prerequisite uses.
+  const without = clone(seconde);
+  without.nodes = without.nodes.filter((node) => node.code !== "MATH.T2.ALG.EQUATION");
+  without.edges = without.edges.filter((edge) => edge.from !== "MATH.T2.ALG.EQUATION" && edge.to !== "MATH.T2.ALG.EQUATION");
+  const before = await snapshot();
+  assert.match(
+    await importError(without),
+    /cannot deactivate nodes still used by relationships declared by other sources: MATH\.T2\.ALG\.EQUATION \(https:\/\/www\.education\.gouv\.fr\/bo\/test\/premiere-spe-maths\)/,
+  );
+  assert.match(await importError(without, { allowMassDeactivation: true }), /still used by relationships declared by other sources/);
+  assert.deepEqual(await snapshot(), before);
+
+  // Once Première stops declaring it, Seconde may deactivate the node.
+  const premiereWithout = clone(premiere);
+  premiereWithout.edges = premiereWithout.edges.filter((edge) => edge.from !== "MATH.T2.ALG.EQUATION");
+  await importPackage(premiereWithout);
+  assert.equal((await importPackage(without)).nodes.deactivated, 1);
+});
+
+test("P1: retyping a node is refused when it would invalidate another source's relationship", async () => {
+  const { seconde } = await secondeAndPremiere();
+  // Seconde retypes EQUATION as a domain and drops its own now-invalid links:
+  // its package is valid alone, but Première's `EQUATION -prerequisite_of->
+  // SECOND_DEGRE` would become domain -> notion.
+  const retyped = clone(seconde);
+  retyped.nodes = retyped.nodes.map((node) => (node.code === "MATH.T2.ALG.EQUATION" ? { ...node, type: "domain" as const } : node));
+  retyped.edges = retyped.edges.filter(
+    (edge) => !(edge.to === "MATH.T2.ALG.EQUATION" && edge.relation === "prerequisite_of") && !(edge.from === "MATH.T2.ALG.EQUATION" && edge.relation === "supports"),
+  );
+  const alone = validateCurriculumPackage(parseJsonCurriculumPackage(JSON.stringify(retyped), "retyped.json"));
+  assert.equal(alone.ok, true, JSON.stringify(alone.errors));
+  const before = await snapshot();
+  assert.match(
+    await importError(retyped),
+    /resulting graph would contain invalid relationships .*MATH\.T2\.ALG\.EQUATION \(domain\) -prerequisite_of-> MATH\.P1\.ALG\.SECOND_DEGRE \(notion\)/,
+  );
+  assert.deepEqual(await snapshot(), before);
+});
+
+test("P2: validator fingerprint, migration header and audit row share one canonical hash", async () => {
+  const pkg = clone(canonical(secondePackage()));
+  // Characters whose JSON escaping must match: quotes, backslash, accents, ’, emoji.
+  pkg.nodes[0].title = "Calculer « vite » – \"guillemets\" \\ l’élève ✓ 😀";
+  pkg.source.publishedOn = null;
+  assert.equal(canonicalCurriculumText(pkg), JSON.stringify(pkg));
+  const expected = hashCurriculumPackage(pkg);
+  assert.match(renderCurriculumImportMigration(pkg), new RegExp(`-- Package hash: ${expected}`));
+  const report = (await importPackage(pkg)) as ImportReport & { packageHash: string };
+  assert.equal(report.packageHash, expected);
+  const [{ hash }] = await call<{ hash: string }>(
+    "postgres",
+    "select package_hash as hash from public.curriculum_import_runs order by imported_at desc limit 1",
+  );
+  assert.equal(hash, expected);
 });

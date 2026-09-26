@@ -577,9 +577,20 @@ export function validateCurriculumPackage(
     );
 
   // -- edge semantics -------------------------------------------------------
+  // A code declared by a context package belongs to that package's source:
+  // redeclaring it here would be refused by the database as a takeover, so it
+  // is an error offline too (never silently masked).
   const external = new Map<string, ExternalCurriculumNode>();
-  for (const node of options.externalNodes ?? [])
-    if (!nodes.has(node.code)) external.set(node.code, node);
+  for (const node of options.externalNodes ?? []) {
+    const local = nodes.get(node.code);
+    if (local)
+      error(
+        "NODE_OWNED_ELSEWHERE",
+        `${node.code} est déjà déclaré par un paquet de contexte (autre source) : un code n’appartient qu’à une seule source.`,
+        local.at,
+      );
+    else external.set(node.code, node);
+  }
   const typeOf = (code: string) => nodes.get(code)?.type ?? external.get(code)?.type;
 
   const edgesByKey = new Map<string, EdgeCandidate>();
@@ -822,8 +833,59 @@ export function validateCurriculumChain(
   };
 }
 
+/**
+ * Canonical serialization — fixed key order, arrays in package order. The
+ * database hashes the exact same text (focus_import_curriculum), so the
+ * validator fingerprint, the "-- Package hash" of a generated migration and
+ * the packageHash of the import audit row are identical.
+ */
+export function canonicalCurriculumText(pkg: CanonicalCurriculumPackage) {
+  const s = (value: string | null) => (value === null ? "null" : JSON.stringify(value));
+  const source = pkg.source;
+  return (
+    `{"formatVersion":${pkg.formatVersion},"source":{` +
+    `"subjectCode":${s(source.subjectCode)},"levelCode":${s(source.levelCode)},` +
+    `"schoolYear":${s(source.schoolYear)},"title":${s(source.title)},` +
+    `"publisher":${s(source.publisher)},"officialReference":${s(source.officialReference)},` +
+    `"sourceUrl":${s(source.sourceUrl)},"publishedOn":${s(source.publishedOn)}},"nodes":[` +
+    pkg.nodes
+      .map(
+        (node) =>
+          `{"code":${s(node.code)},"type":${s(node.type)},"title":${s(node.title)},` +
+          `"description":${s(node.description)},"sourceLocator":${s(node.sourceLocator)}}`,
+      )
+      .join(",") +
+    `],"edges":[` +
+    pkg.edges
+      .map((edge) => `{"from":${s(edge.from)},"to":${s(edge.to)},"relation":${s(edge.relation)}}`)
+      .join(",") +
+    `]}`
+  );
+}
+
 export function hashCurriculumPackage(pkg: CanonicalCurriculumPackage) {
-  return createHash("sha256").update(JSON.stringify(pkg)).digest("hex");
+  return createHash("sha256").update(canonicalCurriculumText(pkg)).digest("hex");
+}
+
+/**
+ * Validates the payload of public.focus_export_curriculum, i.e.
+ * { package, externalNodes }: relationships to nodes of other sources are
+ * resolved with the types the database returned, so a cross-level package
+ * can be exported without extra context.
+ */
+export function validateExportedCurriculum(payload: unknown, origin = "export") {
+  const value = payload as { package?: unknown; externalNodes?: unknown } | null;
+  if (!value || typeof value !== "object" || !value.package || !Array.isArray(value.externalNodes))
+    throw new CurriculumParseError("Réponse d’export inattendue.", origin);
+  const externalNodes = (value.externalNodes as Array<{ code?: unknown; type?: unknown }>).map((node) => {
+    if (typeof node.code !== "string" || !(CURRICULUM_NODE_TYPES as readonly string[]).includes(String(node.type)))
+      throw new CurriculumParseError("Nœud externe invalide dans l’export.", origin);
+    return { code: node.code, type: node.type as CurriculumNodeType };
+  });
+  return validateCurriculumPackage(
+    parseJsonCurriculumPackage(JSON.stringify(value.package), origin),
+    { externalNodes },
+  );
 }
 
 // ---------------------------------------------------------------------------

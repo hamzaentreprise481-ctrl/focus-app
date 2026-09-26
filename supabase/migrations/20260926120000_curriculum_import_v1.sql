@@ -337,7 +337,44 @@ begin
       using errcode = '22023';
   end if;
 
-  v_hash := encode(sha256(convert_to(p_package::text, 'UTF8')), 'hex');
+  -- Hash of the canonical serialization, byte-identical to the validator's
+  -- JSON.stringify of the canonical package (fixed key order, arrays in the
+  -- order received): the audit row matches the CLI fingerprint and the
+  -- "-- Package hash" of a generated migration.
+  v_hash := encode(sha256(convert_to(
+    '{"formatVersion":1,"source":{'
+      || '"subjectCode":' || to_json(v_source->>'subjectCode')::text
+      || ',"levelCode":' || to_json(v_source->>'levelCode')::text
+      || ',"schoolYear":' || to_json(v_source->>'schoolYear')::text
+      || ',"title":' || to_json(v_source->>'title')::text
+      || ',"publisher":' || to_json(v_source->>'publisher')::text
+      || ',"officialReference":' || to_json(v_source->>'officialReference')::text
+      || ',"sourceUrl":' || to_json(v_source->>'sourceUrl')::text
+      || ',"publishedOn":' || coalesce(to_json(v_source->>'publishedOn')::text, 'null')
+      || '},"nodes":['
+      || coalesce((
+        select string_agg(
+          '{"code":' || to_json(x->>'code')::text
+            || ',"type":' || to_json(x->>'type')::text
+            || ',"title":' || to_json(x->>'title')::text
+            || ',"description":' || coalesce(to_json(x->>'description')::text, 'null')
+            || ',"sourceLocator":' || to_json(x->>'sourceLocator')::text
+            || '}',
+          ',' order by i)
+        from jsonb_array_elements(v_nodes) with ordinality as t(x, i)
+      ), '')
+      || '],"edges":['
+      || coalesce((
+        select string_agg(
+          '{"from":' || to_json(x->>'from')::text
+            || ',"to":' || to_json(x->>'to')::text
+            || ',"relation":' || to_json(x->>'relation')::text
+            || '}',
+          ',' order by i)
+        from jsonb_array_elements(v_edges) with ordinality as t(x, i)
+      ), '')
+      || ']}',
+    'UTF8')), 'hex');
 
   -- Writes: everything below runs in a subtransaction so that a dry run can
   -- compute the exact report and then roll back.
@@ -484,6 +521,25 @@ begin
        and not p_allow_mass_deactivation then
       raise exception 'curriculum import: % of % active nodes would be deactivated, above the 20 percent limit; allow mass deactivation explicitly if intended',
         v_nodes_deactivated, v_active_before
+        using errcode = '22023';
+    end if;
+
+    -- A node still used by relationships that OTHER sources declare cannot be
+    -- deactivated: those sources could no longer re-import their package and
+    -- their relationships would silently disappear from graph reads.
+    select string_agg(distinct format('%s (%s)', c.code, s.source_url), ', ')
+    into v_bad
+    from public.curriculum_nodes c
+    join public.curriculum_edge_declarations d
+      on (d.from_node_id = c.id or d.to_node_id = c.id)
+     and d.source_id <> v_source_id
+    join public.curriculum_sources s on s.id = d.source_id
+    where c.source_id = v_source_id
+      and c.active
+      and not (c.code = any(v_codes));
+    if v_bad is not null then
+      raise exception 'curriculum import: cannot deactivate nodes still used by relationships declared by other sources: %',
+        left(v_bad, 2000)
         using errcode = '22023';
     end if;
 
@@ -649,6 +705,39 @@ begin
     from unnest(v_from_ids, v_to_ids, v_relations) as p(from_id, to_id, relation)
     on conflict do nothing;
 
+    -- Final state: every relationship touching this source's nodes — whoever
+    -- declares it — must still satisfy the type rules (a retyped node must not
+    -- leave another source's relationship invalid) and join active nodes.
+    select string_agg(
+      format('%s (%s) -%s-> %s (%s)', f.code, f.node_type, e.relation, t.code, t.node_type),
+      ', '
+    )
+    into v_bad
+    from public.curriculum_edges e
+    join public.curriculum_nodes f on f.id = e.from_node_id
+    join public.curriculum_nodes t on t.id = e.to_node_id
+    where (f.source_id = v_source_id or t.source_id = v_source_id)
+      and (
+        not f.active
+        or not t.active
+        or not (
+          (e.relation = 'prerequisite_of'
+            and (f.node_type, t.node_type) in (('notion', 'notion'), ('prerequisite', 'notion')))
+          or (e.relation = 'supports'
+            and (f.node_type, t.node_type) in (
+              ('notion', 'competency'), ('notion', 'notion'), ('prerequisite', 'competency')))
+          or (e.relation = 'part_of'
+            and (f.node_type, t.node_type) in (
+              ('notion', 'notion'), ('notion', 'domain'), ('domain', 'domain'),
+              ('competency', 'competency')))
+        )
+      );
+    if v_bad is not null then
+      raise exception 'curriculum import: the resulting graph would contain invalid relationships (type rules or inactive endpoints): %',
+        left(v_bad, 2000)
+        using errcode = '22023';
+    end if;
+
     -- The graph had no cycle before this import, so any new cycle goes through
     -- an edge declared by this source: reachability from those edges suffices.
     with recursive reach(relation, start_id, node_id) as (
@@ -744,45 +833,66 @@ stable
 security invoker
 set search_path = public
 as $$
+  with src as (
+    select * from public.curriculum_sources where source_url = p_source_url
+  ),
+  declared as (
+    select f.code as from_code, t.code as to_code, e.relation,
+           f.source_id as from_source, t.source_id as to_source,
+           f.node_type as from_type, t.node_type as to_type
+    from public.curriculum_edge_declarations e
+    join src on src.id = e.source_id
+    join public.curriculum_nodes f on f.id = e.from_node_id and f.active
+    join public.curriculum_nodes t on t.id = e.to_node_id and t.active
+  )
+  -- { package, externalNodes }: the package is exactly what this source
+  -- declares; externalNodes gives the type of every endpoint owned by another
+  -- source so the export can be validated without extra context.
   select jsonb_build_object(
-    'formatVersion', 1,
-    'source', jsonb_build_object(
-      'subjectCode', s.subject_code,
-      'levelCode', s.level_code,
-      'schoolYear', s.school_year,
-      'title', s.title,
-      'publisher', s.publisher,
-      'officialReference', s.official_reference,
-      'sourceUrl', s.source_url,
-      'publishedOn', s.published_on
-    ),
-    'nodes', coalesce((
-      select jsonb_agg(
-        jsonb_build_object(
-          'code', n.code,
-          'type', n.node_type,
-          'title', n.title,
-          'description', n.description,
-          'sourceLocator', n.source_locator
+    'package', jsonb_build_object(
+      'formatVersion', 1,
+      'source', jsonb_build_object(
+        'subjectCode', src.subject_code,
+        'levelCode', src.level_code,
+        'schoolYear', src.school_year,
+        'title', src.title,
+        'publisher', src.publisher,
+        'officialReference', src.official_reference,
+        'sourceUrl', src.source_url,
+        'publishedOn', src.published_on
+      ),
+      'nodes', coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'code', n.code,
+            'type', n.node_type,
+            'title', n.title,
+            'description', n.description,
+            'sourceLocator', n.source_locator
+          )
+          order by n.code collate "C"
         )
-        order by n.code collate "C"
-      )
-      from public.curriculum_nodes n
-      where n.source_id = s.id and n.active
-    ), '[]'::jsonb),
-    'edges', coalesce((
-      select jsonb_agg(
-        jsonb_build_object('from', f.code, 'to', t.code, 'relation', e.relation)
-        order by f.code collate "C", t.code collate "C", e.relation collate "C"
-      )
-      from public.curriculum_edge_declarations e
-      join public.curriculum_nodes f on f.id = e.from_node_id and f.active
-      join public.curriculum_nodes t on t.id = e.to_node_id and t.active
-      where e.source_id = s.id
+        from public.curriculum_nodes n
+        where n.source_id = src.id and n.active
+      ), '[]'::jsonb),
+      'edges', coalesce((
+        select jsonb_agg(
+          jsonb_build_object('from', d.from_code, 'to', d.to_code, 'relation', d.relation)
+          order by d.from_code collate "C", d.to_code collate "C", d.relation collate "C"
+        )
+        from declared d
+      ), '[]'::jsonb)
+    ),
+    'externalNodes', coalesce((
+      select jsonb_agg(jsonb_build_object('code', x.code, 'type', x.type) order by x.code collate "C")
+      from (
+        select from_code as code, from_type as type from declared, src where from_source <> src.id
+        union
+        select to_code, to_type from declared, src where to_source <> src.id
+      ) x
     ), '[]'::jsonb)
   )
-  from public.curriculum_sources s
-  where s.source_url = p_source_url;
+  from src;
 $$;
 
 revoke all on function public.focus_export_curriculum(text) from public;

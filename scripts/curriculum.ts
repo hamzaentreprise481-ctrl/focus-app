@@ -22,9 +22,8 @@ import {
 } from "../lib/curriculum/fs";
 import {
   CurriculumParseError,
-  parseJsonCurriculumPackage,
   validateCurriculumChain,
-  validateCurriculumPackage,
+  validateExportedCurriculum,
 } from "../lib/curriculum/package";
 import { renderCurriculumImportMigration } from "../lib/curriculum/sql";
 import { applyWorkDecisions, workDecisionsTemplate } from "../lib/curriculum/work-decisions";
@@ -224,9 +223,7 @@ async function main() {
     });
     if (error) throw new Error(`Export refusé : ${error.message}`);
     if (!data) throw new Error("Aucune source ne correspond à cette URL.");
-    const result = validateCurriculumPackage(
-      parseJsonCurriculumPackage(JSON.stringify(data), "export"),
-    );
+    const result = validateExportedCurriculum(data, "export");
     report(result, false);
     if (!result.package) process.exit(1);
     writeCsvCurriculumPackage(args.out, result.package);
