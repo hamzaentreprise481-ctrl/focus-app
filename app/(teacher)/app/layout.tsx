@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import {
   EMPTY_SUPABASE_SCHOOL_DATA,
   loadSupabaseSchoolData,
+  teacherDisplayName,
 } from "@/lib/supabase-school-data";
 
 export const dynamic = "force-dynamic";
@@ -17,27 +18,16 @@ export default async function TeacherLayout({
   children: React.ReactNode;
 }) {
   const teacher = await requireTeacher();
-  const name =
-    typeof teacher.user_metadata?.display_name === "string"
-      ? teacher.user_metadata.display_name
-      : "Professeur";
-  const isTestLogin = teacher.app_metadata?.test_login === true;
-
   let schoolData = EMPTY_SUPABASE_SCHOOL_DATA;
   let dataError: string | null = null;
-
-  if (!isTestLogin) {
-    try {
-      schoolData = await loadSupabaseSchoolData({
-        teacherId: teacher.id,
-        teacherName: name,
-      });
-    } catch (error) {
-      console.error("FOCUS school data load failed", error);
-      dataError =
-        "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
-    }
+  try {
+    schoolData = await loadSupabaseSchoolData({ teacherId: teacher.id });
+  } catch (error) {
+    console.error("FOCUS school data load failed", error);
+    dataError =
+      "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
   }
+  const name = schoolData.teacherName ?? teacherDisplayName(teacher);
 
   return (
     <AppShell
@@ -45,7 +35,6 @@ export default async function TeacherLayout({
       teacherId={teacher.id}
       schoolData={schoolData}
       dataError={dataError}
-      dataMode={isTestLogin ? "demo" : "supabase"}
     >
       {children}
     </AppShell>

@@ -6,7 +6,7 @@ import { useSchoolData } from "@/lib/school-data-context";
 import { buildSchoolReport, type ReportTarget } from "@/lib/reports/school-report";
 
 export function ExportPdfButton({ target }: { target: ReportTarget }) {
-  const { dataset, source, loaded, storageError } = useSchoolData();
+  const { dataset, loaded, storageError } = useSchoolData();
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export function ExportPdfButton({ target }: { target: ReportTarget }) {
     setBusy(true);
     setError(null);
     try {
-      const report = buildSchoolReport(dataset, target, source);
+      const report = buildSchoolReport(dataset, target);
       const [{ renderSchoolPdf }, response] = await Promise.all([
         import("@/lib/reports/pdf"), fetch("/fonts/DejaVuSans.ttf"),
       ]);

@@ -22,7 +22,6 @@ export async function renderSchoolPdf(report: SchoolReport, fontBytes: Uint8Arra
   function header() {
     page.drawText("FOCUS / Suivi pédagogique", { x: margin, y: 802, size: 10, font, color: brand });
     page.drawText(`Export du ${date}`, { x: margin, y: 784, size: 8, font, color: muted });
-    if (report.source === "demo") page.drawText("DÉMONSTRATION - DONNÉES FICTIVES", { x: 302, y: 802, size: 8, font, color: muted });
   }
   header();
   function ensure(height: number) {

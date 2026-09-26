@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -17,11 +17,11 @@ import { MasteryBar } from "@/components/ui/mastery-bar";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { dataset, source, loaded, storageError } = useSchoolData();
+  const { dataset, loaded, storageError } = useSchoolData();
   const { name } = useTeacher();
   const [selectedClass, setSelectedClass] = useState("");
   const activeClass = dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
   if (!activeClass) return <p className="text-ink-soft">Aucune classe disponible dans cet espace.</p>;
   const { classInfo, counts, weakestSkills } = analyzeClass(
     activeClass.id,
@@ -95,10 +95,7 @@ export default function DashboardPage() {
               Le fil de votre classe
             </h2>
             <p className="mt-1 text-sm text-ink-soft">
-              {counts.total} élèves · {classEvaluations.length} évaluations{" "}
-              {source === "demo"
-                ? "dans cet espace de démonstration"
-                : "synchronisées avec l’établissement"}
+              {counts.total} élèves · {classEvaluations.length} évaluations
             </p>
           </div>
           <Link

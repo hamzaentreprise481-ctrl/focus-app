@@ -1,6 +1,6 @@
 "use client";
 
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { analyzeClass } from "@/lib/analysis";
@@ -9,7 +9,7 @@ import { useSchoolData } from "@/lib/school-data-context";
 export default function ClassesPage() {
   const { dataset, loaded, storageError } = useSchoolData();
 
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
   return (
     <div className="space-y-6">
       <div>

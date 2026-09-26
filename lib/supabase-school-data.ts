@@ -54,6 +54,16 @@ type CompetencyResultRow = {
 export interface SupabaseSchoolData {
   dataset: EvaluationDataset;
   editableEvaluationIds: string[];
+  /** From the teacher's own profile row; null when it has no name. */
+  teacherName: string | null;
+}
+
+/** Display-only name from Auth metadata, used when the profile has none. */
+export function teacherDisplayName(teacher: {
+  user_metadata?: Record<string, unknown>;
+}) {
+  const value = teacher.user_metadata?.display_name;
+  return typeof value === "string" && value.trim() ? value.trim() : "Professeur";
 }
 
 export const EMPTY_SUPABASE_SCHOOL_DATA: SupabaseSchoolData = {
@@ -65,6 +75,7 @@ export const EMPTY_SUPABASE_SCHOOL_DATA: SupabaseSchoolData = {
     rawGrades: [],
   },
   editableEvaluationIds: [],
+  teacherName: null,
 };
 
 const LEVEL_FROM_DB: Record<CompetencyResultRow["mastery_level"], SkillLevel> = {
@@ -80,10 +91,22 @@ function ensureOk(error: { message: string } | null, label: string) {
 
 export async function loadSupabaseSchoolData(options: {
   teacherId: string;
-  teacherName: string;
 }): Promise<SupabaseSchoolData> {
   const supabase = await createAuthClient();
   if (!supabase) throw new Error("Supabase n’est pas configuré.");
+
+  const profileResponse = await supabase
+    .from("profiles")
+    .select("first_name,last_name")
+    .eq("id", options.teacherId)
+    .maybeSingle();
+  ensureOk(profileResponse.error, "Profil professeur");
+  const profile = profileResponse.data as Omit<ProfileRow, "id"> | null;
+  const teacherName =
+    [profile?.first_name, profile?.last_name]
+      .filter((value): value is string => !!value?.trim())
+      .map((value) => value.trim())
+      .join(" ") || null;
 
   const assignmentsResponse = await supabase
     .from("teacher_assignments")
@@ -92,7 +115,7 @@ export async function loadSupabaseSchoolData(options: {
   ensureOk(assignmentsResponse.error, "Affectations professeur");
   const assignments =
     (assignmentsResponse.data ?? []) as TeacherAssignmentRow[];
-  if (!assignments.length) return EMPTY_SUPABASE_SCHOOL_DATA;
+  if (!assignments.length) return { ...EMPTY_SUPABASE_SCHOOL_DATA, teacherName };
 
   const classIds = [...new Set(assignments.map((row) => row.class_id))];
   const subjectIds = [...new Set(assignments.map((row) => row.subject_id))];
@@ -206,7 +229,7 @@ export async function loadSupabaseSchoolData(options: {
         subject: subjectById.get(assignment.subject_id)?.name ?? "Matière",
         subjectId: assignment.subject_id,
         schoolId: assignment.school_id,
-        teacher: options.teacherName,
+        teacher: teacherName ?? "",
         studentIds: enrollmentByClass.get(row.id) ?? [],
       },
     ];
@@ -269,5 +292,6 @@ export async function loadSupabaseSchoolData(options: {
     editableEvaluationIds: assessmentRows
       .filter((row) => row.teacher_id === options.teacherId)
       .map((row) => row.id),
+    teacherName,
   };
 }

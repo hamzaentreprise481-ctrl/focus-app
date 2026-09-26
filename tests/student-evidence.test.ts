@@ -1,4 +1,4 @@
-import { defaultDataset } from "../lib/demo/dataset";
+import { defaultDataset } from "./fixtures/demo-dataset";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyzeStudent } from "../lib/analysis";

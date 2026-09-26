@@ -3,23 +3,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSchoolData } from "@/lib/school-data-context";
 import { EvaluationEditor } from "@/components/evaluations/evaluation-editor";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 
 export default function EditEvaluation() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, source, loaded, storageError, editableEvaluationIds } = useSchoolData();
-  if (!loaded || storageError) return <DemoDataState />;
+  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
+  if (!loaded || storageError) return <DataLoadState />;
   const evaluation = dataset.evaluations.find((e) => e.id === id);
   if (!evaluation || !editableEvaluationIds.includes(id))
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">
-{source === "demo" ? "Cet essai n’est pas modifiable ici" : "Cette évaluation n’est pas modifiable par ce compte"}
+Cette évaluation n’est pas modifiable par ce compte
         </h1>
         <p>
-          {source === "demo"
-            ? "Vous pouvez compléter les évaluations que vous avez créées sur cet appareil."
-            : "Seules les évaluations dont vous êtes l’auteur peuvent être complétées ou corrigées."}
+          Seules les évaluations dont vous êtes l’auteur peuvent être complétées ou corrigées.
         </p>
         <Link href="/app/evaluations" className="text-brand">
           Retour aux évaluations

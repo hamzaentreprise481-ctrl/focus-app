@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { buildSchoolReport } from "../lib/reports/school-report";
 import { renderSchoolPdf } from "../lib/reports/pdf";
-import { defaultDataset } from "../lib/demo/dataset";
+import { defaultDataset } from "./fixtures/demo-dataset";
 import type { EvaluationDataset } from "../lib/types";
 
 const dataset: EvaluationDataset = {
@@ -19,37 +19,35 @@ const dataset: EvaluationDataset = {
   ],
 };
 test("evaluation PDF content distinguishes zero, absence, competency-only and missing", () => {
-  const report = buildSchoolReport(dataset, { kind: "evaluation", id: "e" }, "demo");
+  const report = buildSchoolReport(dataset, { kind: "evaluation", id: "e" });
   const text = report.sections.flatMap((s) => s.paragraphs).join("\n");
   assert.match(text, /zero · 0 \/ 20/);
   assert.match(text, /absent · Absent\(e\)/);
   assert.match(text, /skills · Compétences uniquement\nRésoudre : Fragile/);
   assert.match(text, /missing · Non renseigné/);
-  assert.equal(report.source, "demo");
 });
 
 test("student report excludes other students and reflects corrected observations", () => {
   const updated = structuredClone(dataset);
   updated.rawGrades[0].score = 14;
-  const report = buildSchoolReport(updated, { kind: "student", id: "zero" }, "supabase");
+  const report = buildSchoolReport(updated, { kind: "student", id: "zero" });
   const text = report.sections.flatMap((s) => s.paragraphs).join("\n");
   assert.match(text, /14 \/ 20/);
   assert.doesNotMatch(text, /Compétences uniquement|Absent\(e\)/);
-  assert.equal(report.source, "supabase");
-  assert.throws(() => buildSchoolReport(dataset, { kind: "student", id: "foreign" }, "demo"));
+  assert.throws(() => buildSchoolReport(dataset, { kind: "student", id: "foreign" }));
 });
 
 test("class reports include only their class and preserve unknown averages", () => {
   const data = structuredClone(dataset);
   data.students.push({ id: "outside", name: "Do not export", classId: "other" });
   data.evaluations.push({ ...data.evaluations[0], id: "other", classId: "other", name: "Private other class" });
-  const text = JSON.stringify(buildSchoolReport(data, { kind: "class", id: "c" }, "demo"));
+  const text = JSON.stringify(buildSchoolReport(data, { kind: "class", id: "c" }));
   assert.doesNotMatch(text, /Do not export|Private other class/);
   assert.match(text, /missing · Aucune note/);
 });
 
 test("PDF output is readable, multipage, A4 and carries French document metadata", async () => {
-  const report = buildSchoolReport(defaultDataset, { kind: "class", id: "seconde-3" }, "demo");
+  const report = buildSchoolReport(defaultDataset, { kind: "class", id: "seconde-3" });
   report.title += " · Éléonore Cœur";
   const bytes = await renderSchoolPdf(report, readFileSync("public/fonts/DejaVuSans.ttf"), new Date("2026-09-25T10:00:00Z"));
   const doc = await PDFDocument.load(bytes);

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
 import { Button } from "@/components/ui/button";
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
@@ -14,20 +14,18 @@ import { AssessmentPedagogyEditor } from "@/components/evaluations/assessment-pe
 
 export default function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, source, loaded, storageError, editableEvaluationIds } = useSchoolData();
+  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
 
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
 
   if (!dataset.evaluations.some((e) => e.id === id)) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">
-{source === "demo" ? "Évaluation introuvable sur cet appareil" : "Évaluation introuvable dans votre espace"}
+          Évaluation introuvable dans votre espace
         </h1>
         <p className="text-ink-soft">
-          {source === "demo"
-            ? "Les essais sont conservés dans le navigateur utilisé pour les créer. Vérifiez le compte professeur et l’appareil."
-            : "Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès."}
+          Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès.
         </p>
         <Link className="text-brand" href="/app/evaluations">
           Retour aux évaluations

@@ -1,4 +1,4 @@
-import type { Evaluation, RawGrade, SkillLevel } from "@/lib/types";
+import type { RawGrade, SkillLevel } from "@/lib/types";
 
 export const SKILL_LEVELS: SkillLevel[] = [
   "maitrise",
@@ -63,25 +63,4 @@ export function gradeFromRow(
     absent: false,
     skillLevels,
   };
-}
-
-/** Validation also runs when restoring untrusted browser storage. */
-export function validEvaluation(value: unknown): value is Evaluation {
-  if (!value || typeof value !== "object") return false;
-  const e = value as Evaluation;
-  return (
-    typeof e.id === "string" &&
-    e.id.startsWith("demo-") &&
-    e.id.length <= 100 &&
-    typeof e.name === "string" &&
-    e.name.trim().length > 0 &&
-    e.name.length <= 200 &&
-    typeof e.classId === "string" &&
-    typeof e.date === "string" &&
-    validDate(e.date) &&
-    typeof e.important === "boolean" &&
-    Array.isArray(e.skillIds) &&
-    e.skillIds.every((id) => typeof id === "string") &&
-    new Set(e.skillIds).size === e.skillIds.length
-  );
 }

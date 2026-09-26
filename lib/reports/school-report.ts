@@ -7,18 +7,17 @@ export type ReportTarget = { kind: "class" | "student" | "evaluation"; id: strin
 export interface SchoolReport {
   title: string;
   subtitle: string;
-  source: "demo" | "supabase";
   sections: { title: string; paragraphs: string[] }[];
 }
 const score = (value: number | null) => value === null ? "Aucune note" : `${formatScore(value)} / 20`;
 
 /** Export only the requested resource, using the same snapshot as the screen. */
-export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarget, source: SchoolReport["source"]): SchoolReport {
+export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarget): SchoolReport {
   if (target.kind === "class") {
     const { classInfo, studentAnalyses, weakestSkills } = analyzeClass(target.id, dataset);
     return {
       title: `Suivi de classe - ${classInfo.name}`,
-      subtitle: `${classInfo.subject} · ${studentAnalyses.length} élèves`, source,
+      subtitle: `${classInfo.subject} · ${studentAnalyses.length} élèves`,
       sections: [
         { title: "Situation des élèves", paragraphs: studentAnalyses.map((a) => `${a.name} · ${score(a.average)}\n${a.summary}`) },
         { title: "Compétences à explorer", paragraphs: weakestSkills.length ? weakestSkills.map((s) => `${s.name} : indice ${s.percent}/100 · ${s.sampleSize} élèves documentés. Cet indice n'est pas un taux de réussite.`) : ["Aucune compétence documentée."] },
@@ -30,7 +29,7 @@ export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarg
     const a = analyzeStudent(target.id, dataset);
     const c = dataset.classes.find((item) => item.id === a.classId);
     return {
-      title: `Dossier élève - ${a.name}`, subtitle: `${c?.name ?? ""} · ${c?.subject ?? ""}`, source,
+      title: `Dossier élève - ${a.name}`, subtitle: `${c?.name ?? ""} · ${c?.subject ?? ""}`,
       sections: [
         { title: "Synthèse pédagogique", paragraphs: [a.summary, a.narrative, `Moyenne des notes renseignées : ${score(a.average)}`] },
         { title: "Compétences observées", paragraphs: a.skillMasteries.map((s) => `${s.name} : ${s.testedCount ? SKILL_LEVEL_LABEL[s.lastTwoLevels.at(-1)!] : "Non renseigné"} · ${s.testedCount} observation(s) · ${CONFIDENCE_LABEL[s.confidence]}`) },
@@ -46,7 +45,7 @@ export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarg
   const a = analyzeEvaluation(target.id, dataset);
   const c = dataset.classes.find((item) => item.id === a.evaluation.classId);
   return {
-    title: a.evaluation.name, subtitle: `${c?.name ?? ""} · ${formatDate(a.evaluation.date)}`, source,
+    title: a.evaluation.name, subtitle: `${c?.name ?? ""} · ${formatDate(a.evaluation.date)}`,
     sections: [
       { title: "Résultats de l'évaluation", paragraphs: [`Moyenne : ${score(a.average)} · ${a.recordedCount} élèves renseignés · ${a.unrecordedCount} non renseignés.`] },
       { title: "Observations par élève", paragraphs: dataset.students.filter((s) => s.classId === a.evaluation.classId).map((s) => {

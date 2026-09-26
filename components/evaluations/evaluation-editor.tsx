@@ -34,7 +34,7 @@ export function EvaluationEditor({
   initialGrades?: RawGrade[];
   initialClassId?: string;
 }) {
-  const { dataset, source, saveEvaluation, loaded, storageError } = useSchoolData();
+  const { dataset, saveEvaluation, loaded, storageError } = useSchoolData();
 
   const { classes, skills } = dataset;
   const [selectedClassId, setSelectedClassId] = useState(initialEvaluation?.classId ?? initialClassId ?? "");
@@ -152,7 +152,7 @@ export function EvaluationEditor({
     setSaving(true);
     setSaveError(null);
     try {
-    if (!evaluationId.current) evaluationId.current = source === "demo" ? `demo-${crypto.randomUUID()}` : crypto.randomUUID();
+    if (!evaluationId.current) evaluationId.current = crypto.randomUUID();
     const evaluation: Evaluation = {
       id: evaluationId.current,
       name: name.trim(),
@@ -203,9 +203,9 @@ export function EvaluationEditor({
               : "Évaluation enregistrée"}
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
-            « {savedEvaluation.name} » est enregistrée {source === "demo" ? "sur cet appareil" : "dans votre espace professeur"}.
+            « {savedEvaluation.name} » est enregistrée dans votre espace professeur.
             Les statistiques et les fiches élèves concernées sont à jour.
-            {source === "demo" && " Cet essai reste local et n’est pas synchronisé avec d’autres appareils."}
+            
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
@@ -244,7 +244,7 @@ export function EvaluationEditor({
             : "Nouvelle évaluation"}
         </h1>
         <p className="mt-1 text-sm text-ink-soft">
-          {source === "demo" ? "Utilisez uniquement des données fictives. Vos essais restent sur cet appareil ; ils ne sont pas synchronisés." : "Les notes et les compétences sont enregistrées dans votre espace professeur."}
+          Les notes et les compétences sont enregistrées dans votre espace professeur.
         </p>
       </div>
 

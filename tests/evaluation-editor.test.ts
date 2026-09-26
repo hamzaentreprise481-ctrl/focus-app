@@ -19,7 +19,7 @@ const dataset: EvaluationDataset = {
 const evaluation: Evaluation = { id: "demo-test", name: "Test", date: "2026-09-25", classId: "b", skillIds: [], important: false };
 function mount(saveEvaluation: SchoolData["saveEvaluation"], edit = false) {
   return render(createElement(SchoolDataProvider, { value: {
-    dataset, source: "demo", loaded: true, storageError: null, retryStorage: () => {}, editableEvaluationIds: [evaluation.id], saveEvaluation,
+    dataset, loaded: true, storageError: null, retryStorage: () => {}, editableEvaluationIds: [evaluation.id], saveEvaluation,
   } }, createElement(EvaluationEditor, edit ? { initialEvaluation: evaluation, initialGrades: [{ studentId: "b", evaluationId: evaluation.id, score: 12, absent: false }] } : { initialClassId: "b" })));
 }
 function fill() {

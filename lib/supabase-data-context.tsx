@@ -33,7 +33,6 @@ export function SupabaseDataProvider({
   const value = useMemo(
     () => ({
       dataset: initialData.dataset,
-      source: "supabase" as const,
       loaded: true,
       storageError: initialError,
       retryStorage,

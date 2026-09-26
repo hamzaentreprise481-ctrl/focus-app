@@ -1,6 +1,6 @@
 "use client";
 
-import { DemoDataState } from "@/components/evaluations/demo-data-state";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import Link from "next/link";
 import { ChevronRight, Plus, Users, Sparkles } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
@@ -14,7 +14,7 @@ export default function EvaluationsPage() {
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
 
-  if (!loaded || storageError) return <DemoDataState />;
+  if (!loaded || storageError) return <DataLoadState />;
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">

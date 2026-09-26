@@ -1,6 +1,6 @@
 import type { RawGrade, SkillLevel } from "@/lib/types";
-import { evaluationsChronological } from "@/lib/data/evaluations";
-import { skills } from "@/lib/data/skills";
+import { evaluationsChronological } from "./evaluations";
+import { skills } from "./skills";
 
 // -----------------------------------------------------------------------------
 // Données mockées : note globale ET maîtrise par compétence.

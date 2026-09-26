@@ -1,4 +1,4 @@
-import { defaultDataset } from "../lib/demo/dataset";
+import { defaultDataset } from "./fixtures/demo-dataset";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -11,11 +11,6 @@ import {
   parseScoreInput,
   validDate,
 } from "../lib/evaluation-entry";
-import {
-  loadOverlay,
-  persistOverlay,
-  validateOverlay,
-} from "../lib/demo-store";
 import { formatDate } from "../lib/utils";
 import type { EvaluationDataset, Evaluation } from "../lib/types";
 
@@ -35,10 +30,7 @@ test("competency-only entry survives saving and contributes to both profile and 
     { scoreInput: "", absent: false, levels: { equations: "fragile" } },
     evaluation.skillIds,
   )!;
-  const data = validateOverlay({
-    evaluations: [evaluation],
-    rawGrades: [grade],
-  });
+  const data = { evaluations: [evaluation], rawGrades: [grade] };
   assert.equal(grade.score, null);
   assert.equal(grade.absent, false);
   assert.equal(
@@ -151,69 +143,6 @@ test("evolution labels count evaluations rather than intervals", () => {
     });
   }
   assert.equal(analyzeStudent(studentId, { ...defaultDataset, ...data }).evolutionWindow, 3);
-});
-test("corrupt persisted shapes, foreign students and duplicate grades are rejected", () => {
-  for (const value of [
-    null,
-    {},
-    { evaluations: [null], rawGrades: [] },
-    { evaluations: [evaluation, evaluation], rawGrades: [] },
-    {
-      evaluations: [evaluation],
-      rawGrades: [
-        {
-          studentId: "foreign",
-          evaluationId: evaluation.id,
-          score: 12,
-          absent: false,
-        },
-      ],
-    },
-  ])
-    assert.throws(() => validateOverlay(value));
-  const g = {
-    studentId,
-    evaluationId: evaluation.id,
-    score: 12,
-    absent: false,
-  };
-  assert.throws(() =>
-    validateOverlay({ evaluations: [evaluation], rawGrades: [g, g] }),
-  );
-});
-test("storage failures are visible and corrupt data is never erased during reads", () => {
-  const records = new Map<string, string>();
-  let unavailable = false;
-  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {
-      localStorage: {
-        getItem: (key: string) => records.get(key) ?? null,
-        setItem: (key: string, value: string) => {
-          if (unavailable) throw new Error("QuotaExceededError");
-          records.set(key, value);
-        },
-      },
-    },
-  });
-  try {
-    persistOverlay({ evaluations: [evaluation], rawGrades: [] }, "teacher-a");
-    assert.equal(loadOverlay("teacher-a").evaluations.length, 1);
-    assert.equal(loadOverlay("teacher-b").evaluations.length, 0);
-    unavailable = true;
-    assert.throws(
-      () => persistOverlay({ evaluations: [], rawGrades: [] }, "teacher-a"),
-      /Enregistrement impossible/,
-    );
-    assert.equal(loadOverlay("teacher-a").evaluations.length, 1);
-    records.set("focus-demo-overlay-v2:teacher-a", "{corrupt");
-    assert.throws(() => loadOverlay("teacher-a"), /conservés/);
-    assert.equal(records.get("focus-demo-overlay-v2:teacher-a"), "{corrupt");
-  } finally {
-    if (previous) Object.defineProperty(globalThis, "window", previous);
-    else Reflect.deleteProperty(globalThis, "window");
-  }
 });
 test("school dates do not move to the previous day in another timezone", () => {
   const old = process.env.TZ;
