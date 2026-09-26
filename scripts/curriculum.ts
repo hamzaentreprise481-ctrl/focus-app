@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { loadCurriculumPackage } from "../lib/curriculum/fs";
+import { loadCurriculumInput, loadCurriculumPackage } from "../lib/curriculum/fs";
 import {
   CurriculumParseError,
   parseJsonCurriculumPackage,
@@ -102,10 +102,32 @@ function validateWithContext(args: Args): CurriculumValidationResult {
     externalNodes.push(...result.package.nodes);
     externalEdges.push(...result.package.edges);
   }
-  return validateCurriculumPackage(loadCurriculumPackage(args.target), {
-    externalNodes,
-    externalEdges,
-  });
+  const input = loadCurriculumInput(args.target);
+  const result = validateCurriculumPackage(input.raw, { externalNodes, externalEdges });
+  if (!input.work) return result;
+
+  // Rich Work document: report what is converted and what the schema cannot
+  // hold yet, and merge the adapter's own consistency findings.
+  const { program, counts, notImported, issues } = input.work;
+  log(
+    `Document Work « ${program.title} » (${program.id}, ${program.status}, version ${program.dataVersion}) : ${counts.nodes} nœuds dont ${counts.legacyNodes} existants et ${counts.newNodes} nouveaux, ${counts.edges} relations.`,
+  );
+  log(
+    `  Non importé (pas de table correspondante) : ${notImported.domains} domaines, ${notImported.chapters} chapitres, ${notImported.objectives} objectifs, ${notImported.errors} erreurs types, ${notImported.remediations} remédiations, ${notImported.coverageRows} lignes de couverture, provenance des relations.`,
+  );
+  log(
+    `  Validations enseignant : ${notImported.teacherValidatedNodes}/${counts.nodes} nœuds, ${notImported.teacherValidatedEdges}/${counts.edges} relations.`,
+  );
+  const errors = [...issues.filter((item) => item.severity === "error"), ...result.errors];
+  const warnings = [...issues.filter((item) => item.severity === "warning"), ...result.warnings];
+  return {
+    ...result,
+    ok: result.ok && errors.length === result.errors.length,
+    errors,
+    warnings,
+    package: errors.length ? null : result.package,
+    hash: errors.length ? null : result.hash,
+  };
 }
 
 function report(result: CurriculumValidationResult, json: boolean) {

@@ -9,12 +9,49 @@ import {
   parseJsonCurriculumPackage,
 } from "./package";
 import type { RawCurriculumPackage } from "./types";
+import {
+  convertWorkCurriculum,
+  isWorkCurriculumDocument,
+  type WorkConversion,
+} from "./work-format";
 
 /**
  * Loads either a JSON package file or a CSV package directory containing
  * source.json, nodes.csv and optionally edges.csv.
  */
 export function loadCurriculumPackage(target: string): RawCurriculumPackage {
+  return loadCurriculumInput(target).raw;
+}
+
+/**
+ * Same as loadCurriculumPackage, but also accepts a rich "Work" curriculum
+ * document (schema_version 1.x) and returns its conversion report.
+ */
+export function loadCurriculumInput(target: string): {
+  raw: RawCurriculumPackage;
+  work: WorkConversion | null;
+} {
+  if (
+    existsSync(target) &&
+    !statSync(target).isDirectory() &&
+    target.toLowerCase().endsWith(".json")
+  ) {
+    const text = readFileSync(target, "utf8");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+    } catch {
+      parsed = null; // reported precisely by parseJsonCurriculumPackage below
+    }
+    if (isWorkCurriculumDocument(parsed)) {
+      const work = convertWorkCurriculum(parsed, target);
+      return { raw: work.raw, work };
+    }
+  }
+  return { raw: loadPackageFile(target), work: null };
+}
+
+function loadPackageFile(target: string): RawCurriculumPackage {
   if (!existsSync(target))
     throw new CurriculumParseError("Chemin introuvable.", target);
 

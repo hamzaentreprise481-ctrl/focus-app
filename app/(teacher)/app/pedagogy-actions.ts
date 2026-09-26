@@ -10,15 +10,13 @@ import {
   toAiCurriculum,
   type CurriculumIndex,
 } from "@/lib/curriculum/graph";
-import {
-  confidenceForEvidence,
-  validateModelAnalysis,
-} from "@/lib/pedagogy/analysis";
+import { validateModelAnalysis } from "@/lib/pedagogy/analysis";
 import {
   analyzePedagogicalEvidence,
   pedagogicalAiConfigured,
   pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
+import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
 import type {
   AssessmentEvidenceDraft,
@@ -944,64 +942,17 @@ export async function generatePedagogicalAnalysis(
     }
   }
 
-  const occurrencesByNode = new Map<string, number>();
-  for (const error of validated)
-    occurrencesByNode.set(
-      error.nodeId,
-      (occurrencesByNode.get(error.nodeId) ?? 0) + 1,
-    );
-
-  const confidenceByNode = new Map<string, PedagogicalConfidence>();
-  for (const nodeId of nodeIds) {
-    const priors = priorErrors.filter(
-      (row) => row.curriculum_node_id === nodeId,
-    );
-    confidenceByNode.set(
-      nodeId,
-      confidenceForEvidence({
-        currentOccurrences: occurrencesByNode.get(nodeId) ?? 0,
-        priorAssessmentCount: new Set(priors.map((row) => row.assessment_id))
-          .size,
-        teacherVerifiedBefore: priors.some((row) => row.verified_by_teacher),
-      }),
-    );
-  }
-
-  const responseByQuestion = new Map(
-    responses.map((response) => [response.question_id, response]),
-  );
-  const persistedErrors = validated.map((error) => ({
-    questionId: error.questionId,
-    responseId: (() => {
-      const response = responseByQuestion.get(error.questionId);
-      if (!response)
-        throw new Error("Validated error has no persisted student response.");
-      return response.id;
-    })(),
-    nodeId: error.nodeId,
-    errorType: error.errorType,
-    evidenceExcerpt: error.evidenceExcerpt,
-    explanation: error.explanation,
-    confidence: confidenceByNode.get(error.nodeId) ?? "limitee",
-  }));
-
-  const grouped = new Map<string, typeof validated>();
-  for (const error of validated) {
-    const list = grouped.get(error.nodeId) ?? [];
-    list.push(error);
-    grouped.set(error.nodeId, list);
-  }
-  const recommendations = [...grouped.entries()].map(([nodeId, errors]) => ({
-    nodeId,
-    difficulty: errors[0].difficulty,
-    evidence: errors.map((error) => ({
-      questionId: error.questionId,
-      excerpt: error.evidenceExcerpt,
+  const { errors: persistedErrors, recommendations } = buildAnalysisPersistence({
+    validated,
+    responseIdByQuestion: new Map(
+      responses.map((response) => [response.question_id, response.id]),
+    ),
+    priorErrors: priorErrors.map((row) => ({
+      nodeId: row.curriculum_node_id,
+      assessmentId: row.assessment_id,
+      verifiedByTeacher: row.verified_by_teacher,
     })),
-    confidence: confidenceByNode.get(nodeId) ?? "limitee",
-    explanation: errors[0].explanation,
-    recommendedAction: errors[0].recommendedAction,
-  }));
+  });
 
   const persistResponse = await supabase.rpc(
     "focus_persist_pedagogical_analysis",

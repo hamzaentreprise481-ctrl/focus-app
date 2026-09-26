@@ -96,6 +96,30 @@ A package may reference nodes of another source (for example a Première notion
 whose prerequisite is a Seconde notion). Validate it with the other package as
 context: `--with path/to/seconde`.
 
+## Work documents (rich format)
+
+`curriculum/work/FOCUS_Maths_Seconde_2026-2027.json` is the full Maths Seconde
+document produced by Work (`schema_version` 1.0.0, status
+`draft_for_teacher_review`). The CLI recognizes this format and converts only
+its graph — 99 nodes and 348 relationships, codes, types and relations
+unchanged — to a package; everything else (domains, chapters, 272 objectives,
+99 typical errors, 99 remediations, coverage rows, relationship provenance) has
+no table yet and is reported as not imported.
+
+```bash
+npm run curriculum -- validate curriculum/work/FOCUS_Maths_Seconde_2026-2027.json
+```
+
+Current result: the 99 nodes are valid (all 44 existing codes kept with their
+type), but 16 relationships block the import — 6 `supports` links between two
+competencies, and 10 node pairs that carry two relationships: 7 where an
+existing `supports` was kept next to a new `prerequisite_of` on the same pair,
+and 3 where a node is `part_of` a parent that is also declared its
+prerequisite (`FONC.TABLEAU_SIGNES`/`FONC.SIGNES`, and
+`STAT.POURCENTAGE_POURCENTAGE`, `STAT.EVOLUTIONS` under `STAT.PROPORTIONS`).
+They need an author decision; the importer never picks one.
+`tests/curriculum-work.test.ts` pins these facts to the file's SHA-256.
+
 ## Commands
 
 ```bash
