@@ -85,6 +85,10 @@ Existing evaluation entry, charts, class roster, student profile and cautious re
 
 The demonstration CTA uses an optional verified HTTPS `FOCUS_DEMO_REQUEST_URL`. Without it, explain that requests are not open and link to the public preview. Never invent an email address, collect leads without a configured recipient, or claim a request was sent when it was not.
 
+## Curriculum knowledge base
+
+The official curriculum graph is changed only through packages in `curriculum/` and `npm run curriculum` (validate → generated migration or dry-run-first import). `public.focus_import_curriculum` is service_role only, idempotent, never deletes nodes (it deactivates them) and refuses mass deactivation, node takeover across sources, retyping referenced nodes, duplicate or conflicting relationships and cycles. Store short FOCUS-written labels and source locators only — never programme or textbook text. The pedagogical AI reads the graph through `public.focus_curriculum_graph`, scoped to the class level; only in-scope notions can carry a recommendation. See curriculum/README.md.
+
 ## Changes requiring explicit approval
 
 Do not, without explicit approval:

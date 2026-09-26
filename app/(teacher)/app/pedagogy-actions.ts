@@ -4,6 +4,13 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
 import {
+  buildCurriculumIndex,
+  parseCurriculumGraphPayload,
+  resolveCurriculumScope,
+  toAiCurriculum,
+  type CurriculumIndex,
+} from "@/lib/curriculum/graph";
+import {
   confidenceForEvidence,
   validateModelAnalysis,
 } from "@/lib/pedagogy/analysis";
@@ -15,7 +22,6 @@ import {
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
 import type {
   AssessmentEvidenceDraft,
-  CurriculumNodeSummary,
   PedagogicalConfidence,
   PedagogicalRecommendationView,
   PedagogicalSnapshot,
@@ -62,23 +68,12 @@ type ResponseRow = {
   awarded_points: number | string | null;
   teacher_annotation: string | null;
 };
-type CurriculumNodeRow = {
+type CurriculumNodeRefRow = {
   id: string;
-  source_id: string;
   code: string;
-  node_type: "domain" | "notion" | "competency" | "prerequisite";
   title: string;
-  description: string | null;
   source_locator: string;
-};
-type CurriculumEdgeRow = {
-  from_node_id: string;
-  to_node_id: string;
-  relation: "prerequisite_of" | "supports" | "part_of";
-};
-type CurriculumSourceRow = {
-  id: string;
-  source_url: string;
+  source: { source_url: string } | null;
 };
 type RecommendationRow = {
   id: string;
@@ -102,6 +97,9 @@ type AnalysisRunRow = {
   failure_reason: string | null;
   created_at: string;
 };
+
+// The pedagogical AI V1 is limited to mathematics (see teacherMathContext).
+const CURRICULUM_SUBJECT_CODE = "MATH";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -146,6 +144,15 @@ async function teacherMathContext(
   if (!enrollment)
     throw new Error("Cet élève n’appartient pas à une de vos classes.");
 
+  const classResponse = await supabase
+    .from("classes")
+    .select("level")
+    .eq("id", enrollment.class_id)
+    .maybeSingle();
+  ensureOk(classResponse.error, "Classe");
+  const classLevel =
+    (classResponse.data as { level: string | null } | null)?.level ?? null;
+
   const relevantAssignments = assignments.filter(
     (row) => row.class_id === enrollment.class_id,
   );
@@ -174,6 +181,7 @@ async function teacherMathContext(
   return {
     schoolId: enrollment.school_id,
     classId: enrollment.class_id,
+    classLevel,
     mathSubject,
     assessments,
   };
@@ -389,52 +397,77 @@ export async function reviewPedagogicalRecommendation(
   return { ok: true };
 }
 
-async function curriculumGraph(supabase: SupabaseClient) {
-  const [nodesResponse, edgesResponse, sourcesResponse] = await Promise.all([
-    supabase
-      .from("curriculum_nodes")
-      .select("id,source_id,code,node_type,title,description,source_locator")
-      .like("code", "MATH.%")
-      .eq("active", true),
-    supabase
-      .from("curriculum_edges")
-      .select("from_node_id,to_node_id,relation"),
-    supabase.from("curriculum_sources").select("id,source_url"),
-  ]);
-  ensureOk(nodesResponse.error, "Programme officiel");
-  ensureOk(edgesResponse.error, "Graphe du programme");
+// Reads the official graph for the class level through one RPC returning a
+// single JSON value: no PostgREST row cap, deterministic order, only active
+// nodes of the class's programme plus prior-level prerequisites as context.
+async function curriculumGraph(
+  supabase: SupabaseClient,
+  classLevel: string | null,
+): Promise<CurriculumIndex> {
+  const sourcesResponse = await supabase
+    .from("curriculum_sources")
+    .select("level_code")
+    .eq("subject_code", CURRICULUM_SUBJECT_CODE);
   ensureOk(sourcesResponse.error, "Sources du programme");
+  const scope = resolveCurriculumScope(
+    classLevel,
+    ((sourcesResponse.data ?? []) as Array<{ level_code: string }>).map(
+      (row) => row.level_code,
+    ),
+  );
+  if (scope.resolution === "subject_fallback")
+    console.warn(
+      "FOCUS curriculum scope: class level not matched to an imported programme; using every level of the subject.",
+    );
 
-  const nodes = (nodesResponse.data ?? []) as CurriculumNodeRow[];
-  const edges = (edgesResponse.data ?? []) as CurriculumEdgeRow[];
-  const sources = (sourcesResponse.data ?? []) as CurriculumSourceRow[];
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const graphResponse = await supabase.rpc("focus_curriculum_graph", {
+    p_subject_code: CURRICULUM_SUBJECT_CODE,
+    p_level_codes: scope.levelCodes,
+  });
+  ensureOk(graphResponse.error, "Graphe du programme");
+  return buildCurriculumIndex(parseCurriculumGraphPayload(graphResponse.data));
+}
 
-  const summaries: CurriculumNodeSummary[] = nodes.map((node) => ({
-    id: node.id,
-    code: node.code,
-    nodeType: node.node_type,
-    title: node.title,
-    description: node.description,
-    sourceLocator: node.source_locator,
-    sourceUrl: sourceById.get(node.source_id)?.source_url ?? "",
-    prerequisites: edges
-      .filter(
-        (edge) =>
-          edge.to_node_id === node.id && edge.relation === "prerequisite_of",
-      )
-      .map((edge) => nodeById.get(edge.from_node_id)?.code)
-      .filter((value): value is string => Boolean(value)),
-    competencies: edges
-      .filter(
-        (edge) => edge.from_node_id === node.id && edge.relation === "supports",
-      )
-      .map((edge) => nodeById.get(edge.to_node_id)?.code)
-      .filter((value): value is string => Boolean(value)),
-  }));
-
-  return { summaries, nodes, edges, sourceById, nodeById };
+// Recommendations must stay readable even if an import later deactivated or
+// re-scoped their node: resolve those references directly by id.
+async function recommendationNodes(
+  supabase: SupabaseClient,
+  graph: CurriculumIndex,
+  nodeIds: string[],
+) {
+  const resolved = new Map<
+    string,
+    { code: string; title: string; sourceLocator: string; sourceUrl: string }
+  >();
+  const missing: string[] = [];
+  for (const id of new Set(nodeIds)) {
+    const node = graph.nodeById.get(id);
+    if (!node) {
+      missing.push(id);
+      continue;
+    }
+    resolved.set(id, {
+      code: node.code,
+      title: node.title,
+      sourceLocator: node.sourceLocator,
+      sourceUrl: graph.summaryByCode.get(node.code)?.sourceUrl ?? "",
+    });
+  }
+  if (missing.length) {
+    const response = await supabase
+      .from("curriculum_nodes")
+      .select("id,code,title,source_locator,source:curriculum_sources(source_url)")
+      .in("id", missing);
+    ensureOk(response.error, "Notions des recommandations");
+    for (const row of (response.data ?? []) as unknown as CurriculumNodeRefRow[])
+      resolved.set(row.id, {
+        code: row.code,
+        title: row.title,
+        sourceLocator: row.source_locator,
+        sourceUrl: row.source?.source_url ?? "",
+      });
+  }
+  return resolved;
 }
 
 export async function loadPedagogicalSnapshot(
@@ -492,7 +525,16 @@ export async function loadPedagogicalSnapshot(
   ensureOk(recommendationsResponse.error, "Recommandations pédagogiques");
   const recRows = (recommendationsResponse.data ?? []) as RecommendationRow[];
 
-  const graph = await curriculumGraph(supabase);
+  const graph = await curriculumGraph(supabase, context.classLevel);
+  const nodesForRecommendations = await recommendationNodes(
+    supabase,
+    graph,
+    recRows.map((row) => row.curriculum_node_id),
+  );
+  const titlesFor = (codes: string[] | undefined) =>
+    (codes ?? [])
+      .map((code) => graph.nodeByCode.get(code)?.title)
+      .filter((value): value is string => Boolean(value));
   const assessmentById = new Map(
     context.assessments.map((assessment) => [assessment.id, assessment]),
   );
@@ -500,10 +542,10 @@ export async function loadPedagogicalSnapshot(
 
   const recommendations: PedagogicalRecommendationView[] = recRows.flatMap(
     (row) => {
-      const node = graph.nodeById.get(row.curriculum_node_id);
+      const node = nodesForRecommendations.get(row.curriculum_node_id);
       const assessment = assessmentById.get(row.assessment_id);
       if (!node || !assessment) return [];
-      const summary = graph.summaries.find((item) => item.id === node.id);
+      const summary = graph.summaryByCode.get(node.code);
       const evidenceRaw = Array.isArray(row.evidence) ? row.evidence : [];
       const evidence = evidenceRaw.flatMap((item) => {
         if (!item || typeof item !== "object") return [];
@@ -533,16 +575,10 @@ export async function loadPedagogicalSnapshot(
           confidence: row.confidence,
           explanation: row.explanation,
           recommendedAction: row.recommended_action,
-          sourceLocator: node.source_locator,
-          sourceUrl: summary?.sourceUrl ?? "",
-          prerequisites:
-            summary?.prerequisites
-              .map((code) => graph.nodes.find((n) => n.code === code)?.title)
-              .filter((value): value is string => Boolean(value)) ?? [],
-          competencies:
-            summary?.competencies
-              .map((code) => graph.nodes.find((n) => n.code === code)?.title)
-              .filter((value): value is string => Boolean(value)) ?? [],
+          sourceLocator: node.sourceLocator,
+          sourceUrl: node.sourceUrl,
+          prerequisites: titlesFor(summary?.prerequisites),
+          competencies: titlesFor(summary?.competencies),
           teacherValidated: row.teacher_validated,
           createdAt: row.created_at,
         },
@@ -635,7 +671,8 @@ export async function generatePedagogicalAnalysis(
     responses.map((response) => [response.question_id, response]),
   );
 
-  const graph = await curriculumGraph(supabase);
+  const graph = await curriculumGraph(supabase, context.classLevel);
+  const aiCurriculum = toAiCurriculum(graph.summaries);
   const model = pedagogicalAiModel();
 
   type Prepared = {
@@ -659,7 +696,7 @@ export async function generatePedagogicalAnalysis(
         awardedPoints: number | null;
         teacherAnnotation: string | null;
       }>;
-      curriculum: CurriculumNodeSummary[];
+      curriculum: ReturnType<typeof toAiCurriculum>;
     };
     inputHash: string;
     existing: {
@@ -703,7 +740,7 @@ export async function generatePedagogicalAnalysis(
           teacherAnnotation: response?.teacher_annotation ?? null,
         };
       }),
-      curriculum: graph.summaries,
+      curriculum: aiCurriculum,
     };
 
     const inputHash = createHash("sha256")
@@ -834,11 +871,9 @@ export async function generatePedagogicalAnalysis(
     };
   }
 
-  const nodesByCode = new Map(
-    graph.nodes
-      .filter((node) => node.node_type === "notion")
-      .map((node) => [node.code, node.id]),
-  );
+  // Only notions of the class's programme may carry a recommendation;
+  // prior-level prerequisites are context for the model, not targets.
+  const nodesByCode = graph.mappableNotionIdsByCode;
   const validationQuestions = assessmentQuestions.map((question) => ({
     assessmentId: assessment.id,
     questionId: question.id,

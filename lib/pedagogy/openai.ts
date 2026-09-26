@@ -1,9 +1,7 @@
 import "server-only";
 
-import type {
-  CurriculumNodeSummary,
-  ModelPedagogicalAnalysis,
-} from "@/lib/pedagogy/types";
+import type { AiCurriculumNode } from "@/lib/curriculum/graph";
+import type { ModelPedagogicalAnalysis } from "@/lib/pedagogy/types";
 import { requestPedagogicalAnalysis } from "@/lib/pedagogy/openai-client";
 
 interface AnalyzeQuestionInput {
@@ -26,7 +24,7 @@ export interface PedagogicalAiInput {
     instructionsText: string | null;
   };
   questions: AnalyzeQuestionInput[];
-  curriculum: CurriculumNodeSummary[];
+  curriculum: AiCurriculumNode[];
 }
 
 export function pedagogicalAiModel() {

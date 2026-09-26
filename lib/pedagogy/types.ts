@@ -8,8 +8,16 @@ export interface CurriculumNodeSummary {
   description: string | null;
   sourceLocator: string;
   sourceUrl: string;
+  /** false for prior-level prerequisites supplied only as context. */
+  inScope: boolean;
+  /** part_of targets (broader notions or domains). */
+  parents: string[];
+  /** Nodes that are prerequisite_of this node. */
   prerequisites: string[];
+  /** Competency nodes this node supports. */
   competencies: string[];
+  /** Notion nodes this node supports (weaker than a prerequisite). */
+  supports: string[];
 }
 
 export interface PedagogicalRecommendationView {
