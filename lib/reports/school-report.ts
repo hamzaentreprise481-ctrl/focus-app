@@ -1,5 +1,6 @@
 import { analyzeClass, analyzeEvaluation, analyzeStudent, CONFIDENCE_LABEL, SKILL_LEVEL_LABEL } from "@/lib/analysis";
 import { studentEvidence } from "@/lib/student-evidence";
+import type { PedagogicalConfidence, PedagogicalSnapshot } from "@/lib/pedagogy/types";
 import type { EvaluationDataset } from "@/lib/types";
 import { formatDate, formatScore } from "@/lib/utils";
 
@@ -11,8 +12,45 @@ export interface SchoolReport {
 }
 const score = (value: number | null) => value === null ? "Aucune note" : `${formatScore(value)} / 20`;
 
+/** The student's copy analyses, as loaded for the export (or why they are missing). */
+export type ReportPedagogy = { ok: true; snapshot: PedagogicalSnapshot } | { ok: false; error: string };
+
+const PDF_CONFIDENCE: Record<PedagogicalConfidence, string> = {
+  limitee: "confiance limitée (une seule observation)",
+  moderee: "confiance modérée (observation répétée)",
+  forte: "confiance forte (répétée et déjà confirmée)",
+};
+
+/**
+ * Only observations the teacher confirmed are reported. Undecided AI
+ * hypotheses are counted, never presented as findings; dismissed and
+ * superseded ones are left out.
+ */
+function confirmedObservations(pedagogy: ReportPedagogy) {
+  if (!pedagogy.ok) return [`Suivi des copies non inclus : ${pedagogy.error}`];
+  const confirmed = pedagogy.snapshot.active.filter((item) => item.status === "validated");
+  const pending = pedagogy.snapshot.active.filter((item) => item.status === "pending").length;
+  const paragraphs = confirmed.length
+    ? confirmed.map((item) =>
+        [
+          `${formatDate(item.assessmentDate)} · ${item.assessmentTitle}`,
+          `Notion : ${item.curriculumNodeTitle} · ${PDF_CONFIDENCE[item.confidence]}`,
+          item.difficulty,
+          ...item.evidence.map((evidence) => `Preuve (${evidence.questionLabel}) : « ${evidence.excerpt} »`),
+          `Piste : ${item.recommendedAction}`,
+          item.teacherNote ? `Note du professeur : ${item.teacherNote}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+    : ["Aucune observation confirmée pour le moment."];
+  if (pending)
+    paragraphs.push(`${pending} hypothèse(s) de l'analyse automatique attendent la décision du professeur et ne figurent pas dans ce document.`);
+  return paragraphs;
+}
+
 /** Export only the requested resource, using the same snapshot as the screen. */
-export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarget): SchoolReport {
+export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarget, pedagogy?: ReportPedagogy): SchoolReport {
   if (target.kind === "class") {
     const { classInfo, studentAnalyses, weakestSkills } = analyzeClass(target.id, dataset);
     return {
@@ -38,6 +76,7 @@ export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarg
           const levels = row.state === "absent" ? [] : row.evaluation.skillIds.map((id) => `${dataset.skills.find((s) => s.id === id)?.name ?? id} : ${row.levels[id] ? SKILL_LEVEL_LABEL[row.levels[id]!] : "Non renseigné"}`);
           return `${formatDate(row.evaluation.date)} · ${row.evaluation.name}\n${state}${levels.length ? "\n" + levels.join(" · ") : ""}`;
         }) },
+        ...(pedagogy ? [{ title: "Observations sur copies confirmées par le professeur", paragraphs: confirmedObservations(pedagogy) }] : []),
         { title: "Pistes à confirmer par le professeur", paragraphs: a.recommendedActions.length ? a.recommendedActions.map((action) => `${action.label} · durée indicative : ${action.minutes} min`) : ["Poursuivre ou compléter les observations."] },
       ],
     };

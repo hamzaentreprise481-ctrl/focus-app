@@ -129,9 +129,11 @@ function RecommendationCard({
                 Confirmer l’observation
               </Button>
             )}
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide("dismiss", note)}>
-              Écarter
-            </Button>
+            {recommendation.status !== "dismissed" && (
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide("dismiss", note)}>
+                Écarter
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -348,7 +350,13 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
               </summary>
               <div className="mt-3 space-y-3">
                 {snapshot.history.map((item) => (
-                  <RecommendationCard key={item.id} recommendation={item} />
+                  <RecommendationCard
+                    key={item.id}
+                    recommendation={item}
+                    busy={busyId === item.id}
+                    // A dismissal can be revisited; superseded hypotheses are frozen.
+                    onDecide={item.status === "dismissed" ? (decision, note) => void decide(item.id, decision, note) : undefined}
+                  />
                 ))}
               </div>
             </details>
