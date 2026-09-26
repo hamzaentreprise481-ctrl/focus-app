@@ -267,8 +267,14 @@ export interface LocalStack {
   close(): Promise<void>;
 }
 
-export async function startLocalStack(options: { supabasePort: number; modelPort: number; script?: ScriptedError[] }): Promise<LocalStack> {
-  const db = await createMigratedDatabase();
+export async function startLocalStack(options: {
+  supabasePort: number;
+  modelPort: number;
+  script?: ScriptedError[];
+  /** Last migration to apply, to reproduce a database that is behind the code. */
+  upTo?: string;
+}): Promise<LocalStack> {
+  const db = await createMigratedDatabase({ upTo: options.upTo });
   const ids = await seedLocalSchool(db);
   const accounts: LocalAccount[] = [
     { email: LOCAL_TEACHER.email, password: LOCAL_TEACHER.password, userId: LOCAL_TEACHER.id },

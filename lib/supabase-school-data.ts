@@ -10,6 +10,7 @@ import type {
   Student,
   Skill,
 } from "@/lib/types";
+import { ensureOk } from "@/lib/supabase-errors";
 
 type TeacherAssignmentRow = {
   school_id: string;
@@ -86,9 +87,7 @@ const LEVEL_FROM_DB: Record<CompetencyResultRow["mastery_level"], SkillLevel> = 
   not_mastered: "non_maitrise",
 };
 
-function ensureOk(error: { message: string } | null, label: string) {
-  if (error) throw new Error(`${label}: ${error.message}`);
-}
+
 
 export async function loadSupabaseSchoolData(options: {
   teacherId: string;

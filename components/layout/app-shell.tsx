@@ -1,6 +1,5 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { TeacherProvider } from "@/components/layout/teacher-context";
-import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { SupabaseDataProvider } from "@/lib/supabase-data-context";
 import type { SupabaseSchoolData } from "@/lib/supabase-school-data";
 
@@ -29,7 +28,6 @@ export function AppShell({
           <span>Données de l’établissement</span>
         </div>
         <div className="mx-auto w-full max-w-[1180px] px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
-          <DataLoadState />
           {children}
         </div>
       </main>

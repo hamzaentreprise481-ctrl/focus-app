@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
 import type { Evaluation, RawGrade, SkillLevel } from "@/lib/types";
 import type { SaveResult } from "@/lib/school-data-context";
+import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE } from "@/lib/supabase-errors";
 
 const LEVEL_TO_DB: Record<
   SkillLevel,
@@ -141,8 +142,9 @@ export async function saveEvaluationAction(
     });
     return {
       ok: false,
-      error:
-        error.code === "42501"
+      error: isSchemaOutdated(error)
+        ? SCHEMA_OUTDATED_MESSAGE
+        : error.code === "42501"
           ? "Vous n’avez pas les droits nécessaires pour enregistrer cette évaluation."
           : "Enregistrement Supabase impossible. Votre saisie est conservée.",
     };

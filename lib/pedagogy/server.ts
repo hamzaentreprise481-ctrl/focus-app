@@ -13,6 +13,7 @@ import {
   type CurriculumIndex,
 } from "@/lib/curriculum/graph";
 import { relatedNotionCodes } from "@/lib/pedagogy/analysis";
+import { ensureOk } from "@/lib/supabase-errors";
 import type {
   AssessmentAnalysisState,
   CatalogueSuggestion,
@@ -35,9 +36,7 @@ export const UUID_RE =
 
 export class AccessError extends Error {}
 
-export function ensureOk(error: { message: string } | null, label: string) {
-  if (error) throw new Error(`${label}: ${error.message}`);
-}
+export { ensureOk };
 
 export type AssessmentRow = {
   id: string;

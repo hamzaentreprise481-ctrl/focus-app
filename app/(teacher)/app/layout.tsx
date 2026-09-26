@@ -5,6 +5,7 @@ import {
   loadSupabaseSchoolData,
   teacherDisplayName,
 } from "@/lib/supabase-school-data";
+import { SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -25,7 +26,9 @@ export default async function TeacherLayout({
   } catch (error) {
     console.error("FOCUS school data load failed", error);
     dataError =
-      "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
+      error instanceof SchemaOutdatedError
+        ? SCHEMA_OUTDATED_MESSAGE
+        : "Impossible de charger les données de l’établissement. Aucun jeu de démonstration n’est utilisé en secours.";
   }
   const name = schoolData.teacherName ?? teacherDisplayName(teacher);
 

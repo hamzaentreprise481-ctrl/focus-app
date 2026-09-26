@@ -10,7 +10,9 @@ import {
   pedagogicalAiConfigured,
   pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
+import { pedagogicalAiHourlyLimit } from "@/lib/pedagogy/openai-client";
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
+import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
 import {
   AccessError,
@@ -47,7 +49,7 @@ const GENERIC_ERROR = "L’opération n’a pas pu aboutir. Réessayez ; si le p
 function failure(error: unknown, fallback = GENERIC_ERROR): Failure {
   if (error instanceof AccessError) return { ok: false, error: error.message };
   console.error("FOCUS pedagogy action failed", error instanceof Error ? error.message : error);
-  return { ok: false, error: fallback };
+  return { ok: false, error: error instanceof SchemaOutdatedError ? SCHEMA_OUTDATED_MESSAGE : fallback };
 }
 
 async function session() {
@@ -166,8 +168,9 @@ export async function saveAssessmentDefinition(
       console.error("FOCUS assessment definition save failed", { code: error.code, message: error.message });
       return {
         ok: false,
-        error:
-          error.code === "42501"
+        error: isSchemaOutdated(error)
+          ? SCHEMA_OUTDATED_MESSAGE
+          : error.code === "42501"
             ? "Vous n’avez pas les droits nécessaires pour modifier cette évaluation."
             : error.code === "23514"
               ? "Des points déjà attribués dépassent le nouveau maximum d’une question. Ajustez d’abord les points des élèves."
@@ -293,8 +296,9 @@ export async function saveStudentEvidence(
       console.error("FOCUS student evidence save failed", { code: error.code, message: error.message });
       return {
         ok: false,
-        error:
-          error.code === "42501"
+        error: isSchemaOutdated(error)
+          ? SCHEMA_OUTDATED_MESSAGE
+          : error.code === "42501"
             ? "Vous n’avez pas les droits nécessaires pour modifier cette copie."
             : /points/.test(error.message)
               ? "Des points dépassent le maximum de la question."
@@ -525,6 +529,19 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       };
     }
 
+    const limit = pedagogicalAiHourlyLimit();
+    const recent = await supabase
+      .from("ai_analysis_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("teacher_id", teacherId)
+      .gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
+    ensureOk(recent.error, "Analyses récentes");
+    if ((recent.count ?? 0) >= limit)
+      return {
+        ok: false,
+        error: `Limite de ${limit} analyses par heure atteinte. Vos copies sont enregistrées ; relancez l’analyse un peu plus tard.`,
+      };
+
     let modelResult: Awaited<ReturnType<typeof analyzePedagogicalEvidence>>;
     try {
       modelResult = await analyzePedagogicalEvidence(aiInput);
@@ -533,6 +550,8 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       if (message === "OPENAI_API_KEY_MISSING")
         return { ok: false, error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée." };
       console.error("FOCUS pedagogical AI request failed", message);
+      if (message === "OPENAI_TIMEOUT")
+        return { ok: false, error: "Le service d’analyse n’a pas répondu à temps. Aucune recommandation n’a été enregistrée ; réessayez." };
       return { ok: false, error: "L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard." };
     }
 
