@@ -21,7 +21,7 @@ The public site can explain the ecosystem. This repository must only provide tea
 ## Public and authenticated architecture
 
 - Root layout: fonts, document metadata, global CSS only; never an application data provider.
-- `app/(marketing)/`: public `/`, institutional presentation, independent navigation. It imports ONLY the dedicated immutable `lib/demo/marketing-data.ts` fixture for its preview. That fixture has no imports. Public pages must not depend, even transitively, on `lib/data`, `lib/analysis`, the demo store or teacher components.
+- `app/(marketing)/`: public `/`, institutional presentation, independent navigation. It imports ONLY the dedicated immutable `lib/demo/marketing-data.ts` fixture for its preview. That fixture has no imports. Public pages must not depend, even transitively, on application data loaders, `lib/analysis` or teacher components (tested).
 - `app/(auth)/`: `/connexion`, teacher login, server actions; no student data.
 - `app/(teacher)/app/`: private `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres`. Dynamic rendering. Each page calls `requireTeacher()` before rendering its existing client view. The layout also checks the teacher and provides shell/context. Future data readers, route handlers and mutations must independently authorize the user and the requested resource.
 - `proxy.ts`: checks every `/app` request, refreshes Auth cookies, denies unauthenticated/non-teacher access and applies private/no-store responses. It is not the only authorization layer.
@@ -42,8 +42,9 @@ The home experience follows: arrive → understand the current workspace → cho
 
 - Calm greeting and class/subject context first.
 - Three clear actions: open class, add evaluation, consult students.
-- Recent evaluations second, without dominant raw grades or alert totals.
-- Pedagogical insights third, inside a collapsed, keyboard-accessible “À consulter quand vous êtes prêt” disclosure.
+- "À traiter" second, only for mathematics assessments of the class: hypotheses awaiting the teacher's decision first, then copies awaiting analysis, then missing subjects and copies; each row links to the exact place. Nothing is shown when nothing is tracked.
+- Recent evaluations third, without dominant raw grades or alert totals.
+- Pedagogical insights last, inside a collapsed, keyboard-accessible “À consulter quand vous êtes prêt” disclosure.
 - Avoid alarming first screens, labels that judge students, red as the default priority cue, excessive cards and competing calls to action.
 - Keep navigation text visible on tablet and mobile. Marketing links do not belong in operational navigation.
 - One clear purpose per page; empty states should explain the next useful action.
@@ -67,21 +68,26 @@ Prefer “Évolution”, “Point à travailler”, “Fiabilité du signal”, 
 
 ## Data/privacy truth
 
-All current academic data are fictitious. The teacher app still uses the existing one-class demonstration dataset and browser-only additions. Additions are namespaced by teacher ID to avoid accidental reuse between accounts. This is convenience separation, NOT tenant isolation, encryption, or a real student-record access boundary. Old unscoped browser additions are not automatically migrated or deleted.
+The teacher app reads and writes only Supabase, with the teacher's cookie session, under RLS. There is no demonstration dataset, browser storage or fallback in the teacher app: when a read fails, the page says so. The only fictitious data are the public preview fixture (`lib/demo/marketing-data.ts`) and test fixtures (`tests/fixtures/`).
 
-Do not enter real student data. Business persistence, server-side resource ownership, establishment isolation, retention/deletion rules, deployment/data processing review and compliance checks must be implemented and verified before a real school pilot. Authentication alone does not provide these guarantees. No GDPR certification or completed audit is claimed.
+Establishment isolation is enforced by RLS and by the `focus_*` write functions (teacher assignment, class, subject and enrollment checks); `anon` has no privilege on application tables. The live project holds only fictitious records so far. Do not enter real student data until the owner has settled hosting, retention/deletion, the processing register and impact assessment with the school. No GDPR certification or completed audit is claimed.
 
-The public preview is isolated by construction and a transitive import test. Never replace its fixture with application data or re-use a teacher view as public preview. The existing client-side academic fixtures must be replaced by authorized server data readers before real records exist; client bundles are publicly downloadable even when their page is protected.
+The public preview is isolated by construction and a transitive import test. Never replace its fixture with application data or re-use a teacher view as public preview.
 
-## Reliability update — 11 September 2026
+## Evidence and pedagogical AI contract
 
-The current user request authorizes progressive production deployment after successful checks. Earlier no-production language in the original PR describes that earlier task, not a new approval requirement. This does not waive verification: provider access and production authentication are still blocked, so production must not be marked verified or ready.
+The flow is: assessment → subject, questions, correction, rubric, assessed notions (shared) → each student's exact answer, points, annotation → analysis → teacher decision → student file.
 
-Read AUDIT_2026-09-11.md. Local evaluation saves now report failures, validate restored data, and allow editing demo additions. Dates are calendar dates displayed in UTC. Historical evaluation baselines use earlier evaluations in the same class only. Less than two numeric results cannot establish a score trend; explicit competency evidence remains independent. Thresholds and established example narratives remain regression-tested. No SQL migration is safe to invent before inspecting the existing schema.
+- The model sees the exact answers and the correction, the notions tagged on each question, and only the class's programme with its catalogue of typical errors. It returns a strict JSON schema.
+- FOCUS keeps a finding only if its excerpt appears literally in the answer (meaningful length), its notion is an in-scope notion related to the question's assessed notions (part_of either way or prerequisite, checked identically in TypeScript and SQL), the teacher did not give full marks, the answer is not the correction, and the wording is neither overstated nor non-pedagogical. A typical-error code is kept only for the same notion. Rejected candidates are counted, never shown as findings. Do not relax these rules to make model output pass.
+- Confidence (`limitee`, `moderee`, `forte`) is computed by the database from the student's history (repeated, and already confirmed by the teacher); the model's own confidence is ignored.
+- AI tables are written only by audited SECURITY DEFINER functions; teachers cannot insert or edit AI output. Editing a copy, a question or its notions supersedes the analysis; superseded hypotheses are frozen in the history.
+- Every hypothesis waits for the teacher: confirm or dismiss, with an optional note, revisable while current. Only confirmed observations appear in the student PDF; pending ones are counted.
+- "No error observed" is never presented as mastery; insufficient evidence is reported as such.
 
 ## Features and claims
 
-Existing evaluation entry, charts, class roster, student profile and cautious recommendations are preserved. Evaluation persistence depends on browser storage availability and is not synchronized. Accompaniment suggestions are read-only; no plan or intervention is saved and no simulated success is shown. Measuring intervention outcomes and automatic school-tool synchronization remain future work.
+Implemented: teacher login, dashboard work queue, classes and students, evaluations with grades/competencies, subject/questions/correction/notions, copy entry, AI analysis of mathematics copies with teacher review, longitudinal student follow-up (hypotheses, confirmed observations, notion timelines, history), PDF exports, curriculum importer and catalogue. Not implemented: invitations/password recovery, school-tool synchronization, measuring intervention outcomes, Student/Parent apps. The live model has never been exercised from this repository's environment; only scripted stand-ins have — never report those as real model tests.
 
 The demonstration CTA uses an optional verified HTTPS `FOCUS_DEMO_REQUEST_URL`. Without it, explain that requests are not open and link to the public preview. Never invent an email address, collect leads without a configured recipient, or claim a request was sent when it was not.
 
@@ -97,9 +103,9 @@ Do not, without explicit approval:
 - Replace the three-app architecture or complementary positioning.
 - Add public student-data access or weaken route protection.
 - Claim prediction, autonomous decisions, compliance, tenant isolation, live integrations or features unsupported by implementation/evidence.
-- Introduce real student data into the demo store or public fixture.
+- Introduce real student data into the public fixture or test fixtures.
 - Change analytical safeguards/thresholds under a design task.
-- Promote unverified changes: the current owner request authorizes merging and production deployment after provider configuration and real authentication are verified. See AUDIT_2026-09-13.md for the remaining access gates.
+- Merge into `main`, promote to production or apply migrations to the live project: the owner decides, after the migrations, real authentication and the real model have been verified on a Preview.
 - Access, inspect or modify the unrelated Metrik project. It is outside this project's scope.
 
-Continue PR #1 on `codex/effectuer-un-audit-visuel-de-focus`, or use a safe continuation branch. Re-read current PR comments, confirm the remote head before pushing, and never overwrite another agent's work. Report commands actually run, exact commit, Preview URL, and remaining limitations honestly.
+Work on a branch, never on `main`; never merge into `main` without the owner. Re-read current PR comments, confirm the remote head before pushing, and never overwrite another agent's work. Apply database migrations to a Supabase branch or copy before the live project. Report commands actually run, exact commit, Preview URL, and remaining limitations honestly.

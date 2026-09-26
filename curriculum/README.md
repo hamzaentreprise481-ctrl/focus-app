@@ -113,9 +113,19 @@ relations unchanged — to a package.
 99 nodes (89 notions, 6 competencies, 4 prerequisites; the 44 existing codes
 keep their type and UUID) and 348 relationships, of which 322 are undisputed.
 
-**B. Work data with no database schema yet** (reported, never imported):
-8 domains, 14 chapters, 272 objectives, 99 typical errors, 99 remediations
-(with their control questions), 308 coverage rows, relationship provenance and
+**B. Catalogue** (`curriculum_objectives`, `curriculum_typical_errors`,
+`curriculum_remediations`, `curriculum_remediation_targets`): 272 objectives,
+99 typical errors and 99 remediations with their check questions, imported by
+`catalogue-sql` into a separate, generated migration. Every row keeps its Work
+provenance and is marked as an editorial FOCUS proposal, not teacher-validated.
+Teachers read it; only `focus_import_curriculum_catalogue` (service_role, dry
+run by default, upsert by code, deactivate-only) writes it. The analysis may
+link a finding to a typical error **of the same notion** only (checked in
+TypeScript and by the database), and the student file then shows the matching
+remediation and check question as a suggestion.
+
+**C. Work data with no database schema yet** (reported, never imported):
+8 domains, 14 chapters, 308 coverage rows, relationship provenance and
 normative flags, teacher-validation flags (0/99 nodes, 0/348 relationships).
 
 ### Disputed relationships
@@ -145,6 +155,27 @@ npm run curriculum -- validate curriculum/work/FOCUS_Maths_Seconde_2026-2027.jso
   --decisions curriculum/work/FOCUS_Maths_Seconde_2026-2027.decisions.json
 ```
 
+#### What is imported while the disputes are pending
+
+The committed import (`20260926160000_curriculum_work_seconde_2026.sql`) is
+generated with `--defer-disputes <live package>`: for each pending dispute,
+the single relationship **already live** is kept when it is one of the listed
+options, and every other relationship of the dispute is left out. This keeps
+the graph exactly as meaningful as it was, adds nothing FOCUS would have
+chosen, and blocks nothing else:
+
+- kept as they are (8): the 7 existing `supports` of the
+  `support_and_prerequisite` pairs, and `FONC.TABLEAU_SIGNES part_of FONC.SIGNES`;
+- left out until an author decides (18): the 8 `prerequisite_of` proposed next
+  to them, the 4 `STAT.POURCENTAGE_POURCENTAGE` / `STAT.EVOLUTIONS` edges, and
+  the 6 competency-to-competency `supports`.
+
+Result: 99 nodes (the 44 live UUIDs preserved, 55 added, none deactivated) and
+330 relationships; re-running it changes nothing (tested on a replica of the
+live database). Once `keep` is signed in the decisions file, regenerate the
+migration with `--decisions` instead; the importer then applies exactly the
+chosen relationships.
+
 ## Commands
 
 ```bash
@@ -159,6 +190,14 @@ npm run curriculum -- sql curriculum/packages/math/seconde-gt-2026-2027
 # Or import directly (administrator shell only). Dry run unless --commit.
 NEXT_PUBLIC_SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
   npm run curriculum -- apply curriculum/packages/math/seconde-gt-2026-2027 [--commit]
+
+# Work document, undecided disputes left as they are live (see above).
+npm run curriculum -- sql curriculum/work/FOCUS_Maths_Seconde_2026-2027.json \
+  --defer-disputes curriculum/packages/math/seconde-gt-2026-2027
+
+# Catalogue of the Work document (objectives, typical errors, remediations).
+npm run curriculum -- catalogue-sql curriculum/work/FOCUS_Maths_Seconde_2026-2027.json \
+  --out supabase/migrations/<timestamp>_curriculum_catalogue_work_seconde_2026.sql
 
 # Export what the database holds for a source back to a CSV folder. The folder
 # then holds exactly that package: an edges.csv left by an earlier export is

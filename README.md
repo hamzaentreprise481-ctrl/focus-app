@@ -2,168 +2,112 @@
 
 FOCUS complète les outils de vie scolaire avec un espace de suivi pédagogique pour les enseignants. Ce dépôt contient **FOCUS Teacher** et sa vitrine publique. FOCUS Student et FOCUS Parent sont prévus dans des projets distincts.
 
-**État réel :** authentification professeur implémentée, parcours pédagogique en démonstration sur une classe fictive. Aucune donnée réelle d’élève ne doit être saisie. Ce n’est pas encore un service prêt pour une utilisation scolaire réelle.
-
 Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGENTS.md](./AGENTS.md). Claude Code charge ces deux références via [CLAUDE.md](./CLAUDE.md).
 
-## Parcours compétences — 22 septembre 2026
+## État réel
 
-- Dans une classe ou la liste des élèves, choisissez une compétence puis un dernier niveau observé. Ces filtres se combinent avec le nom et le statut. « Non renseigné » n’est pas assimilé à « Non maîtrisé ».
-- Le dossier élève affiche désormais les observations datées, filtrables par compétence, avec un lien vers l’évaluation source. Notes, absences, compétences seules et données manquantes sont distinguées.
-- Les listes et dossiers attendent la lecture du stockage local avant d’afficher une synthèse. En cas d’erreur, ils indiquent que seul le jeu d’exemple est affiché et proposent de réessayer.
-- Aucun seuil d’analyse ni contrôle d’accès n’a été modifié. Les données restent fictives et locales au navigateur.
-
-Validation locale : 10 tests d’analyse et de restitution passent, dont 5 nouveaux
-cas de non-régression. Le réseau de cet environnement ne permet pas d’installer
-les dépendances npm ; le build, le typage, le lint et la suite complète sont
-à vérifier sur la CI du commit de cette mise à jour. Les accès Vercel et au
-backend Supabase désigné restent refusés le 22 septembre. Le parcours avec un
-vrai compte et la vérification visuelle des nouveaux filtres restent à faire.
-
-## Vérification du 13 septembre 2026
-
-La production observée sert encore le prototype : `/` et `/classes` répondent,
-mais `/connexion` et `/app` renvoient 404. Le code de connexion se trouve dans
-la PR #1 non fusionnée. Un build Vercel réussi ne signifie donc pas que cette
-version a atteint la production.
-
-| Élément | État vérifié / cible |
-| --- | --- |
-| Dépôt | `hamzaentreprise481-ctrl/focus-app` |
-| Branche par défaut | `main`, encore au prototype `6a88301` lors de l'audit |
-| Travail existant | PR #1, `codex/effectuer-un-audit-visuel-de-focus` |
-| Projet Vercel lié au statut de la PR | `focus-app-nhkt` |
-| URL publique observée | https://focus-app-nhkt.vercel.app |
-| Backend | Projet Supabase FOCUS existant désigné par le propriétaire ; accès fournisseur à rétablir |
-
-La branche de production configurée dans Vercel, les variables, les domaines
-et les éventuels doublons restent à contrôler dans le compte propriétaire.
-L'architecture cible est ce dépôt → `main` → ce projet Vercel → le backend
-FOCUS existant. Aucun nouveau projet n'est nécessaire.
-
-Voir [AUDIT_2026-09-13.md](./AUDIT_2026-09-13.md) pour les preuves récentes.
-
-## Mise à jour du 11 septembre 2026
-
-Voir [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md) pour les constats vérifiés et les blocages actuels.
-
-- Saisie indépendante des notes et compétences ; compétences facultatives pour une évaluation notée.
-- Évaluations ajoutées en démonstration : correction et saisie partielle via `/app/evaluations/:id/modifier`, sans duplication.
-- Restauration des essais après actualisation, validation du stockage et erreurs explicites. Les données illisibles ne sont pas effacées.
-- Analyse historique limitée aux évaluations antérieures de la même classe ; manque de recul signalé, sans progression inventée.
-- Fiche élève : action proposée, observations et compétences, puis historique dépliable. Liste mobile dédiée.
-- Déconnexion locale même en cas d’indisponibilité du fournisseur ; limitation de révocation explicitement affichée.
-
-Le schéma du Supabase existant reste inaccessible au connecteur. Aucune migration n’a été appliquée et aucune persistance scolaire sécurisée n’est revendiquée. La production publique observée affiche toujours l’ancienne version, accessible sans connexion. La version de travail conserve les protections Auth.
+- **Connexion** : comptes professeurs Supabase Auth, rôle `app_metadata.role = "teacher"` attribué par l’administrateur. Aucun identifiant de démonstration, aucune session simulée.
+- **Données** : classes, élèves, évaluations, résultats, sujets, copies et décisions sont lus et écrits dans Supabase, sous RLS, avec la session du professeur. L’application n’affiche aucun jeu fictif en secours et n’utilise pas le stockage du navigateur.
+- **Parcours** : tableau de bord « À traiter » → évaluation → sujet, questions, corrigé, barème et notions visées → copies (réponse exacte, points, annotation) → analyse (mathématiques) → hypothèses que le professeur confirme ou écarte, avec note → dossier élève longitudinal et export PDF.
+- **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
+- **Pas encore validé en conditions réelles** : les migrations de cette branche ne sont pas appliquées sur le projet Supabase, l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
 
 ## Développement
 
-Node.js 22 est utilisé en CI ; versions de dépendances et lockfile dans le dépôt.
-Le build a également été vérifié sous Node.js 24 sur Windows. Conserver npm et
-`package-lock.json` ; ne pas introduire un deuxième lockfile.
+Node.js 22 en CI. Conserver npm et `package-lock.json`.
 
 ```bash
 npm ci
-cp .env.example .env.local
+cp .env.example .env.local   # URL et clé publiable du projet Supabase FOCUS
 npm run dev
 ```
 
-Sans variables Auth, la vitrine fonctionne et toutes les routes professeur refusent l’accès. La connexion affiche un état de préparation, sans simuler une session.
+Sans variables Auth, la vitrine fonctionne et toutes les routes professeur refusent l’accès.
+
+### Environnement local complet, sans réseau
+
+```bash
+npm run build
+node --import tsx scripts/local-stack.ts   # http://127.0.0.1:3300/connexion
+```
+
+Le schéma réel (toutes les migrations) tourne dans PGlite avec une école fictive, derrière un double Supabase Auth/PostgREST et un modèle **scripté**. Les comptes fictifs s’affichent au démarrage. Les analyses produites ainsi sont simulées : elles vérifient le parcours et les garde-fous, jamais la qualité du modèle. `FOCUS_LOCAL_UP_TO=<migration>` arrête le schéma à une migration donnée, pour voir le comportement face à une base en retard.
 
 ## Routes et limites entre espaces
 
 | Espace            | Routes                                                                       | Implémentation                                                                  |
 | ----------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Public            | `/`                                                                          | `app/(marketing)` ; preview exclusivement issue de `lib/demo/marketing-data.ts` |
+| Public            | `/`                                                                          | `app/(marketing)` ; aperçu issu uniquement de `lib/demo/marketing-data.ts` (fictif) |
 | Connexion         | `/connexion`                                                                 | `app/(auth)` ; actions de connexion/déconnexion côté serveur                    |
-| Professeur privé  | `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres` | `app/(teacher)/app` ; `requireTeacher()` sur chaque page et dans le layout      |
+| Professeur privé  | `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres` | `app/(teacher)/app` ; `requireTeacher()` sur chaque page, action et le layout   |
 | Liens historiques | `/classes/*`, `/eleves/*`, `/evaluations/*`, `/parametres/*`, `/decouvrir`   | Redirections permanentes définies dans `next.config.ts`                         |
 
-Le Proxy actualise les cookies et contrôle les requêtes privées. La protection est répétée dans les pages ; chaque futur accès à des données et chaque mutation devra vérifier à nouveau l’utilisateur et ses droits sur la ressource. Il n’existe pas de contournement public de l’authentification.
+Le Proxy actualise les cookies et refuse les requêtes privées sans professeur. Chaque page et chaque Server Action revérifie l’utilisateur ; la base revérifie chaque ligne (RLS) et chaque écriture (fonctions `focus_*`).
 
-## Configuration extérieure nécessaire
+## Base de données
 
-Correction du 10 septembre 2026 : le propriétaire a identifié son projet
-Supabase FOCUS existant. Le projet préparé auparavant appartenait à une autre
-organisation ; ne pas réutiliser cette configuration.
+`supabase/migrations/` reproduit exactement le schéma du projet live jusqu’à `20260925214642` (empreinte vérifiée par `tests/schema-live.test.ts`, mêmes versions que `supabase_migrations.schema_migrations`). Les migrations suivantes sont **dans le dépôt, pas encore sur le projet** :
 
-Le connecteur Supabase actuel n'a pas accès au projet désigné. Ses paramètres
-Auth et ses comptes restent à vérifier. Les variables Vercel Preview doivent
-être remplacées par l'URL et la clé publiable de ce projet, puis la Preview
-doit être redéployée. La connexion réelle n'est pas encore validée.
-Conserver les identifiants d'infrastructure et les adresses personnelles hors
-de cette documentation publique. Ne créer aucun autre projet et ne supprimer
-aucun projet sans accord explicite.
+| Migration | Contenu |
+| --- | --- |
+| `20260926120000_curriculum_import_v1` | Importeur du programme (service_role, dry run, idempotent, désactivation seulement) |
+| `20260926140000_curriculum_catalogue_v1` | Tables du catalogue : objectifs, erreurs types, remédiations, provenance |
+| `20260926150000_teacher_evidence_review_v1` | Sujet/questions séparés des copies, points ≤ barème, remplacement des analyses si les preuves changent, écritures IA uniquement par fonctions auditées, décisions et historique du professeur |
+| `20260926160000_curriculum_work_seconde_2026` | Programme de Seconde (99 nœuds, 330 relations ; 44 UUID conservés, litiges non tranchés laissés en l’état) |
+| `20260926170000_curriculum_catalogue_work_seconde_2026` | Catalogue de Seconde (272 objectifs, 99 erreurs types, 99 remédiations) |
+| `20260926180000_teacher_work_queue` | Lecture « À traiter » du tableau de bord (SECURITY INVOKER) |
+| `20260926190000_security_performance_hardening` | Recommandations des advisors Supabase : anon sans accès aux tables, `(select auth.uid())` dans les policies, index des clés étrangères |
 
-Utiliser un projet Supabase réservé à FOCUS. Ne jamais réutiliser les ressources d’un autre produit.
+Le code de cette branche a besoin de ces migrations. Sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. Les appliquer **dans l’ordre**, d’abord sur une branche Supabase ou une copie, puis relancer les advisors et le parcours professeur. Ne rien appliquer en production sans l’accord du propriétaire.
 
-1. Dans Supabase Auth, activer la connexion e-mail/mot de passe et désactiver les inscriptions publiques et les connexions anonymes.
-2. Créer/administrer les comptes professeurs via les outils d’administration sécurisés de Supabase. Les comptes doivent avoir une adresse confirmée et un mot de passe défini. Il n’existe pas encore de parcours d’acceptation d’invitation ou de réinitialisation autonome dans FOCUS.
-3. Affecter **côté administrateur** `app_metadata: { "role": "teacher" }` via l’Admin API. Ne pas mettre le rôle dans `user_metadata` : cette valeur est modifiable par l’utilisateur. Les utilisateurs sans ce rôle, parents, élèves et comptes anonymes sont refusés. Le champ facultatif `user_metadata.display_name` sert uniquement à l’affichage.
-4. Définir `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` dans les environnements **Production** et **Preview** du même projet Vercel FOCUS, ainsi que dans `.env.local` pour le développement. Vérifier chaque portée séparément. La clé est la clé publiable, jamais `service_role` ou une secret key. L'application attend exactement ces noms. Les opérations administratives ne s’exécutent pas dans cette application.
-5. Vérifier les limites de tentatives Auth et les réglages d’e-mail du projet. Tester un vrai compte professeur, un compte sans autorisation, l’expiration, la déconnexion et les erreurs réseau avant un pilote.
-6. Facultatif : `FOCUS_DEMO_REQUEST_URL` doit désigner un formulaire/contact HTTPS vérifié et suivi. Sans valeur, le site indique que les demandes ne sont pas encore ouvertes et propose son aperçu ; il ne collecte ni n’envoie de demandes.
-7. Redéployer la Preview après modification des variables : les valeurs `NEXT_PUBLIC_` peuvent être intégrées lors du build. Vérifier la connexion réelle, puis fusionner/publier dans le cadre de l'autorisation du propriétaire. Refaire les tests sur l'URL de production. L'autorisation de production existe dans la demande actuelle ; les blocages restants sont l'accès aux fournisseurs et la vérification du comportement, pas une nouvelle demande d'accord.
+## Configuration Supabase Auth
 
-Pour cette connexion par mot de passe, le formulaire appelle une Server Action,
-qui contacte Supabase Auth puis redirige sur le même site. Aucun callback OAuth
-n'est utilisé. Les cookies n'ont pas de domaine partagé : une session Preview
-ne connecte pas automatiquement à la production. Vérifier aussi Site URL et les
-URL de retour Supabase avant d'activer de futurs liens d'invitation/récupération.
+Utiliser le projet Supabase réservé à FOCUS ; ne jamais réutiliser les ressources d’un autre produit.
 
-Sessions persistantes via cookies HttpOnly, SameSite=Lax, Secure en HTTPS/Vercel. Le serveur vérifie l’identité et le rôle à jour avec `getUser()`. Les redirections de retour sont restreintes à `/app`. L’inscription et la récupération de mot de passe sont administrées hors application pour cette version.
+1. Activer la connexion e-mail/mot de passe ; désactiver les inscriptions publiques et les connexions anonymes. Activer la protection contre les mots de passe divulgués (advisor Supabase).
+2. Créer les comptes professeurs avec les outils d’administration Supabase (adresse confirmée, mot de passe défini). Il n’existe pas encore de parcours d’invitation ni de réinitialisation dans FOCUS.
+3. Affecter **côté administrateur** `app_metadata: { "role": "teacher" }`. Jamais dans `user_metadata`, modifiable par l’utilisateur. `user_metadata.display_name` sert uniquement à l’affichage si le profil n’a pas de nom.
+4. Créer l’appartenance à l’établissement et les affectations classe/matière (`school_memberships`, `teacher_assignments`) : un professeur ne voit que ses classes.
 
-Documentation fournisseur : [clients SSR](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [administration des utilisateurs](https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid).
+Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 
-## Données et analyses
+## Variables d’environnement
 
-- `lib/data/` : 31 élèves fictifs, 5 évaluations, 8 compétences, une classe de mathématiques.
-- `lib/analysis.ts` : règles existantes, transparentes et prudentes. Aucune IA distante. Les scores globaux et les compétences sont distincts ; aucune compétence n’est silencieusement inférée d’une note. Pas de règle universelle « note < 10 = difficulté ».
-- `lib/demo-data-context.tsx`, `lib/demo-store.ts` : ajouts d’évaluations dans le navigateur, avec clé par identifiant professeur. Pas de synchronisation, de chiffrement ni de véritable isolation multiétablissement. Le stockage historique `focus-demo-overlay-v1` reste intact mais n’est pas repris automatiquement, car son propriétaire n’est pas identifié.
-- Les pistes d’accompagnement sont consultables mais aucun plan n’est enregistré ; aucune confirmation de création fictive n’est affichée. La mesure de l’effet des interventions et les intégrations PRONOTE/ÉcoleDirecte/ENT ne sont pas implémentées.
-- Les fixtures métier sont encore dans les bundles client. Avant de brancher des données réelles, les remplacer par des lectures serveur autorisées, avec contrôle de propriété/établissement sur chaque ressource et règles de base de données appropriées.
+| Variable | Portée | Rôle |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production et Preview | Projet Supabase FOCUS ; clé publiable, jamais `service_role` |
+| `OPENAI_API_KEY` | Serveur uniquement | Analyse pédagogique ; jamais en `NEXT_PUBLIC_` |
+| `FOCUS_AI_MODEL` | Serveur | Modèle d’analyse (défaut `gpt-5.6-terra`) |
+| `FOCUS_AI_HOURLY_LIMIT` | Serveur | Analyses par professeur et par heure (défaut 150) |
+| `FOCUS_DEMO_REQUEST_URL` | Facultatif | Formulaire HTTPS vérifié ; sinon la vitrine indique que les demandes ne sont pas ouvertes |
 
-Aucune conformité RGPD ni isolation des établissements n’est revendiquée. Le stockage métier sécurisé, les droits sur les données, les règles de conservation/suppression et les vérifications opérationnelles restent nécessaires.
+`SUPABASE_SERVICE_ROLE_KEY` ne sert qu’aux commandes d’administration du programme (`npm run curriculum -- apply|export`) dans un shell local ; jamais dans Vercel ni dans l’application (un test le vérifie). Redéployer après toute modification des variables `NEXT_PUBLIC_`.
+
+## Programme officiel et catalogue
+
+Le graphe du programme et le catalogue changent uniquement par `curriculum/` et `npm run curriculum`. Voir [curriculum/README.md](./curriculum/README.md), y compris les 15 litiges du document Work qui attendent une décision d’auteur.
 
 ## Validation
 
 ```bash
 npm run typecheck       # next typegen + tsc --noEmit
-npm run lint            # ESLint
-npm run test            # tests réels : analyse, rôle, redirects, frontière des imports
-npm run build           # production build, sans déploiement
-npm run test:routes     # après build ; lance un serveur local et un double Auth HTTP
+npm run lint
+npm run test            # unitaires, schéma réel (PGlite) avec RLS, parcours, programme, sécurité
+npm run build
+npm run test:routes     # après build ; vraies routes contre un double Supabase Auth
+npm run curriculum:check
+npm run test:ai-live    # opt-in : vrai modèle, nécessite OPENAI_API_KEY
 npm run check:deployment -- https://votre-domaine-focus
 ```
 
-`test:routes` réserve les ports locaux 3100 et 3101. Il exécute les vraies routes et Server Actions contre un double du protocole Supabase : refus sans session, cookies falsifiés, rôle révoqué, connexion, persistance, renouvellement et déconnexion. Il ne vérifie pas les paramètres d’un véritable projet Supabase.
+Les tests de base de données exécutent toutes les migrations sur PostgreSQL (PGlite) avec les rôles `anon`, `authenticated` et `service_role` : ils prouvent le comportement du schéma du dépôt, pas la configuration d’un projet Supabase réel. `check:deployment` ne fait que des lectures anonymes.
 
-`check:deployment` effectue uniquement des lectures anonymes et sort en erreur
-si la vitrine, le formulaire activé ou les protections professeur manquent.
-Il ne journalise ni corps de réponse, ni cookies, ni secrets. Un succès ne
-certifie pas la connexion réelle, les workflows métier ou les politiques RLS.
+## Limites connues
 
-Le rapport [DESIGN_AUDIT.md](./DESIGN_AUDIT.md) distingue les validations réalisées de celles encore bloquées. La mention historique « pnpm test passed » de la première version de PR #1 était inexacte : aucun script test n’existait à ce commit. Les scripts et tests ci-dessus ont été ajoutés dans cette révision.
+- Pas d’invitation ni de réinitialisation de mot de passe dans l’application ; pas d’import depuis PRONOTE, ÉcoleDirecte ou l’ENT.
+- L’analyse IA couvre les mathématiques de Seconde ; sa qualité n’est pas mesurée (revue en aveugle à faire).
+- Le catalogue (erreurs types, remédiations) est une proposition éditoriale FOCUS, validée par aucun enseignant ; 15 litiges du programme attendent leur auteur.
+- La mesure de l’effet des remédiations n’est pas implémentée.
+- Aucune conformité RGPD n’est revendiquée : hébergement, durée de conservation, registre et analyse d’impact restent à établir avec l’établissement.
 
-## Git / Preview
-
-Dépôt existant uniquement : `hamzaentreprise481-ctrl/focus-app`.
-PR de travail : [#1](https://github.com/hamzaentreprise481-ctrl/focus-app/pull/1).
-Branche : `codex/effectuer-un-audit-visuel-de-focus`.
-Les pushes sur cette branche produisent une Vercel Preview via l’intégration
-existante (statut vérifié sur `1bb6aa1`). Vérifier le statut du commit exact,
-ouvrir la Preview et tester avant de fusionner dans `main`. La promotion en
-production est autorisée par le propriétaire, mais reste bloquée tant que
-l'accès aux fournisseurs et la connexion réelle ne sont pas vérifiés.
-
-
-### V1 continuation (25 September 2026)
-
-Teacher views and analysis now consume an explicit `EvaluationDataset` through
-`SchoolDataProvider`. The mounted adapter is **still the local demonstration**;
-Supabase academic persistence is blocked on this session's project permissions.
-The existing authentication is unchanged. Class/student/evaluation pages now
-export PDF reports from their current dataset; PDF generation stays in the browser.
-Evaluation saves wait for confirmation, preserve failed input and prevent duplicate
-submissions. See [the integration handoff](docs/SUPABASE_INTEGRATION_HANDOFF.md)
-for the exact remaining backend work and verification gates.
+Historique des audits : [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md), [AUDIT_2026-09-13.md](./AUDIT_2026-09-13.md), [DESIGN_AUDIT.md](./DESIGN_AUDIT.md).

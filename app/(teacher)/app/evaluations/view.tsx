@@ -2,7 +2,7 @@
 
 import { DataLoadState } from "@/components/evaluations/data-load-state";
 import Link from "next/link";
-import { ChevronRight, Plus, Users, Sparkles } from "lucide-react";
+import { ChevronRight, Plus, Users } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ export default function EvaluationsPage() {
       <div className="space-y-2">
         {evaluations.map((evaluation) => {
           const analysis = analyzeEvaluation(evaluation.id, dataset);
-          const isNew = editableEvaluationIds.includes(evaluation.id);
+          const ownEvaluation = editableEvaluationIds.includes(evaluation.id);
           return (
             <Link
               key={evaluation.id}
@@ -54,10 +54,9 @@ export default function EvaluationsPage() {
                       Séquence charnière
                     </span>
                   )}
-                  {isNew && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-normal-soft px-2 py-0.5 text-xs font-medium text-normal">
-                      <Sparkles className="h-3 w-3" />
-                      Ajoutée en démo
+                  {ownEvaluation && (
+                    <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-medium text-ink-soft">
+                      Créée par vous
                     </span>
                   )}
                 </div>

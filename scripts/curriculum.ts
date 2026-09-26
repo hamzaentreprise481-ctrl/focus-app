@@ -4,6 +4,9 @@
 //   npm run curriculum -- sql <package> [--with <package>]... [--out <file>|-] [--allow-mass-deactivation]
 //   npm run curriculum -- apply <package> [--with <package>]... [--commit] [--allow-mass-deactivation]
 //   npm run curriculum -- export <sourceUrl> --out <directory>
+//   npm run curriculum -- work-disputes <work.json> [--out <file>|-]
+//   npm run curriculum -- catalogue-sql <work.json> --out <file>
+//   (validate/sql/apply: --decisions <file> or --defer-disputes <package> for a Work document)
 //
 // <package> is a JSON file or a directory with source.json + nodes.csv
 // [+ edges.csv]. See curriculum/README.md.
@@ -56,6 +59,7 @@ function usage(message?: string): never {
       "  npm run curriculum -- apply <paquet> [--with <paquet>]... [--commit] [--allow-mass-deactivation]",
       "  npm run curriculum -- export <sourceUrl> --out <dossier>",
       "  npm run curriculum -- work-disputes <document-work.json> [--out <fichier>|-]",
+      "  npm run curriculum -- catalogue-sql <document-work.json> --out <fichier>",
       "  (validate/sql/apply acceptent --decisions <fichier> pour un document Work)",
       "  (et --defer-disputes <paquet importé> : garde tel quel le lien déjà importé d’un litige non décidé, écarte le reste)",
     ].join("\n"),
@@ -165,7 +169,10 @@ function validateWithContext(args: Args): CurriculumValidationResult {
     `Document Work « ${program.title} » (${program.id}, ${program.status}, version ${program.dataVersion}) : ${counts.nodes} nœuds dont ${counts.legacyNodes} existants et ${counts.newNodes} nouveaux, ${counts.edges} relations.`,
   );
   log(
-    `  Non importé (pas de table correspondante) : ${notImported.domains} domaines, ${notImported.chapters} chapitres, ${notImported.objectives} objectifs, ${notImported.errors} erreurs types, ${notImported.remediations} remédiations, ${notImported.coverageRows} lignes de couverture, provenance des relations.`,
+    `  Catalogue (commande catalogue-sql, pas ce paquet) : ${notImported.objectives} objectifs, ${notImported.errors} erreurs types, ${notImported.remediations} remédiations.`,
+  );
+  log(
+    `  Non importé (pas de table correspondante) : ${notImported.domains} domaines, ${notImported.chapters} chapitres, ${notImported.coverageRows} lignes de couverture, provenance des relations.`,
   );
   log(
     `  Validations enseignant : ${notImported.teacherValidatedNodes}/${counts.nodes} nœuds, ${notImported.teacherValidatedEdges}/${counts.edges} relations.`,
