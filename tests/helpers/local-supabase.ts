@@ -69,8 +69,15 @@ type ColumnTypes = Map<string, string>;
 
 export async function startLocalSupabase(
   db: PGlite,
-  options: { port: number; accounts: LocalAccount[]; accessTokenSeconds?: number },
+  options: {
+    port: number;
+    accounts: LocalAccount[];
+    accessTokenSeconds?: number;
+    /** PostgREST's max-rows: every response is capped at it, silently (Supabase default 1000). */
+    maxRows?: number;
+  },
 ): Promise<LocalSupabase> {
+  const maxRows = options.maxRows ?? 1000;
   const queue = createQueue();
   const accessTokens = new Map<string, Session>();
   const refreshTokens = new Map<string, string>();
@@ -361,14 +368,15 @@ export async function startLocalSupabase(
         const select = url.searchParams.get("select") ?? "*";
         const where = await whereClause(table, url.searchParams, values);
         const order = await orderClause(table, url.searchParams.get("order"));
-        const limit = url.searchParams.get("limit");
-        const offset = url.searchParams.get("offset");
+        const requested = url.searchParams.get("limit");
+        const limit = Math.min(requested === null ? maxRows : Number(requested), maxRows);
+        const offset = Number(url.searchParams.get("offset") ?? 0);
         const expression = await selectExpression(table, "t", select);
         const prefer = String(req.headers.prefer ?? "");
         const wantsCount = /count=exact/.test(prefer);
         const { rows, total } = await asCaller(identity, async () => {
           const data = await db.query<{ row: unknown }>(
-            `select ${expression} as row from public.${table} t ${where} ${order} ${limit ? `limit ${Number(limit)}` : ""} ${offset ? `offset ${Number(offset)}` : ""}`,
+            `select ${expression} as row from public.${table} t ${where} ${order} limit ${limit} offset ${offset}`,
             values,
           );
           const count = wantsCount
@@ -376,7 +384,7 @@ export async function startLocalSupabase(
             : null;
           return { rows: data.rows.map((row) => row.row), total: count };
         });
-        const range = `${rows.length ? `0-${rows.length - 1}` : "*"}/${total ?? "*"}`;
+        const range = `${rows.length ? `${offset}-${offset + rows.length - 1}` : "*"}/${total ?? "*"}`;
         const single = String(req.headers.accept ?? "").includes("vnd.pgrst.object+json");
         if (req.method === "HEAD") {
           res.writeHead(200, { "Content-Range": range });

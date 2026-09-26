@@ -273,6 +273,8 @@ export async function startLocalStack(options: {
   script?: ScriptedError[];
   /** Last migration to apply, to reproduce a database that is behind the code. */
   upTo?: string;
+  /** PostgREST max-rows of the stand-in (default 1000, as on Supabase). */
+  maxRows?: number;
 }): Promise<LocalStack> {
   const db = await createMigratedDatabase({ upTo: options.upTo });
   const ids = await seedLocalSchool(db);
@@ -281,7 +283,7 @@ export async function startLocalStack(options: {
     { email: OTHER_TEACHER.email, password: OTHER_TEACHER.password, userId: OTHER_TEACHER.id },
     { email: NON_TEACHER.email, password: NON_TEACHER.password, userId: NON_TEACHER.id },
   ];
-  const supabase = await startLocalSupabase(db, { port: options.supabasePort, accounts });
+  const supabase = await startLocalSupabase(db, { port: options.supabasePort, accounts, maxRows: options.maxRows });
   const model = await startModelStandIn(options.modelPort, options.script);
   return {
     db,

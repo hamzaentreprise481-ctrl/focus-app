@@ -14,6 +14,7 @@ import {
 } from "@/lib/curriculum/graph";
 import { relatedNotionCodes } from "@/lib/pedagogy/analysis";
 import { ensureOk } from "@/lib/supabase-errors";
+import { selectAllIn } from "@/lib/supabase-pages";
 import type {
   AssessmentAnalysisState,
   CatalogueSuggestion,
@@ -238,39 +239,48 @@ export function relatedCodesFor(graph: CurriculumIndex) {
 export async function evidenceRows(supabase: SupabaseClient, assessmentIds: string[], studentId?: string) {
   if (!assessmentIds.length)
     return { materials: [] as MaterialRow[], questions: [] as QuestionRow[], responses: [] as ResponseRow[], tags: [] as Array<{ question_id: string; code: string }> };
-  let responsesQuery = supabase
-    .from("student_responses")
-    .select("id,assessment_id,question_id,student_id,response_text,awarded_points,teacher_annotation")
-    .in("assessment_id", assessmentIds);
-  if (studentId) responsesQuery = responsesQuery.eq("student_id", studentId);
-  const [materials, questions, responses] = await Promise.all([
+  // A whole class's answers can exceed PostgREST's max-rows: read every page.
+  const [materials, questionRows, responses] = await Promise.all([
     supabase.from("assessment_materials").select("assessment_id,context_text,instructions_text").in("assessment_id", assessmentIds),
-    supabase
-      .from("assessment_questions")
-      .select("id,assessment_id,position,prompt,correction_text,rubric,max_points")
-      .in("assessment_id", assessmentIds)
-      .order("position", { ascending: true }),
-    responsesQuery,
+    selectAllIn<QuestionRow>("Questions", assessmentIds, (chunk, from, to) =>
+      supabase
+        .from("assessment_questions")
+        .select("id,assessment_id,position,prompt,correction_text,rubric,max_points", { count: "exact" })
+        .in("assessment_id", chunk)
+        .order("assessment_id")
+        .order("position", { ascending: true })
+        .range(from, to),
+    ),
+    selectAllIn<ResponseRow>("Réponses élève", assessmentIds, (chunk, from, to) => {
+      let query = supabase
+        .from("student_responses")
+        .select("id,assessment_id,question_id,student_id,response_text,awarded_points,teacher_annotation", { count: "exact" })
+        .in("assessment_id", chunk);
+      if (studentId) query = query.eq("student_id", studentId);
+      return query.order("id").range(from, to);
+    }),
   ]);
   ensureOk(materials.error, "Sujets d’évaluation");
-  ensureOk(questions.error, "Questions");
-  ensureOk(responses.error, "Réponses élève");
-  const questionRows = (questions.data ?? []) as QuestionRow[];
-  const tagsResponse = questionRows.length
-    ? await supabase
+  questionRows.sort((a, b) => a.position - b.position);
+  // The untyped client infers the many-to-one embed as an array.
+  const tagRows = (await selectAllIn(
+    "Notions évaluées",
+    questionRows.map((row) => row.id),
+    (chunk, from, to) =>
+      supabase
         .from("question_curriculum_nodes")
-        .select("question_id,relation,node:curriculum_nodes(code)")
-        .in("question_id", questionRows.map((row) => row.id))
+        .select("question_id,curriculum_node_id,node:curriculum_nodes(code)", { count: "exact" })
+        .in("question_id", chunk)
         .eq("relation", "assesses")
-    : { data: [], error: null };
-  ensureOk(tagsResponse.error, "Notions évaluées");
-  const tags = ((tagsResponse.data ?? []) as unknown as Array<{ question_id: string; node: { code: string } | null }>)
-    .filter((row) => row.node)
-    .map((row) => ({ question_id: row.question_id, code: row.node!.code }));
+        .order("question_id")
+        .order("curriculum_node_id")
+        .range(from, to),
+  )) as unknown as Array<{ question_id: string; node: { code: string } | null }>;
+  const tags = tagRows.filter((row) => row.node).map((row) => ({ question_id: row.question_id, code: row.node!.code }));
   return {
     materials: (materials.data ?? []) as MaterialRow[],
     questions: questionRows,
-    responses: (responses.data ?? []) as ResponseRow[],
+    responses,
     tags,
   };
 }

@@ -11,6 +11,7 @@ import type {
   Skill,
 } from "@/lib/types";
 import { ensureOk } from "@/lib/supabase-errors";
+import { selectAllIn } from "@/lib/supabase-pages";
 
 type TeacherAssignmentRow = {
   school_id: string;
@@ -120,90 +121,95 @@ export async function loadSupabaseSchoolData(options: {
   const classIds = [...new Set(assignments.map((row) => row.class_id))];
   const subjectIds = [...new Set(assignments.map((row) => row.subject_id))];
 
-  const [
-    classesResponse,
-    subjectsResponse,
-    enrollmentsResponse,
-    competenciesResponse,
-    assessmentsResponse,
-  ] = await Promise.all([
+  // Rows that grow with classes, students and the school year are read page
+  // by page (PostgREST caps each response) with short `in` filters.
+  const [classesResponse, subjectsResponse, enrollmentRows, competenciesResponse, assessmentRows] = await Promise.all([
     supabase.from("classes").select("id,name,level").in("id", classIds),
     supabase.from("subjects").select("id,name").in("id", subjectIds),
-    supabase
-      .from("student_enrollments")
-      .select("student_id,class_id")
-      .in("class_id", classIds),
+    selectAllIn<EnrollmentRow>("Inscriptions élèves", classIds, (chunk, from, to) =>
+      supabase
+        .from("student_enrollments")
+        .select("student_id,class_id", { count: "exact" })
+        .in("class_id", chunk)
+        .order("id")
+        .range(from, to),
+    ),
     supabase
       .from("competencies")
       .select("id,subject_id,name")
       .in("subject_id", subjectIds),
-    supabase
-      .from("assessments")
-      .select("id,class_id,subject_id,teacher_id,title,date,important")
-      .in("class_id", classIds)
-      .in("subject_id", subjectIds),
+    selectAllIn<AssessmentRow>("Évaluations", classIds, (chunk, from, to) =>
+      supabase
+        .from("assessments")
+        .select("id,class_id,subject_id,teacher_id,title,date,important", { count: "exact" })
+        .in("class_id", chunk)
+        .in("subject_id", subjectIds)
+        .order("id")
+        .range(from, to),
+    ),
   ]);
 
   ensureOk(classesResponse.error, "Classes");
   ensureOk(subjectsResponse.error, "Matières");
-  ensureOk(enrollmentsResponse.error, "Inscriptions élèves");
   ensureOk(competenciesResponse.error, "Compétences");
-  ensureOk(assessmentsResponse.error, "Évaluations");
 
   const classRows = (classesResponse.data ?? []) as ClassRow[];
   const subjectRows = (subjectsResponse.data ?? []) as SubjectRow[];
-  const enrollmentRows = (enrollmentsResponse.data ?? []) as EnrollmentRow[];
   const competencyRows = (competenciesResponse.data ?? []) as CompetencyRow[];
-  const assessmentRows = (assessmentsResponse.data ?? []) as AssessmentRow[];
 
   const studentIds = [...new Set(enrollmentRows.map((row) => row.student_id))];
   const assessmentIds = assessmentRows.map((row) => row.id);
 
-  const [profilesResponse, assessmentCompetenciesResponse, resultsResponse] =
-    await Promise.all([
-      studentIds.length
-        ? supabase
-            .from("profiles")
-            .select("id,first_name,last_name")
-            .in("id", studentIds)
-        : Promise.resolve({ data: [], error: null }),
-      assessmentIds.length
-        ? supabase
-            .from("assessment_competencies")
-            .select("assessment_id,competency_id")
-            .in("assessment_id", assessmentIds)
-        : Promise.resolve({ data: [], error: null }),
-      assessmentIds.length
-        ? supabase
-            .from("assessment_results")
-            .select("id,assessment_id,student_id,score,absent")
-            .in("assessment_id", assessmentIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const [profileRows, assessmentCompetencyRows, resultRows] = await Promise.all([
+    selectAllIn<ProfileRow>("Profils élèves", studentIds, (chunk, from, to) =>
+      supabase.from("profiles").select("id,first_name,last_name", { count: "exact" }).in("id", chunk).order("id").range(from, to),
+    ),
+    selectAllIn<AssessmentCompetencyRow>("Compétences des évaluations", assessmentIds, (chunk, from, to) =>
+      supabase
+        .from("assessment_competencies")
+        .select("assessment_id,competency_id", { count: "exact" })
+        .in("assessment_id", chunk)
+        .order("assessment_id")
+        .order("competency_id")
+        .range(from, to),
+    ),
+    selectAllIn<AssessmentResultRow>("Résultats", assessmentIds, (chunk, from, to) =>
+      supabase
+        .from("assessment_results")
+        .select("id,assessment_id,student_id,score,absent", { count: "exact" })
+        .in("assessment_id", chunk)
+        .order("id")
+        .range(from, to),
+    ),
+  ]);
 
-  ensureOk(profilesResponse.error, "Profils élèves");
-  ensureOk(assessmentCompetenciesResponse.error, "Compétences des évaluations");
-  ensureOk(resultsResponse.error, "Résultats");
-
-  const profileRows = (profilesResponse.data ?? []) as ProfileRow[];
-  const assessmentCompetencyRows =
-    (assessmentCompetenciesResponse.data ?? []) as AssessmentCompetencyRow[];
-  const resultRows = (resultsResponse.data ?? []) as AssessmentResultRow[];
-  const resultIds = resultRows.map((row) => row.id);
-
-  const competencyResultsResponse = resultIds.length
-    ? await supabase
+  const competencyResultRows = await selectAllIn<CompetencyResultRow>(
+    "Résultats par compétence",
+    resultRows.map((row) => row.id),
+    (chunk, from, to) =>
+      supabase
         .from("competency_results")
-        .select("assessment_result_id,competency_id,mastery_level")
-        .in("assessment_result_id", resultIds)
-    : { data: [], error: null };
-  ensureOk(competencyResultsResponse.error, "Résultats par compétence");
-  const competencyResultRows =
-    (competencyResultsResponse.data ?? []) as CompetencyResultRow[];
+        .select("assessment_result_id,competency_id,mastery_level", { count: "exact" })
+        .in("assessment_result_id", chunk)
+        .order("assessment_result_id")
+        .order("competency_id")
+        .range(from, to),
+  );
 
   const classById = new Map(classRows.map((row) => [row.id, row]));
   const subjectById = new Map(subjectRows.map((row) => [row.id, row]));
   const profileById = new Map(profileRows.map((row) => [row.id, row]));
+  // Rosters in alphabetical order (last name, first name), independent of
+  // the order rows come back in.
+  const collator = new Intl.Collator("fr", { sensitivity: "base" });
+  const nameOf = (studentId: string) => profileById.get(studentId);
+  enrollmentRows.sort(
+    (a, b) =>
+      collator.compare(nameOf(a.student_id)?.last_name ?? "", nameOf(b.student_id)?.last_name ?? "") ||
+      collator.compare(nameOf(a.student_id)?.first_name ?? "", nameOf(b.student_id)?.first_name ?? "") ||
+      a.student_id.localeCompare(b.student_id),
+  );
+  assessmentRows.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
   const enrollmentByClass = new Map<string, string[]>();
   for (const row of enrollmentRows) {
     const ids = enrollmentByClass.get(row.class_id) ?? [];
