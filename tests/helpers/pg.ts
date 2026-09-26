@@ -1,15 +1,18 @@
-// Real PostgreSQL (PGlite, WASM) with a minimal stand-in for the Supabase base
-// schema that lives outside this repository (schools, classes, assessments,
-// authorization helpers, roles and default privileges). Every migration in
-// supabase/migrations is then applied in order, exactly as written.
+// Real PostgreSQL (PGlite, WASM) with a minimal stand-in for what the Supabase
+// platform provides before any project migration runs: the API roles, their
+// default privileges and the auth schema (auth.users, auth.uid(), auth.jwt()).
+// Everything else — the FOCUS base schema, its RLS policies and every later
+// change — comes from supabase/migrations, applied in order, exactly as
+// written and exactly as recorded in the live project's migration history.
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "supabase", "migrations");
 
-const SUPABASE_BASE_SCHEMA = `
+const SUPABASE_PLATFORM = `
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
@@ -20,110 +23,22 @@ alter default privileges in schema public grant all on sequences to anon, authen
 
 create schema auth;
 grant usage on schema auth to anon, authenticated, service_role;
-create table auth.users (id uuid primary key default gen_random_uuid());
+create table auth.users (
+  id uuid primary key default gen_random_uuid(),
+  email text,
+  raw_app_meta_data jsonb not null default '{}'::jsonb,
+  raw_user_meta_data jsonb not null default '{}'::jsonb,
+  is_anonymous boolean not null default false,
+  created_at timestamptz not null default now()
+);
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
+create function auth.jwt() returns jsonb language sql stable as $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+$$;
 grant execute on function auth.uid() to anon, authenticated, service_role;
-
-create type public.mastery_level as enum ('mastered', 'developing', 'fragile', 'not_mastered');
-
-create table public.schools (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.classes (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid not null references public.schools(id),
-  academic_year_id uuid not null default gen_random_uuid(),
-  name text not null,
-  level text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.subjects (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid,
-  name text not null,
-  code text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.competencies (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid,
-  subject_id uuid not null references public.subjects(id),
-  name text not null,
-  code text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.teacher_assignments (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid not null,
-  teacher_id uuid not null references auth.users(id),
-  class_id uuid not null references public.classes(id),
-  subject_id uuid not null references public.subjects(id),
-  created_at timestamptz not null default now()
-);
-create table public.student_enrollments (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid not null,
-  student_id uuid not null references auth.users(id),
-  class_id uuid not null references public.classes(id),
-  academic_year_id uuid not null default gen_random_uuid(),
-  created_at timestamptz not null default now()
-);
-create table public.assessments (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid not null references public.schools(id),
-  class_id uuid not null references public.classes(id),
-  subject_id uuid not null references public.subjects(id),
-  teacher_id uuid not null references auth.users(id),
-  title text not null,
-  date date not null,
-  coefficient numeric not null default 1,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.assessment_competencies (
-  assessment_id uuid not null references public.assessments(id) on delete cascade,
-  competency_id uuid not null references public.competencies(id),
-  primary key (assessment_id, competency_id)
-);
-create table public.assessment_results (
-  id uuid primary key default gen_random_uuid(),
-  assessment_id uuid not null references public.assessments(id) on delete cascade,
-  student_id uuid not null references auth.users(id),
-  score numeric,
-  absent boolean not null default false,
-  teacher_comment text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (assessment_id, student_id)
-);
-create table public.competency_results (
-  id uuid primary key default gen_random_uuid(),
-  assessment_result_id uuid not null references public.assessment_results(id) on delete cascade,
-  competency_id uuid not null references public.competencies(id),
-  mastery_level public.mastery_level not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create function public.teaches_class(target_class_id uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from public.teacher_assignments ta
-    where ta.class_id = target_class_id and ta.teacher_id = auth.uid()
-  )
-$$;
-create function public.is_school_admin(target_school_id uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select false
-$$;
+grant execute on function auth.jwt() to anon, authenticated, service_role;
 `;
 
 export function migrationFiles() {
@@ -134,8 +49,8 @@ export function migrationFiles() {
 }
 
 export async function createMigratedDatabase(options: { upTo?: string } = {}) {
-  const db = new PGlite();
-  await db.exec(SUPABASE_BASE_SCHEMA);
+  const db = new PGlite({ extensions: { pgcrypto } });
+  await db.exec(SUPABASE_PLATFORM);
   for (const file of migrationFiles()) {
     const name = path.basename(file);
     if (options.upTo && name > options.upTo) break;
@@ -162,4 +77,80 @@ export async function asRole<T>(
   } finally {
     await db.exec("reset role");
   }
+}
+
+export interface SchoolFixtureIds {
+  school: string;
+  year: string;
+  classId: string;
+  subject: string;
+  teacher: string;
+  students: string[];
+}
+
+/**
+ * One school, one academic year, one class with its teacher (assigned for the
+ * subject) and enrolled students, with the memberships the base RLS relies on.
+ * Runs as the connection's current (superuser) role.
+ */
+export async function seedSchoolFixture(
+  db: PGlite,
+  ids: Partial<Omit<SchoolFixtureIds, "students">> & { students?: string[] } = {},
+): Promise<SchoolFixtureIds> {
+  const one = async (sql: string, params: unknown[] = []) =>
+    (await db.query<{ id: string }>(sql, params)).rows[0].id;
+  const teacher = await one(
+    `insert into auth.users(id, email, raw_app_meta_data, raw_user_meta_data)
+     values (coalesce($1::uuid, gen_random_uuid()), 'prof@example.test', '{"role":"teacher"}', '{"first_name":"Prof","last_name":"Test"}')
+     returning id`,
+    [ids.teacher ?? null],
+  );
+  const students: string[] = [];
+  for (const [index, id] of (ids.students ?? [null, null]).entries())
+    students.push(
+      await one(
+        `insert into auth.users(id, raw_user_meta_data)
+         values (coalesce($1::uuid, gen_random_uuid()), jsonb_build_object('first_name', 'Élève', 'last_name', $2::text))
+         returning id`,
+        [id, String(index + 1)],
+      ),
+    );
+  const school = await one(
+    "insert into public.schools(id, name) values (coalesce($1::uuid, gen_random_uuid()), 'Lycée test') returning id",
+    [ids.school ?? null],
+  );
+  const year = await one(
+    `insert into public.academic_years(id, school_id, name, starts_at, ends_at, active)
+     values (coalesce($1::uuid, gen_random_uuid()), $2, '2026-2027', '2026-09-01', '2027-07-04', true) returning id`,
+    [ids.year ?? null, school],
+  );
+  const classId = await one(
+    `insert into public.classes(id, school_id, academic_year_id, name, level)
+     values (coalesce($1::uuid, gen_random_uuid()), $2, $3, 'Seconde 3', 'Seconde') returning id`,
+    [ids.classId ?? null, school, year],
+  );
+  const subject = await one(
+    `insert into public.subjects(id, school_id, name, code)
+     values (coalesce($1::uuid, gen_random_uuid()), $2, 'Mathématiques', 'MATH') returning id`,
+    [ids.subject ?? null, school],
+  );
+  await db.query(
+    "insert into public.school_memberships(school_id, user_id, role) values ($1, $2, 'teacher')",
+    [school, teacher],
+  );
+  await db.query(
+    "insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)",
+    [school, teacher, classId, subject],
+  );
+  for (const student of students) {
+    await db.query(
+      "insert into public.school_memberships(school_id, user_id, role) values ($1, $2, 'student')",
+      [school, student],
+    );
+    await db.query(
+      "insert into public.student_enrollments(school_id, student_id, class_id, academic_year_id) values ($1, $2, $3, $4)",
+      [school, student, classId, year],
+    );
+  }
+  return { school, year, classId, subject, teacher, students };
 }

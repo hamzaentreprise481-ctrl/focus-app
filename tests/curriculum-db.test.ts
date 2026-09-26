@@ -157,7 +157,9 @@ async function referenceNode(code: string) {
     "postgres",
     `with u as (insert into auth.users default values returning id),
           s as (insert into public.schools(name) values ('École test') returning id),
-          c as (insert into public.classes(school_id, name, level) select s.id, 'Seconde 1', 'Seconde' from s returning id, school_id),
+          y as (insert into public.academic_years(school_id, name, starts_at, ends_at)
+                select s.id, '2026-2027', '2026-09-01', '2027-07-04' from s returning id, school_id),
+          c as (insert into public.classes(school_id, academic_year_id, name, level) select y.school_id, y.id, 'Seconde 1', 'Seconde' from y returning id, school_id),
           sub as (insert into public.subjects(name, code) values ('Mathématiques', 'MATH') returning id),
           a as (insert into public.assessments(school_id, class_id, subject_id, teacher_id, title, date)
                 select c.school_id, c.id, sub.id, u.id, 'Évaluation', current_date from c, sub, u returning id),
@@ -663,7 +665,7 @@ test("a JSON package file on disk imports end to end, then re-imports as a no-op
 
 test("applying the importer migration to the existing database keeps the 44 node rows untouched", async () => {
   const migration = "20260926120000_curriculum_import_v1.sql";
-  const previous = await createMigratedDatabase({ upTo: "20260926003500_supersede_edited_analysis_runs.sql" });
+  const previous = await createMigratedDatabase({ upTo: "20260925214642_supersede_edited_analysis_runs.sql" });
   try {
     const nodes = async () =>
       (

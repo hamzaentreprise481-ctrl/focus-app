@@ -24,7 +24,7 @@ import {
 import { validateCurriculumPackage } from "../lib/curriculum/package";
 import { validateModelAnalysis } from "../lib/pedagogy/analysis";
 import { buildAnalysisPersistence } from "../lib/pedagogy/pipeline";
-import { createMigratedDatabase } from "./helpers/pg";
+import { createMigratedDatabase, seedSchoolFixture } from "./helpers/pg";
 import {
   LIVE,
   legacyFingerprint,
@@ -72,21 +72,13 @@ before(async () => {
   await db.query("select public.focus_import_curriculum($1::jsonb, false, false)", [JSON.stringify(pkg)]);
   await db.exec("reset role");
 
-  await db.query("insert into auth.users(id) values ($1), ($2)", [ids.teacher, ids.student]);
-  await db.query("insert into public.schools(id, name) values ($1, 'Lycée test')", [ids.school]);
-  await db.query(
-    "insert into public.classes(id, school_id, name, level) values ($1, $2, 'Seconde 3', 'Seconde')",
-    [ids.classId, ids.school],
-  );
-  await db.query("insert into public.subjects(id, name, code) values ($1, 'Mathématiques', 'MATH')", [ids.subject]);
-  await db.query(
-    "insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)",
-    [ids.school, ids.teacher, ids.classId, ids.subject],
-  );
-  await db.query(
-    "insert into public.student_enrollments(school_id, student_id, class_id) values ($1, $2, $3)",
-    [ids.school, ids.student, ids.classId],
-  );
+  await seedSchoolFixture(db, {
+    teacher: ids.teacher,
+    students: [ids.student],
+    school: ids.school,
+    classId: ids.classId,
+    subject: ids.subject,
+  });
 });
 after(async () => {
   await db.close();
