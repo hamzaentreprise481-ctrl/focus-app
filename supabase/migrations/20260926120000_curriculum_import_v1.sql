@@ -293,6 +293,10 @@ begin
     select k from jsonb_object_keys(p_package) k
     where k not in ('formatVersion', 'source', 'nodes', 'edges')
     union all
+    select k from jsonb_object_keys(v_source) k
+    where k not in ('subjectCode', 'levelCode', 'schoolYear', 'title', 'publisher',
+                    'officialReference', 'sourceUrl', 'publishedOn')
+    union all
     select k from jsonb_array_elements(v_nodes) x, jsonb_object_keys(x) k
     where k not in ('code', 'type', 'title', 'description', 'sourceLocator')
     union all

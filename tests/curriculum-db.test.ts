@@ -982,6 +982,10 @@ test("P2: the RPC refuses the inline JSON form instead of releasing its relation
   extraEdgeKey.edges[0].weight = 1;
   assert.match(await importError(extraEdgeKey), /unexpected keys: weight/);
   assert.match(await importError({ ...clone(base), inline: true }), /unexpected keys: inline/);
+  // A misspelt source field is refused, not silently dropped.
+  const typo = clone(base) as unknown as TestPackage & { source: Record<string, unknown> };
+  typo.source.published_on = "2026-01-01";
+  assert.match(await importError(typo), /unexpected keys: published_on/);
   assert.deepEqual(await snapshot(), before);
   // The canonical package still re-imports as a no-op: nothing was released.
   assert.equal((await importPackage(base)).changed, false);
