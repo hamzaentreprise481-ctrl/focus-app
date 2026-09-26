@@ -94,7 +94,12 @@ already implied by a chain.
 
 A package may reference nodes of another source (for example a Première notion
 whose prerequisite is a Seconde notion). Validate it with the other package as
-context: `--with path/to/seconde`.
+context: `--with path/to/seconde`. Repeat `--with` for a chain, in dependency
+order — each context package is validated with the ones before it
+(`--with seconde --with premiere` for a Terminale package).
+
+The 25,000-relationship limit counts every relationship, inline ones
+(`part_of`, `prerequisites`, `competencies`) included.
 
 ## Work documents (rich format)
 
@@ -135,7 +140,9 @@ npm run curriculum -- sql curriculum/packages/math/seconde-gt-2026-2027
 NEXT_PUBLIC_SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
   npm run curriculum -- apply curriculum/packages/math/seconde-gt-2026-2027 [--commit]
 
-# Export what the database holds for a source back to a CSV folder.
+# Export what the database holds for a source back to a CSV folder. The folder
+# then holds exactly that package: an edges.csv left by an earlier export is
+# removed when no relationship needs it any more.
 npm run curriculum -- export https://www.education.gouv.fr/bo/2026/Hebdo14/MENE2602914A --out /tmp/seconde
 ```
 
@@ -155,13 +162,17 @@ an advisory lock, and re-validates everything server-side:
   reference), reactivates nodes that come back;
 - refuses to take over a node owned by another source, to change the type of a
   node already referenced by teacher data, or to deactivate more than 20 % of
-  a programme unless `--allow-mass-deactivation` is given (protects against a
-  truncated file);
-- replaces the relationships owned by this source, leaving other sources'
-  relationships untouched;
+  a programme's active nodes — whatever its size — unless
+  `--allow-mass-deactivation` is given (protects against a truncated file);
+- replaces this source's relationship **declarations**
+  (`curriculum_edge_declarations`). Several sources may declare the same
+  relationship; it stays in the graph until the last of them stops declaring
+  it (`adopted` / `released` in the report), and each source's export lists
+  exactly what it declares;
 - rejects conflicts and cycles against the whole graph;
-- returns a report (`inserted`, `updated`, `reactivated`, `unchanged`,
-  `deactivated`, …) and logs committed changes in `curriculum_import_runs`.
+- returns a report (nodes: `inserted`, `updated`, `reactivated`, `unchanged`,
+  `deactivated`; relationships: `inserted`, `adopted`, `unchanged`,
+  `released`, `deleted`) and logs committed changes in `curriculum_import_runs`.
 
 Importing the same package twice is a strict no-op: no row is rewritten and no
 audit row is added. A dry run computes the exact same report and rolls back.

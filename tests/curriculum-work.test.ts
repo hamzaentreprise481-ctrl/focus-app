@@ -78,6 +78,7 @@ async function tableSnapshot() {
        'sources', (select jsonb_agg(jsonb_build_array(ctid::text, id, title, official_reference) order by id) from public.curriculum_sources),
        'nodes', (select jsonb_agg(jsonb_build_array(ctid::text, id, code, title, active) order by id) from public.curriculum_nodes),
        'edges', (select jsonb_agg(jsonb_build_array(ctid::text, from_node_id, to_node_id, relation) order by from_node_id, to_node_id) from public.curriculum_edges),
+       'declarations', (select jsonb_agg(jsonb_build_array(ctid::text, from_node_id, to_node_id, relation, source_id) order by from_node_id, to_node_id, source_id) from public.curriculum_edge_declarations),
        'runs', (select count(*) from public.curriculum_import_runs)) as value`,
   );
   return rows[0].value;
@@ -190,7 +191,7 @@ test("diagnostic: the undisputed 99-node graph imports in place, keeps the 44 li
   });
   // The 8 legacy relationships involved in a disputed pair are not in the
   // undisputed subset, so the importer would remove them.
-  assert.deepEqual(dry.edges, { inserted: 262, deleted: 8, unchanged: 60, sharedWithOtherSources: 0 });
+  assert.deepEqual(dry.edges, { inserted: 262, adopted: 0, unchanged: 60, released: 0, deleted: 8 });
 
   const committed = await serverImport(pkg, false);
   assert.deepEqual(committed.nodes, dry.nodes);

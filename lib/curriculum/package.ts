@@ -540,8 +540,6 @@ export function validateCurriculumPackage(
   }
 
   // -- explicit edges -------------------------------------------------------
-  if (raw.edges.length > CURRICULUM_LIMITS.maxEdges)
-    error("TOO_MANY_EDGES", `Plus de ${CURRICULUM_LIMITS.maxEdges} relations.`, raw.origin);
   for (const { value, at } of raw.edges) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       error("EDGE_FIELD", "Chaque relation doit être un objet.", at);
@@ -568,6 +566,15 @@ export function validateCurriculumPackage(
     }
     candidates.push({ from, to, relation: relation as CurriculumRelation, at, expectCompetency: false });
   }
+
+  // The database limit applies to the canonical edge set, which includes the
+  // inline partOf / prerequisites / competencies relationships.
+  if (candidates.length > CURRICULUM_LIMITS.maxEdges)
+    error(
+      "TOO_MANY_EDGES",
+      `${candidates.length} relations déclarées (liens en ligne partOf, prerequisites, competencies compris) : plus de ${CURRICULUM_LIMITS.maxEdges}.`,
+      raw.origin,
+    );
 
   // -- edge semantics -------------------------------------------------------
   const external = new Map<string, ExternalCurriculumNode>();
@@ -777,6 +784,41 @@ export function validateCurriculumPackage(
     package: canonical,
     hash: hashCurriculumPackage(canonical),
     stats,
+  };
+}
+
+export interface CurriculumChainResult {
+  /** Results of the context packages, in order; stops at the first invalid one. */
+  context: CurriculumValidationResult[];
+  /** null when a context package is invalid. */
+  target: CurriculumValidationResult | null;
+}
+
+/**
+ * Validates `--with` context packages cumulatively — each one may reference
+ * nodes and relationships of the packages before it — then the target with
+ * all of them as context.
+ */
+export function validateCurriculumChain(
+  context: RawCurriculumPackage[],
+  target: RawCurriculumPackage,
+): CurriculumChainResult {
+  const externalNodes: ExternalCurriculumNode[] = [];
+  const externalEdges: CanonicalCurriculumEdge[] = [];
+  const results: CurriculumValidationResult[] = [];
+  for (const raw of context) {
+    const result = validateCurriculumPackage(raw, {
+      externalNodes: [...externalNodes],
+      externalEdges: [...externalEdges],
+    });
+    results.push(result);
+    if (!result.package) return { context: results, target: null };
+    externalNodes.push(...result.package.nodes);
+    externalEdges.push(...result.package.edges);
+  }
+  return {
+    context: results,
+    target: validateCurriculumPackage(target, { externalNodes, externalEdges }),
   };
 }
 

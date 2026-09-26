@@ -95,6 +95,8 @@ export async function useLiveIdentifiers(db: PGlite) {
     await db.exec(`
       update public.curriculum_edges e set from_node_id = m.new_id from focus_live_ids m where e.from_node_id = m.old_id;
       update public.curriculum_edges e set to_node_id = m.new_id from focus_live_ids m where e.to_node_id = m.old_id;
+      update public.curriculum_edge_declarations d set from_node_id = m.new_id from focus_live_ids m where d.from_node_id = m.old_id;
+      update public.curriculum_edge_declarations d set to_node_id = m.new_id from focus_live_ids m where d.to_node_id = m.old_id;
       update public.curriculum_nodes n set id = m.new_id from focus_live_ids m where n.id = m.old_id;
       drop table focus_live_ids;
     `);
@@ -106,7 +108,7 @@ export async function useLiveIdentifiers(db: PGlite) {
     ).rows;
     await db.query("update public.curriculum_sources set id = $1 where id = $2", [LIVE.source.id, oldSource]);
     await db.query("update public.curriculum_nodes set source_id = $1 where source_id = $2", [LIVE.source.id, oldSource]);
-    await db.query("update public.curriculum_edges set source_id = $1 where source_id = $2", [LIVE.source.id, oldSource]);
+    await db.query("update public.curriculum_edge_declarations set source_id = $1 where source_id = $2", [LIVE.source.id, oldSource]);
   } finally {
     await db.exec("set session_replication_role = origin");
   }

@@ -15,19 +15,21 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { loadCurriculumInput, loadCurriculumPackage } from "../lib/curriculum/fs";
+import {
+  loadCurriculumInput,
+  loadCurriculumPackage,
+  writeCsvCurriculumPackage,
+} from "../lib/curriculum/fs";
 import {
   CurriculumParseError,
   parseJsonCurriculumPackage,
-  serializeCsvCurriculumPackage,
+  validateCurriculumChain,
   validateCurriculumPackage,
 } from "../lib/curriculum/package";
 import { renderCurriculumImportMigration } from "../lib/curriculum/sql";
 import type {
-  CanonicalCurriculumEdge,
   CurriculumIssue,
   CurriculumValidationResult,
-  ExternalCurriculumNode,
 } from "../lib/curriculum/types";
 
 interface Args {
@@ -90,20 +92,16 @@ function printIssues(issues: CurriculumIssue[]) {
 }
 
 function validateWithContext(args: Args): CurriculumValidationResult {
-  const externalNodes: ExternalCurriculumNode[] = [];
-  const externalEdges: CanonicalCurriculumEdge[] = [];
-  for (const other of args.with) {
-    const result = validateCurriculumPackage(loadCurriculumPackage(other));
-    if (!result.package) {
-      console.error(`Le paquet de contexte ${other} est invalide :`);
-      printIssues(result.errors);
-      process.exit(1);
-    }
-    externalNodes.push(...result.package.nodes);
-    externalEdges.push(...result.package.edges);
-  }
   const input = loadCurriculumInput(args.target);
-  const result = validateCurriculumPackage(input.raw, { externalNodes, externalEdges });
+  // Context packages are validated cumulatively, in the order given.
+  const chain = validateCurriculumChain(args.with.map(loadCurriculumPackage), input.raw);
+  if (!chain.target) {
+    const failed = chain.context.length - 1;
+    console.error(`Le paquet de contexte ${args.with[failed]} est invalide :`);
+    printIssues(chain.context[failed].errors);
+    process.exit(1);
+  }
+  const result = chain.target;
   if (!input.work) return result;
 
   // Rich Work document: report what is converted and what the schema cannot
@@ -206,11 +204,7 @@ async function main() {
     );
     report(result, false);
     if (!result.package) process.exit(1);
-    const files = serializeCsvCurriculumPackage(result.package);
-    mkdirSync(args.out, { recursive: true });
-    writeFileSync(path.join(args.out, "source.json"), files.sourceJson);
-    writeFileSync(path.join(args.out, "nodes.csv"), files.nodesCsv);
-    if (files.edgesCsv) writeFileSync(path.join(args.out, "edges.csv"), files.edgesCsv);
+    writeCsvCurriculumPackage(args.out, result.package);
     console.log(`\nExporté dans ${args.out}`);
     return;
   }

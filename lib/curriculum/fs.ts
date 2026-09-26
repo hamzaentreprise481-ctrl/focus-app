@@ -1,14 +1,15 @@
 // File-system loading for curriculum packages. Used by scripts and tests only;
 // never import this from application code.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   CurriculumParseError,
   parseCsvCurriculumPackage,
   parseJsonCurriculumPackage,
+  serializeCsvCurriculumPackage,
 } from "./package";
-import type { RawCurriculumPackage } from "./types";
+import type { CanonicalCurriculumPackage, RawCurriculumPackage } from "./types";
 import {
   convertWorkCurriculum,
   isWorkCurriculumDocument,
@@ -80,4 +81,26 @@ function loadPackageFile(target: string): RawCurriculumPackage {
     "Attendu : un fichier .json ou un dossier (source.json + nodes.csv [+ edges.csv]).",
     target,
   );
+}
+
+/**
+ * Writes a package as a CSV directory. The directory ends up containing
+ * exactly the package: a previous edges.csv is removed when the package has
+ * no relationship left for it, so stale relationships can never be reloaded.
+ * Each file is written to a temporary name first, then renamed.
+ */
+export function writeCsvCurriculumPackage(dir: string, pkg: CanonicalCurriculumPackage) {
+  const files = serializeCsvCurriculumPackage(pkg);
+  mkdirSync(dir, { recursive: true });
+  const write = (name: string, content: string) => {
+    const target = path.join(dir, name);
+    const temporary = `${target}.tmp-${process.pid}`;
+    writeFileSync(temporary, content);
+    renameSync(temporary, target);
+  };
+  write("source.json", files.sourceJson);
+  write("nodes.csv", files.nodesCsv);
+  if (files.edgesCsv) write("edges.csv", files.edgesCsv);
+  else rmSync(path.join(dir, "edges.csv"), { force: true });
+  return files;
 }

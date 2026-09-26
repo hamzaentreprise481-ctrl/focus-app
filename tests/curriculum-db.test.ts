@@ -94,7 +94,7 @@ interface ImportReport {
     "inserted" | "updated" | "reactivated" | "unchanged" | "deactivated" | "deactivatedStillReferenced",
     number
   >;
-  edges: Record<"inserted" | "deleted" | "unchanged" | "sharedWithOtherSources", number>;
+  edges: Record<"inserted" | "adopted" | "unchanged" | "released" | "deleted", number>;
 }
 
 async function importPackage(
@@ -126,7 +126,8 @@ async function snapshot() {
     `select jsonb_build_object(
        'sources', (select jsonb_agg(jsonb_build_array(ctid::text, id, title) order by id) from public.curriculum_sources),
        'nodes', (select jsonb_agg(jsonb_build_array(ctid::text, id, code, active) order by id) from public.curriculum_nodes),
-       'edges', (select jsonb_agg(jsonb_build_array(ctid::text, from_node_id, to_node_id, relation, source_id) order by from_node_id, to_node_id) from public.curriculum_edges),
+       'edges', (select jsonb_agg(jsonb_build_array(ctid::text, from_node_id, to_node_id, relation) order by from_node_id, to_node_id) from public.curriculum_edges),
+       'declarations', (select jsonb_agg(jsonb_build_array(ctid::text, from_node_id, to_node_id, relation, source_id) order by from_node_id, to_node_id, source_id) from public.curriculum_edge_declarations),
        'runs', (select count(*) from public.curriculum_import_runs)
      ) as value`,
   );
@@ -169,15 +170,19 @@ async function referenceNode(code: string) {
 
 // ---------------------------------------------------------------------------
 
-test("all migrations apply on PostgreSQL and keep the seeded 44-node graph with owned edges", async () => {
+test("all migrations apply on PostgreSQL and keep the seeded 44-node graph, each edge declared by its source", async () => {
   assert.equal(await count("select count(*) from public.curriculum_nodes where active"), 44);
   assert.equal(await count("select count(*) from public.curriculum_edges"), 68);
   assert.equal(
     await count(
-      "select count(*) from public.curriculum_edges e join public.curriculum_nodes n on n.id = e.from_node_id where e.source_id = n.source_id",
+      `select count(*) from public.curriculum_edges e
+       join public.curriculum_nodes n on n.id = e.from_node_id
+       join public.curriculum_edge_declarations d
+         on d.from_node_id = e.from_node_id and d.to_node_id = e.to_node_id and d.relation = e.relation and d.source_id = n.source_id`,
     ),
     68,
   );
+  assert.equal(await count("select count(*) from public.curriculum_edge_declarations"), 68);
 });
 
 test("the committed reference package is exactly the seeded graph: importing it changes nothing", async () => {
@@ -205,7 +210,7 @@ test("the committed reference package is exactly the seeded graph: importing it 
     deactivated: 0,
     deactivatedStillReferenced: 0,
   });
-  assert.deepEqual(report.edges, { inserted: 0, deleted: 0, unchanged: 68, sharedWithOtherSources: 0 });
+  assert.deepEqual(report.edges, { inserted: 0, adopted: 0, unchanged: 68, released: 0, deleted: 0 });
   assert.deepEqual(await snapshot(), before);
 });
 
@@ -266,7 +271,7 @@ test("an updated package applies only its diff and returning nodes are reactivat
     deactivatedStillReferenced: 0,
   });
   // FACTORISATION's part_of + supports edges and the notion→notion support go.
-  assert.deepEqual(report.edges, { inserted: 2, deleted: 3, unchanged: 6, sharedWithOtherSources: 0 });
+  assert.deepEqual(report.edges, { inserted: 2, adopted: 0, unchanged: 6, released: 0, deleted: 3 });
   assert.equal(
     await count("select count(*) from public.curriculum_nodes where code = 'MATH.T2.ALG.FACTORISATION' and not active"),
     1,
@@ -287,7 +292,7 @@ test("a truncated package cannot silently deactivate a programme", async () => {
 
   const before = await snapshot();
   const message = await importError(truncated);
-  assert.match(message, /24 of 44 active nodes would be deactivated \(limit 8\)/);
+  assert.match(message, /24 of 44 active nodes would be deactivated, above the 20 percent limit/);
   assert.deepEqual(await snapshot(), before);
 
   const forced = await importPackage(truncated, { allowMassDeactivation: true, dryRun: true });
@@ -360,7 +365,7 @@ test("cross-level prerequisites are imported and exposed as out-of-scope context
   assert.equal(again.changed, false);
   assert.equal(
     await count(
-      "select count(*) from public.curriculum_edges e join public.curriculum_sources s on s.id = e.source_id where s.source_url = $1 and e.relation = 'prerequisite_of'",
+      "select count(*) from public.curriculum_edge_declarations e join public.curriculum_sources s on s.id = e.source_id where s.source_url = $1 and e.relation = 'prerequisite_of'",
       [PREMIERE_URL],
     ),
     1,
@@ -534,20 +539,23 @@ test("database constraints guard nodes and pairs even outside the importer", asy
     ),
     /uq_curriculum_edges_node_pair/,
   );
-  // Legacy inserts without source_id still get an owner.
-  await call(
-    "postgres",
+  // An edge nobody declares cannot be committed (checked at commit time).
+  await db.exec("savepoint undeclared");
+  await db.exec(
     `insert into public.curriculum_edges(from_node_id, to_node_id, relation)
      select f.id, t.id, 'supports' from public.curriculum_nodes f, public.curriculum_nodes t
      where f.code = 'MATH.NUM.INTERVALLES' and t.code = 'MATH.COMP.REPRESENTER'`,
   );
-  assert.equal(
-    await count(
-      "select count(*) from public.curriculum_edges e join public.curriculum_nodes f on f.id = e.from_node_id where f.code = 'MATH.NUM.INTERVALLES' and e.source_id = $1",
-      [source.id],
-    ),
-    2,
+  await assert.rejects(db.exec("set constraints all immediate"), /curriculum edge has no declaring source/);
+  await db.exec("rollback to savepoint undeclared");
+  // Nor can the last declaration of an existing edge be removed on its own.
+  await db.exec("savepoint orphan");
+  await db.exec(
+    `delete from public.curriculum_edge_declarations d using public.curriculum_nodes f
+     where f.id = d.from_node_id and f.code = 'MATH.ALG.EXPRESSIONS' and d.relation = 'prerequisite_of'`,
   );
+  await assert.rejects(db.exec("set constraints all immediate"), /curriculum edge has no declaring source/);
+  await db.exec("rollback to savepoint orphan");
 });
 
 async function seededIdsByCode() {
@@ -592,7 +600,7 @@ test("the 44 seeded node UUIDs are preserved through re-import, extension, edits
     deactivated: 0,
     deactivatedStillReferenced: 0,
   });
-  assert.deepEqual(grown.edges, { inserted: 3, deleted: 0, unchanged: 68, sharedWithOtherSources: 0 });
+  assert.deepEqual(grown.edges, { inserted: 3, adopted: 0, unchanged: 68, released: 0, deleted: 0 });
 
   // Back to the reference: the two new notions are deactivated, not deleted,
   // then a second extension reactivates them under their first UUIDs.
@@ -666,12 +674,94 @@ test("applying the importer migration to the existing database keeps the 44 node
     await previous.exec(readFileSync(path.join(__dirname, "..", "supabase", "migrations", migration), "utf8"));
     assert.deepEqual(await nodes(), before);
     const [edges] = (
-      await previous.query<{ total: number; owned: number }>(
-        "select count(*)::int as total, count(source_id)::int as owned from public.curriculum_edges",
+      await previous.query<{ total: number; declared: number }>(
+        `select count(*)::int as total,
+                count(*) filter (where exists (
+                  select 1 from public.curriculum_edge_declarations d
+                  where d.from_node_id = e.from_node_id and d.to_node_id = e.to_node_id and d.relation = e.relation))::int as declared
+         from public.curriculum_edges e`,
       )
     ).rows;
-    assert.deepEqual(edges, { total: 68, owned: 68 });
+    assert.deepEqual(edges, { total: 68, declared: 68 });
   } finally {
     await previous.close();
   }
+});
+
+// Codex P1 (PR #6): a relationship declared by several sources must survive
+// until the last of them stops declaring it.
+test("a relationship shared by two sources survives until its last declaring source removes it", async () => {
+  const seconde = canonical(secondePackage());
+  await importPackage(seconde);
+  const premiere = canonical(premierePackage(), [seconde]);
+  const shared = { from: "MATH.T2.ALG.EQUATION", to: "MATH.P1.ALG.SECOND_DEGRE", relation: "prerequisite_of" as const };
+  assert.ok(premiere.edges.some((edge) => edge.from === shared.from && edge.to === shared.to));
+  assert.equal((await importPackage(premiere)).edges.inserted, 2);
+
+  // Seconde now declares the same relationship: it is adopted, not duplicated.
+  const secondeWithShared = clone(seconde);
+  secondeWithShared.edges.push(shared);
+  const adopted = await importPackage(secondeWithShared);
+  assert.deepEqual(adopted.edges, { inserted: 0, adopted: 1, unchanged: 9, released: 0, deleted: 0 });
+  assert.equal((await importPackage(secondeWithShared)).changed, false);
+
+  const sharedEdgeCount = () =>
+    count(
+      `select count(*) from public.curriculum_edges e
+       join public.curriculum_nodes f on f.id = e.from_node_id
+       join public.curriculum_nodes t on t.id = e.to_node_id
+       where f.code = $1 and t.code = $2 and e.relation = 'prerequisite_of'`,
+      [shared.from, shared.to],
+    );
+  const exported = async (url: string) => {
+    const [row] = await call<{ pkg: CanonicalCurriculumPackage }>(
+      "service_role",
+      "select public.focus_export_curriculum($1) as pkg",
+      [url],
+    );
+    return row.pkg.edges.some((edge) => edge.from === shared.from && edge.to === shared.to);
+  };
+  assert.equal(await exported(PREMIERE_URL), true);
+  assert.equal(await exported(SECONDE_TEST_URL), true);
+
+  // Première stops declaring it: released, but the edge stays for Seconde.
+  const premiereWithout = clone(premiere);
+  premiereWithout.edges = premiereWithout.edges.filter((edge) => !(edge.from === shared.from && edge.to === shared.to));
+  const released = await importPackage(premiereWithout);
+  assert.deepEqual(released.edges, { inserted: 0, adopted: 0, unchanged: 1, released: 1, deleted: 0 });
+  assert.equal(await sharedEdgeCount(), 1);
+  assert.equal(await exported(PREMIERE_URL), false);
+  assert.equal(await exported(SECONDE_TEST_URL), true);
+  const index = buildCurriculumIndex(await graph(["PREMIERE_SPE"]));
+  assert.deepEqual(index.summaryByCode.get("MATH.P1.ALG.SECOND_DEGRE")?.prerequisites, [shared.from]);
+
+  // The last declaring source removes it: now the edge is deleted.
+  const gone = await importPackage(seconde);
+  assert.deepEqual(gone.edges, { inserted: 0, adopted: 0, unchanged: 9, released: 0, deleted: 1 });
+  assert.equal(await sharedEdgeCount(), 0);
+});
+
+// Codex P2 (PR #6): the 20 percent guard also protects small programmes.
+test("mass-deactivation guard enforces 20 percent exactly, including small programmes", async () => {
+  const small = (count: number) => {
+    const pkg = clone(secondePackage());
+    pkg.source.sourceUrl = "https://www.education.gouv.fr/bo/test/petit-programme";
+    pkg.source.levelCode = "SECONDE_PETIT";
+    pkg.nodes = Array.from({ length: count }, (_, i) => ({
+      code: `MATH.S5.N${i}`,
+      type: "notion",
+      title: `Notion ${i}`,
+      sourceLocator: "Test",
+    }));
+    pkg.edges = [];
+    return canonical(pkg);
+  };
+  await importPackage(small(5));
+  // 2 of 5 = 40 percent: refused (the previous floor of 2 let this through).
+  assert.match(await importError(small(3)), /2 of 5 active nodes would be deactivated, above the 20 percent limit/);
+  assert.equal((await importPackage(small(3), { allowMassDeactivation: true, dryRun: true })).nodes.deactivated, 2);
+  // 1 of 5 = exactly 20 percent: allowed.
+  assert.equal((await importPackage(small(4))).nodes.deactivated, 1);
+  // 1 of 4 = 25 percent: refused.
+  assert.match(await importError(small(3)), /1 of 4 active nodes would be deactivated/);
 });

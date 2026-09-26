@@ -3,7 +3,7 @@
 -- Prepares the curriculum graph to ingest complete official programmes from
 -- structured packages (see curriculum/README.md):
 --   1. database-level guards on nodes and relationships;
---   2. relationship ownership (which source declared an edge);
+--   2. relationship declarations (which sources declare each edge);
 --   3. an audit table of committed imports;
 --   4. public.focus_import_curriculum — validated, idempotent, dry-run by
 --      default, service_role only;
@@ -29,48 +29,92 @@ alter table public.curriculum_nodes
     and char_length(btrim(source_locator)) between 1 and 200
   );
 
--- 2. Relationship ownership and uniqueness -----------------------------------
+-- 2. Relationship declarations and uniqueness ------------------------------
+--
+-- A relationship stays in the graph as long as at least one source declares
+-- it. An import replaces only its own declarations; an edge row is deleted
+-- only when its last declaring source stops declaring it.
 
-alter table public.curriculum_edges
-  add column if not exists source_id uuid
-    references public.curriculum_sources(id) on delete cascade;
+create table if not exists public.curriculum_edge_declarations (
+  from_node_id uuid not null,
+  to_node_id uuid not null,
+  relation text not null,
+  source_id uuid not null references public.curriculum_sources(id) on delete cascade,
+  declared_at timestamptz not null default now(),
+  primary key (from_node_id, to_node_id, relation, source_id),
+  foreign key (from_node_id, to_node_id, relation)
+    references public.curriculum_edges(from_node_id, to_node_id, relation)
+    on delete cascade
+);
+
+create index if not exists idx_curriculum_edge_declarations_source
+  on public.curriculum_edge_declarations(source_id, relation);
 
 -- Existing edges were all declared by the source of their origin node.
-update public.curriculum_edges e
-set source_id = n.source_id
-from public.curriculum_nodes n
-where n.id = e.from_node_id
-  and e.source_id is null;
+insert into public.curriculum_edge_declarations(from_node_id, to_node_id, relation, source_id)
+select e.from_node_id, e.to_node_id, e.relation, n.source_id
+from public.curriculum_edges e
+join public.curriculum_nodes n on n.id = e.from_node_id
+on conflict do nothing;
 
--- Keeps legacy insert paths (seed migrations) valid.
-create or replace function public.focus_curriculum_edge_default_source()
+alter table public.curriculum_edge_declarations enable row level security;
+drop policy if exists curriculum_edge_declarations_select on public.curriculum_edge_declarations;
+create policy curriculum_edge_declarations_select on public.curriculum_edge_declarations
+  for select to authenticated using (true);
+revoke all on public.curriculum_edge_declarations from anon;
+revoke insert, update, delete, truncate on public.curriculum_edge_declarations from authenticated;
+grant select on public.curriculum_edge_declarations to authenticated;
+
+-- Invariant checked at commit: an edge exists only while a source declares it
+-- (covers direct inserts outside the importer and removed declarations).
+create or replace function public.focus_curriculum_edge_declared()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
+declare
+  v_from uuid;
+  v_to uuid;
+  v_relation text;
 begin
-  if new.source_id is null then
-    select n.source_id into new.source_id
-    from public.curriculum_nodes n
-    where n.id = new.from_node_id;
+  if tg_table_name = 'curriculum_edges' then
+    v_from := new.from_node_id;
+    v_to := new.to_node_id;
+    v_relation := new.relation;
+  else
+    v_from := old.from_node_id;
+    v_to := old.to_node_id;
+    v_relation := old.relation;
   end if;
-  return new;
+  if exists (
+       select 1 from public.curriculum_edges e
+       where e.from_node_id = v_from and e.to_node_id = v_to and e.relation = v_relation
+     )
+     and not exists (
+       select 1 from public.curriculum_edge_declarations d
+       where d.from_node_id = v_from and d.to_node_id = v_to and d.relation = v_relation
+     ) then
+    raise exception 'curriculum edge has no declaring source' using errcode = '23514';
+  end if;
+  return null;
 end;
 $$;
 
-revoke all on function public.focus_curriculum_edge_default_source() from public;
-revoke all on function public.focus_curriculum_edge_default_source() from anon;
-revoke all on function public.focus_curriculum_edge_default_source() from authenticated;
+revoke all on function public.focus_curriculum_edge_declared() from public;
+revoke all on function public.focus_curriculum_edge_declared() from anon;
+revoke all on function public.focus_curriculum_edge_declared() from authenticated;
 
-drop trigger if exists curriculum_edges_default_source on public.curriculum_edges;
-create trigger curriculum_edges_default_source
-  before insert on public.curriculum_edges
-  for each row execute function public.focus_curriculum_edge_default_source();
+drop trigger if exists curriculum_edges_declared on public.curriculum_edges;
+create constraint trigger curriculum_edges_declared
+  after insert on public.curriculum_edges
+  deferrable initially deferred
+  for each row execute function public.focus_curriculum_edge_declared();
 
-alter table public.curriculum_edges alter column source_id set not null;
-
-create index if not exists idx_curriculum_edges_source
-  on public.curriculum_edges(source_id, relation);
+drop trigger if exists curriculum_edge_declarations_remaining on public.curriculum_edge_declarations;
+create constraint trigger curriculum_edge_declarations_remaining
+  after delete on public.curriculum_edge_declarations
+  deferrable initially deferred
+  for each row execute function public.focus_curriculum_edge_declared();
 
 -- At most one relationship between two nodes, whatever its direction: a pair
 -- cannot be both "prerequisite_of" and "part_of", nor point both ways.
@@ -139,11 +183,14 @@ declare
   v_nodes_unchanged integer := 0;
   v_nodes_deactivated integer := 0;
   v_nodes_deactivated_referenced integer := 0;
-  v_deactivation_limit integer;
   v_edges_inserted integer := 0;
   v_edges_deleted integer := 0;
   v_edges_unchanged integer := 0;
-  v_edges_shared integer := 0;
+  v_edges_adopted integer := 0;
+  v_edges_released integer := 0;
+  v_released_from uuid[];
+  v_released_to uuid[];
+  v_released_relations text[];
   v_changed boolean := false;
   v_report jsonb;
 begin
@@ -429,11 +476,14 @@ begin
       and c.active
       and not (c.code = any(v_codes));
 
-    -- A truncated or wrong file must not silently empty a programme.
-    v_deactivation_limit := greatest(2, floor(v_active_before * 0.2)::integer);
-    if v_nodes_deactivated > v_deactivation_limit and not p_allow_mass_deactivation then
-      raise exception 'curriculum import: % of % active nodes would be deactivated (limit %); allow mass deactivation explicitly if intended',
-        v_nodes_deactivated, v_active_before, v_deactivation_limit
+    -- A truncated or wrong file must not silently empty a programme: more
+    -- than 20 percent of its active nodes, whatever its size, needs an
+    -- explicit override. Integer arithmetic: deactivated / active > 1 / 5.
+    if v_nodes_deactivated > 0
+       and v_nodes_deactivated * 5 > v_active_before
+       and not p_allow_mass_deactivation then
+      raise exception 'curriculum import: % of % active nodes would be deactivated, above the 20 percent limit; allow mass deactivation explicitly if intended',
+        v_nodes_deactivated, v_active_before
         using errcode = '22023';
     end if;
 
@@ -505,16 +555,40 @@ begin
     join public.curriculum_nodes f on f.code = e."from"
     join public.curriculum_nodes t on t.code = e."to";
 
+    -- Release the declarations this package no longer contains, then delete
+    -- only the edges that no other source still declares.
+    with released as (
+      delete from public.curriculum_edge_declarations d
+      where d.source_id = v_source_id
+        and not exists (
+          select 1
+          from unnest(v_from_ids, v_to_ids, v_relations) as p(from_id, to_id, relation)
+          where p.from_id = d.from_node_id
+            and p.to_id = d.to_node_id
+            and p.relation = d.relation
+        )
+      returning d.from_node_id, d.to_node_id, d.relation
+    )
+    select
+      coalesce(array_agg(released.from_node_id), '{}'),
+      coalesce(array_agg(released.to_node_id), '{}'),
+      coalesce(array_agg(released.relation), '{}')
+    into v_released_from, v_released_to, v_released_relations
+    from released;
+
     delete from public.curriculum_edges ce
-    where ce.source_id = v_source_id
+    using unnest(v_released_from, v_released_to, v_released_relations) as r(from_id, to_id, relation)
+    where ce.from_node_id = r.from_id
+      and ce.to_node_id = r.to_id
+      and ce.relation = r.relation
       and not exists (
-        select 1
-        from unnest(v_from_ids, v_to_ids, v_relations) as p(from_id, to_id, relation)
-        where p.from_id = ce.from_node_id
-          and p.to_id = ce.to_node_id
-          and p.relation = ce.relation
+        select 1 from public.curriculum_edge_declarations d
+        where d.from_node_id = ce.from_node_id
+          and d.to_node_id = ce.to_node_id
+          and d.relation = ce.relation
       );
     get diagnostics v_edges_deleted = row_count;
+    v_edges_released := cardinality(v_released_from) - v_edges_deleted;
 
     select string_agg(
       format('%s -%s-> %s conflicts with %s -%s-> %s',
@@ -541,18 +615,25 @@ begin
         using errcode = '22023';
     end if;
 
+    -- Existing edges: already declared by this source (unchanged) or declared
+    -- only by other sources so far (adopted: this source now co-declares it).
     select
-      count(*) filter (where ce.source_id = v_source_id),
-      count(*) filter (where ce.source_id <> v_source_id)
-    into v_edges_unchanged, v_edges_shared
+      count(*) filter (where d.source_id is not null),
+      count(*) filter (where d.source_id is null)
+    into v_edges_unchanged, v_edges_adopted
     from unnest(v_from_ids, v_to_ids, v_relations) as p(from_id, to_id, relation)
     join public.curriculum_edges ce
       on ce.from_node_id = p.from_id
      and ce.to_node_id = p.to_id
-     and ce.relation = p.relation;
+     and ce.relation = p.relation
+    left join public.curriculum_edge_declarations d
+      on d.from_node_id = p.from_id
+     and d.to_node_id = p.to_id
+     and d.relation = p.relation
+     and d.source_id = v_source_id;
 
-    insert into public.curriculum_edges(from_node_id, to_node_id, relation, source_id)
-    select p.from_id, p.to_id, p.relation, v_source_id
+    insert into public.curriculum_edges(from_node_id, to_node_id, relation)
+    select p.from_id, p.to_id, p.relation
     from unnest(v_from_ids, v_to_ids, v_relations) as p(from_id, to_id, relation)
     where not exists (
       select 1
@@ -563,13 +644,18 @@ begin
     );
     get diagnostics v_edges_inserted = row_count;
 
+    insert into public.curriculum_edge_declarations(from_node_id, to_node_id, relation, source_id)
+    select p.from_id, p.to_id, p.relation, v_source_id
+    from unnest(v_from_ids, v_to_ids, v_relations) as p(from_id, to_id, relation)
+    on conflict do nothing;
+
     -- The graph had no cycle before this import, so any new cycle goes through
     -- an edge declared by this source: reachability from those edges suffices.
     with recursive reach(relation, start_id, node_id) as (
-      select ce.relation, ce.from_node_id, ce.to_node_id
-      from public.curriculum_edges ce
-      where ce.source_id = v_source_id
-        and ce.relation in ('prerequisite_of', 'part_of')
+      select d.relation, d.from_node_id, d.to_node_id
+      from public.curriculum_edge_declarations d
+      where d.source_id = v_source_id
+        and d.relation in ('prerequisite_of', 'part_of')
       union
       select r.relation, r.start_id, ce.to_node_id
       from reach r
@@ -594,6 +680,8 @@ begin
       or v_nodes_reactivated > 0
       or v_nodes_deactivated > 0
       or v_edges_inserted > 0
+      or v_edges_adopted > 0
+      or v_edges_released > 0
       or v_edges_deleted > 0;
 
     v_report := jsonb_build_object(
@@ -616,9 +704,10 @@ begin
       ),
       'edges', jsonb_build_object(
         'inserted', v_edges_inserted,
-        'deleted', v_edges_deleted,
+        'adopted', v_edges_adopted,
         'unchanged', v_edges_unchanged,
-        'sharedWithOtherSources', v_edges_shared
+        'released', v_edges_released,
+        'deleted', v_edges_deleted
       )
     );
 
@@ -686,7 +775,7 @@ as $$
         jsonb_build_object('from', f.code, 'to', t.code, 'relation', e.relation)
         order by f.code collate "C", t.code collate "C", e.relation collate "C"
       )
-      from public.curriculum_edges e
+      from public.curriculum_edge_declarations e
       join public.curriculum_nodes f on f.id = e.from_node_id and f.active
       join public.curriculum_nodes t on t.id = e.to_node_id and t.active
       where e.source_id = s.id
