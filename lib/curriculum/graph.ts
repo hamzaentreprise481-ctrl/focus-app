@@ -227,6 +227,17 @@ function normalizeLevel(value: string) {
     .trim();
 }
 
+// Spelled-out tracks → the qualifier used in level codes.
+const TRACK_SYNONYMS: Record<string, string> = {
+  GENERALE_ET_TECHNOLOGIQUE: "GT",
+  GENERALE_TECHNOLOGIQUE: "GT",
+  PROFESSIONNELLE: "PRO",
+  SPECIALITE: "SPE",
+  SPECIALITE_MATHEMATIQUES: "SPE_MATHS",
+  SPE_MATHEMATIQUES: "SPE_MATHS",
+  TRONC_COMMUN: "TC",
+};
+
 const LEVEL_ALIASES: Array<{ pattern: RegExp; prefix: string }> = [
   { pattern: /^(seconde|2nde|2de|2nd)\b/, prefix: "SECONDE" },
   { pattern: /^(premiere|1re|1ere)\b/, prefix: "PREMIERE" },
@@ -250,6 +261,26 @@ export function resolveCurriculumScope(
     if (exact.length) return { levelCodes: exact, resolution: "class_level" };
     const alias = LEVEL_ALIASES.find(({ pattern }) => pattern.test(normalized));
     if (alias) {
+      // Keep the track qualifier ("2nde GT" → SECONDE_GT, "Première spé" →
+      // PREMIERE_SPE…): a general-track class must not receive a
+      // professional-track programme that shares the grade prefix.
+      const spelled = normalized
+        .replace(alias.pattern, "")
+        .trim()
+        .split(" ")
+        .filter(Boolean)
+        .join("_")
+        .toUpperCase();
+      const qualifier = TRACK_SYNONYMS[spelled] ?? spelled;
+      if (qualifier) {
+        const withQualifier = `${alias.prefix}_${qualifier}`;
+        const tracked = levels.filter(
+          (code) => code === withQualifier || code.startsWith(`${withQualifier}_`),
+        );
+        if (tracked.length) return { levelCodes: tracked, resolution: "class_level" };
+      }
+      // No (matching) qualifier, e.g. "Seconde" or "Seconde 3": every
+      // programme of that grade.
       const matches = levels.filter(
         (code) => code === alias.prefix || code.startsWith(`${alias.prefix}_`),
       );

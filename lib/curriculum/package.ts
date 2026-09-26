@@ -233,20 +233,14 @@ export function normalizeCurriculumText(value: string) {
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
-const OFFICIAL_HOST_SUFFIXES = [".gouv.fr", ".education.fr"];
+
+// The exact expression used by public.focus_import_curriculum, so both sides
+// accept the same URLs (https, official host, no user info, no explicit port).
+export const OFFICIAL_SOURCE_URL_PATTERN =
+  /^https:\/\/([a-z0-9-]+\.)*(gouv|education)\.fr([/?#]|$)/i;
 
 export function isOfficialSourceUrl(value: string) {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== "https:" || url.username || url.password) return false;
-  const host = url.hostname.toLowerCase();
-  return OFFICIAL_HOST_SUFFIXES.some(
-    (suffix) => host === suffix.slice(1) || host.endsWith(suffix),
-  );
+  return OFFICIAL_SOURCE_URL_PATTERN.test(value);
 }
 
 function isIsoDate(value: string) {

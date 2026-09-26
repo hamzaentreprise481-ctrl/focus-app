@@ -874,6 +874,9 @@ test("P2: the database and the validator reject the same source and node values"
     ["description of 301 characters", (pkg) => (pkg.nodes[4].description = "d".repeat(301))],
     ["locator of 201 characters", (pkg) => (pkg.nodes[4].sourceLocator = "l".repeat(201))],
     ["non-consecutive school year", (pkg) => (pkg.source.schoolYear = "2026-2099")],
+    // Codex review of f3bc46a: same URL set on both sides.
+    ["official URL with an explicit port", (pkg) => (pkg.source.sourceUrl = "https://www.education.gouv.fr:443/bo/test/seconde")],
+    ["official URL with user info", (pkg) => (pkg.source.sourceUrl = "https://user@www.education.gouv.fr/bo/test")],
   ];
   const before = await snapshot();
   for (const [label, mutate] of cases) {
@@ -894,7 +897,7 @@ test("P2: the database and the validator reject the same source and node values"
       })),
       edges: canonical(secondePackage()).edges,
     };
-    assert.match(await importError(serverPackage), /curriculum import: (source fields|invalid nodes|invalid schoolYear)/, label);
+    assert.match(await importError(serverPackage), /curriculum import: (source fields|invalid nodes|invalid schoolYear|sourceUrl must be an https URL on an official domain)/, label);
   }
   assert.deepEqual(await snapshot(), before);
 

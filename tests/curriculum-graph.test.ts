@@ -172,3 +172,20 @@ test("unmatched class levels fall back to the whole subject and say so", () => {
     resolution: "single_level",
   });
 });
+
+// Codex review of f3bc46a — keep the track qualifier when resolving aliases.
+test("class levels keep their track qualifier when several tracks share a grade", () => {
+  const levels = ["SECONDE_GT", "SECONDE_PRO", "PREMIERE_SPE_MATHS", "PREMIERE_TC"];
+  assert.deepEqual(resolveCurriculumScope("2nde GT", levels).levelCodes, ["SECONDE_GT"]);
+  assert.deepEqual(resolveCurriculumScope("Seconde générale et technologique", ["SECONDE_GT", "SECONDE_PRO"]).levelCodes, ["SECONDE_GT"]);
+  assert.deepEqual(resolveCurriculumScope("Seconde professionnelle", levels).levelCodes, ["SECONDE_PRO"]);
+  assert.deepEqual(resolveCurriculumScope("Première spécialité mathématiques", levels).levelCodes, ["PREMIERE_SPE_MATHS"]);
+  assert.deepEqual(resolveCurriculumScope("Seconde pro", levels).levelCodes, ["SECONDE_PRO"]);
+  assert.deepEqual(resolveCurriculumScope("1re spé", levels).levelCodes, ["PREMIERE_SPE_MATHS"]);
+  assert.deepEqual(resolveCurriculumScope("Première TC", levels).levelCodes, ["PREMIERE_TC"]);
+  // No track given, or a class number: every programme of the grade.
+  assert.deepEqual(resolveCurriculumScope("Seconde", levels).levelCodes, ["SECONDE_GT", "SECONDE_PRO"]);
+  assert.deepEqual(resolveCurriculumScope("Seconde 3", levels).levelCodes, ["SECONDE_GT", "SECONDE_PRO"]);
+  // The live class level with the live programme.
+  assert.deepEqual(resolveCurriculumScope("Seconde", ["SECONDE_GT"]), { levelCodes: ["SECONDE_GT"], resolution: "class_level" });
+});

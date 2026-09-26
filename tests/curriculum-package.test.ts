@@ -261,6 +261,8 @@ test("the source must be official, dated correctly and complete", () => {
   assert.equal(isOfficialSourceUrl("https://education.gouv.fr.example.com/bo"), false);
   assert.equal(isOfficialSourceUrl("https://user@education.gouv.fr/bo"), false);
   assert.equal(isOfficialSourceUrl("https://manuel-editeur.fr/chapitre-3"), false);
+  assert.equal(isOfficialSourceUrl("https://www.education.gouv.fr:443/bo"), false); // same rule as the database
+  assert.equal(isOfficialSourceUrl("https://Education.Gouv.FR/bo"), true);
 
   const pkg = clone(secondePackage());
   pkg.source.sourceUrl = "https://manuel-editeur.fr/chapitre-3";
