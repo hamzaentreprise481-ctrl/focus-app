@@ -2,7 +2,7 @@ import "server-only";
 
 import type { AiCurriculumNode } from "@/lib/curriculum/graph";
 import type { ModelPedagogicalAnalysis } from "@/lib/pedagogy/types";
-import { requestPedagogicalAnalysis } from "@/lib/pedagogy/openai-client";
+import { openAiBaseUrl, requestPedagogicalAnalysis } from "@/lib/pedagogy/openai-client";
 
 interface AnalyzeQuestionInput {
   assessmentId: string;
@@ -55,7 +55,7 @@ export async function probePedagogicalAiConnection(): Promise<{
 
   try {
     const response = await fetch(
-      `https://api.openai.com/v1/models/${encodeURIComponent(model)}`,
+      `${openAiBaseUrl()}/models/${encodeURIComponent(model)}`,
       {
         headers: { Authorization: `Bearer ${apiKey}` },
         cache: "no-store",

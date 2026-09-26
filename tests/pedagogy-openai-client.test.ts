@@ -91,3 +91,21 @@ test("malformed provider JSON is also reported without its body", async () => {
     },
   );
 });
+
+test("the API base defaults to the provider and only accepts HTTPS or local loopback", async () => {
+  const { openAiBaseUrl } = await import("../lib/pedagogy/openai-client");
+  const vercel = process.env.VERCEL;
+  try {
+    delete process.env.VERCEL;
+    assert.equal(openAiBaseUrl(undefined), "https://api.openai.com/v1");
+    assert.equal(openAiBaseUrl("https://gateway.example/v1/"), "https://gateway.example/v1");
+    assert.equal(openAiBaseUrl("http://127.0.0.1:54329/v1"), "http://127.0.0.1:54329/v1");
+    assert.equal(openAiBaseUrl("http://evil.example/v1"), "https://api.openai.com/v1");
+    assert.equal(openAiBaseUrl("not a url"), "https://api.openai.com/v1");
+    process.env.VERCEL = "1";
+    assert.equal(openAiBaseUrl("http://127.0.0.1:54329/v1"), "https://api.openai.com/v1");
+  } finally {
+    if (vercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = vercel;
+  }
+});
