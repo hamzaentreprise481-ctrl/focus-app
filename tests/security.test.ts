@@ -114,7 +114,7 @@ test("every teacher page checks authentication before rendering", () => {
     assert.match(readFileSync(file, "utf8"), /await requireTeacher\(\)/);
 });
 
-test("the Supabase service role key is only read by the administrator curriculum CLI", () => {
+test("the Supabase service role key is only read by the administrator CLIs (curriculum, invitation)", () => {
   const root = path.join(__dirname, "..");
   const sources = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -127,12 +127,16 @@ test("the Supabase service role key is only read by the administrator curriculum
   const offenders = sources(root)
     .filter((file) => readFileSync(file, "utf8").includes("SUPABASE_SERVICE_ROLE_KEY"))
     .map((file) => path.relative(root, file));
-  assert.deepEqual(offenders, [path.join("scripts", "curriculum.ts")]);
+  assert.deepEqual(offenders.sort(), [
+    path.join("lib", "auth", "invite-plan.ts"),
+    path.join("scripts", "admin-invite-teacher.ts"),
+    path.join("scripts", "curriculum.ts"),
+  ]);
 
   // File-system loading, CSV parsing and SQL rendering never reach the app bundle.
   const appImports = [...sources(path.join(root, "app")), ...sources(path.join(root, "components"))]
     .filter((file) =>
-      /@\/lib\/curriculum\/(fs|sql|package|csv)["']/.test(readFileSync(file, "utf8")),
+      /@\/lib\/curriculum\/(fs|sql|package|csv)["']|invite-plan|admin-invite/.test(readFileSync(file, "utf8")),
     )
     .map((file) => path.relative(root, file));
   assert.deepEqual(appImports, []);

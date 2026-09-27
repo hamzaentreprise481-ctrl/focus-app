@@ -34,6 +34,13 @@ export interface LocalSupabase {
   server: Server;
   /** Makes every issued access token expire (the refresh token still works). */
   expireAccessTokens(): void;
+  /**
+   * The token_hash an e-mail link would carry: the last password-recovery
+   * request for this address, or a new invitation (type "invite").
+   */
+  emailToken(email: string, type: "recovery" | "invite"): string | null;
+  /** Current password of an account (to check a reset really changed it). */
+  passwordOf(email: string): string | undefined;
   requests: string[];
   close(): Promise<void>;
 }
@@ -144,6 +151,10 @@ export async function startLocalSupabase(
     );
     return rows[0] ? user(rows[0]) : null;
   }
+
+  const emailTokens = new Map<string, { userId: string; type: "recovery" | "invite" }>();
+  const lastRecovery = new Map<string, string>();
+  const accountByEmail = (email: string) => options.accounts.find((item) => item.email.toLowerCase() === email.toLowerCase());
 
   async function issueSession(userId: string) {
     const now = Math.floor(Date.now() / 1000);
@@ -461,6 +472,38 @@ export async function startLocalSupabase(
   // --- Auth ------------------------------------------------------------------
 
   async function handleAuth(req: IncomingMessage, res: ServerResponse, url: URL) {
+    if (url.pathname === "/auth/v1/recover" && req.method === "POST") {
+      // Like GoTrue: the same answer whether or not the address has an account.
+      const body = JSON.parse((await readBody(req)) || "{}") as Record<string, string>;
+      const account = accountByEmail(String(body.email ?? ""));
+      if (account) {
+        const token = randomBytes(18).toString("hex");
+        emailTokens.set(token, { userId: account.userId, type: "recovery" });
+        lastRecovery.set(account.email.toLowerCase(), token);
+      }
+      return send(res, 200, {});
+    }
+    if (url.pathname === "/auth/v1/verify" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}") as Record<string, string>;
+      const entry = emailTokens.get(String(body.token_hash ?? ""));
+      if (!entry || entry.type !== body.type)
+        return send(res, 403, { code: "otp_expired", msg: "Email link is invalid or has expired" });
+      emailTokens.delete(String(body.token_hash));
+      return send(res, 200, await issueSession(entry.userId));
+    }
+    if (url.pathname === "/auth/v1/user" && req.method === "PUT") {
+      const identity = caller(req);
+      if (identity === "expired" || !identity.userId) return send(res, 401, { code: "bad_jwt", msg: "invalid JWT" });
+      const body = JSON.parse((await readBody(req)) || "{}") as Record<string, string>;
+      const account = options.accounts.find((item) => item.userId === identity.userId);
+      if (!account) return send(res, 404, { code: "user_not_found", msg: "User not found" });
+      if (typeof body.password === "string") {
+        if (body.password.length < 6) return send(res, 422, { code: "weak_password", msg: "Password should be at least 6 characters." });
+        if (body.password === account.password) return send(res, 422, { code: "same_password", msg: "New password should be different from the old password." });
+        account.password = body.password;
+      }
+      return send(res, 200, await loadUser(identity.userId));
+    }
     if (url.pathname === "/auth/v1/health" && req.method === "GET")
       return send(res, 200, { version: "local-stand-in", name: "GoTrue", description: "FOCUS test stand-in" });
     if (url.pathname === "/auth/v1/token" && req.method === "POST") {
@@ -518,6 +561,17 @@ export async function startLocalSupabase(
     requests,
     expireAccessTokens() {
       for (const session of accessTokens.values()) session.expiresAt = 0;
+    },
+    emailToken(email, type) {
+      const account = accountByEmail(email);
+      if (!account) return null;
+      if (type === "recovery") return lastRecovery.get(account.email.toLowerCase()) ?? null;
+      const token = randomBytes(18).toString("hex");
+      emailTokens.set(token, { userId: account.userId, type: "invite" });
+      return token;
+    },
+    passwordOf(email) {
+      return accountByEmail(email)?.password;
     },
     async close() {
       server.closeAllConnections();

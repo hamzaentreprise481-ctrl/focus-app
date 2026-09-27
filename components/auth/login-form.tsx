@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useActionState } from "react";
 import { login } from "@/app/(auth)/connexion/actions";
 import { Input, Label } from "@/components/ui/input";
@@ -54,10 +55,14 @@ export function LoginForm({
       >
         {pending ? "Connexion en cours…" : "Se connecter"}
       </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <Link href="/connexion/mot-de-passe-oublie" className="font-medium text-brand">
+          Mot de passe oublié ?
+        </Link>
+      </div>
       <p className="text-xs leading-relaxed text-ink-soft">
-        Votre compte est ouvert par l’équipe FOCUS. Pour obtenir un accès ou
-        réinitialiser votre mot de passe, contactez la personne qui vous a
-        invité.
+        Votre compte est ouvert sur invitation. Pour obtenir un accès,
+        contactez la personne qui vous a invité.
       </p>
     </form>
   );

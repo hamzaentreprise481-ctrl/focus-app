@@ -38,7 +38,7 @@ Le schéma réel (toutes les migrations) tourne dans PGlite avec une école fict
 | Espace            | Routes                                                                       | Implémentation                                                                  |
 | ----------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Public            | `/`                                                                          | `app/(marketing)` ; aperçu issu uniquement de `lib/demo/marketing-data.ts` (fictif) |
-| Connexion         | `/connexion`                                                                 | `app/(auth)` ; actions de connexion/déconnexion côté serveur                    |
+| Connexion         | `/connexion`, `/connexion/mot-de-passe-oublie`, `/connexion/nouveau-mot-de-passe`, `/auth/confirm` | `app/(auth)`, `app/auth/confirm` ; connexion, déconnexion, réinitialisation et invitation côté serveur |
 | Professeur privé  | `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres` | `app/(teacher)/app` ; `requireTeacher()` sur chaque page, action et le layout   |
 | Liens historiques | `/classes/*`, `/eleves/*`, `/evaluations/*`, `/parametres/*`, `/decouvrir`   | Redirections permanentes définies dans `next.config.ts`                         |
 
@@ -67,9 +67,29 @@ Le code de cette branche a besoin de ces migrations. Sans elles, l’application
 Utiliser le projet Supabase réservé à FOCUS ; ne jamais réutiliser les ressources d’un autre produit.
 
 1. Activer la connexion e-mail/mot de passe ; désactiver les inscriptions publiques et les connexions anonymes. Activer la protection contre les mots de passe divulgués (advisor Supabase).
-2. Créer les comptes professeurs avec les outils d’administration Supabase (adresse confirmée, mot de passe défini). Il n’existe pas encore de parcours d’invitation ni de réinitialisation dans FOCUS.
-3. Affecter **côté administrateur** `app_metadata: { "role": "teacher" }`. Jamais dans `user_metadata`, modifiable par l’utilisateur. `user_metadata.display_name` sert uniquement à l’affichage si le profil n’a pas de nom.
-4. Créer l’appartenance à l’établissement et les affectations classe/matière (`school_memberships`, `teacher_assignments`) : un professeur ne voit que ses classes.
+2. **URL Configuration** : *Site URL* = l’URL du déploiement FOCUS ; ajouter aux *Redirect URLs* `https://<domaine>/auth/confirm` (et l’URL des Previews utilisées pour la recette).
+3. **Email Templates** : les liens doivent passer par `/auth/confirm` avec un `token_hash` (vérifié côté serveur, à usage unique) :
+   - *Reset Password* : `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
+   - *Invite user* : `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
+4. Inviter les professeurs avec `scripts/admin-invite-teacher.ts` (ci-dessous) ou les outils d’administration Supabase, puis affecter **côté administrateur** `app_metadata: { "role": "teacher" }`. Jamais dans `user_metadata`, modifiable par l’utilisateur. `user_metadata.display_name` sert uniquement à l’affichage si le profil n’a pas de nom.
+5. Créer l’appartenance à l’établissement et les affectations classe/matière (`school_memberships`, `teacher_assignments`) : un professeur ne voit que ses classes. Le script d’invitation le fait.
+
+Parcours de compte dans FOCUS :
+
+- `/connexion/mot-de-passe-oublie` : demande de lien ; la réponse est identique qu’un compte existe ou non (seuls la limite de débit et une panne sont signalées).
+- `/auth/confirm` : vérifie le lien (`verifyOtp` ou échange de code), ouvre la session et redirige vers `/connexion/nouveau-mot-de-passe` ; un lien invalide, expiré ou déjà utilisé renvoie vers la demande de nouveau lien, sans session.
+- `/connexion/nouveau-mot-de-passe` : 12 à 128 caractères, confirmation ; un professeur arrive ensuite dans `/app`. Un compte sans rôle `teacher` peut enregistrer son mot de passe mais reste refusé et déconnecté.
+
+Invitation d’un compte (fictif pour la recette : utiliser une adresse que vous contrôlez), **depuis un shell d’administrateur uniquement** :
+
+```bash
+SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… FOCUS_SITE_URL=https://<déploiement> \
+node --import tsx scripts/admin-invite-teacher.ts --project-ref <ref> --email prof@example.test \
+  --school <uuid> --class <uuid> --subject <uuid>            # affiche le plan, n’écrit rien
+# … puis la même commande avec --commit
+```
+
+`--project-ref` doit correspondre à l’URL (garde-fou contre une erreur de projet). Sans `--commit`, rien n’est envoyé.
 
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 
@@ -82,9 +102,10 @@ Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté 
 | `FOCUS_AI_MODEL` | Serveur | Modèle d’analyse (défaut `gpt-5.6-terra`) |
 | `FOCUS_AI_HOURLY_LIMIT` | Serveur | Appels au modèle par professeur et par heure (défaut 150) |
 | `FOCUS_AI_REASONING_EFFORT` | Serveur | `low` (défaut), `medium` ou `high` |
+| `FOCUS_SITE_URL` | Serveur, recommandé | Origine HTTPS utilisée dans les liens de réinitialisation ; sinon l’hôte de la requête |
 | `FOCUS_DEMO_REQUEST_URL` | Facultatif | Formulaire HTTPS vérifié ; sinon la vitrine indique que les demandes ne sont pas ouvertes |
 
-`SUPABASE_SERVICE_ROLE_KEY` ne sert qu’aux commandes d’administration du programme (`npm run curriculum -- apply|export`) dans un shell local ; jamais dans Vercel ni dans l’application (un test le vérifie). Redéployer après toute modification des variables `NEXT_PUBLIC_`.
+`SUPABASE_SERVICE_ROLE_KEY` ne sert qu’aux commandes d’administration (`npm run curriculum -- apply|export`, `scripts/admin-invite-teacher.ts`) dans un shell local ; jamais dans Vercel ni dans l’application (un test le vérifie). Redéployer après toute modification des variables `NEXT_PUBLIC_`.
 
 ## Programme officiel et catalogue
 
@@ -119,7 +140,7 @@ Ce statut prouve la configuration, pas le parcours : la connexion réelle et l�
 
 ## Limites connues
 
-- Pas d’invitation ni de réinitialisation de mot de passe dans l’application ; pas d’import depuis PRONOTE, ÉcoleDirecte ou l’ENT.
+- Mot de passe oublié et invitation testés contre le double Supabase local, pas encore avec les modèles d’e-mail d’un vrai projet ; pas d’inscription libre. Pas d’import depuis PRONOTE, ÉcoleDirecte ou l’ENT.
 - L’analyse IA couvre les mathématiques de Seconde ; sa qualité n’est pas mesurée (revue en aveugle à faire).
 - Le catalogue (erreurs types, remédiations) est une proposition éditoriale FOCUS, validée par aucun enseignant ; 15 litiges du programme attendent leur auteur.
 - La mesure de l’effet des remédiations n’est pas implémentée.
