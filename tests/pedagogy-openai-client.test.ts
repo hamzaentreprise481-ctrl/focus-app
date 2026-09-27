@@ -142,3 +142,39 @@ test("the hourly analysis limit is a positive integer, 150 by default", async ()
   assert.equal(pedagogicalAiHourlyLimit("40"), 40);
   for (const invalid of ["0", "-3", "2.5", "many"]) assert.equal(pedagogicalAiHourlyLimit(invalid), 150);
 });
+
+test("provider usage and latency are returned; missing fields stay null", async () => {
+  const { requestPedagogicalAnalysisWithUsage, usageFrom } = await import("../lib/pedagogy/openai-client");
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    assert.deepEqual(body.reasoning, { effort: "medium" });
+    return new Response(
+      JSON.stringify({
+        output: [{ content: [{ type: "output_text", text: JSON.stringify({ status: "no_error_observed", insufficientReason: "", errors: [] }) }] }],
+        usage: { input_tokens: 1200, output_tokens: 80, total_tokens: 1280, output_tokens_details: { reasoning_tokens: 32 } },
+      }),
+      { status: 200 },
+    );
+  };
+  const result = await requestPedagogicalAnalysisWithUsage({}, { apiKey: "fictional-test-key", model: "fictional-model", fetchImpl, reasoningEffort: "medium" });
+  assert.deepEqual(result.usage, { inputTokens: 1200, outputTokens: 80, reasoningTokens: 32, totalTokens: 1280 });
+  assert.ok(result.latencyMs >= 0);
+  assert.deepEqual(usageFrom({}), { inputTokens: null, outputTokens: null, reasoningTokens: null, totalTokens: null });
+  assert.deepEqual(usageFrom({ usage: { input_tokens: -1, output_tokens: "7" } }).inputTokens, null);
+  const { pedagogicalReasoningEffort } = await import("../lib/pedagogy/openai-client");
+  assert.equal(pedagogicalReasoningEffort(undefined), "low");
+  assert.equal(pedagogicalReasoningEffort("medium"), "medium");
+  assert.equal(pedagogicalReasoningEffort("extreme"), "low");
+});
+
+test("a failed call reports a FOCUS code and its latency, never the provider body", async () => {
+  const { requestPedagogicalAnalysisWithUsage, ModelCallError } = await import("../lib/pedagogy/openai-client");
+  const fetchImpl: typeof fetch = async () => new Response("student said: 3x+2 secret", { status: 500 });
+  await assert.rejects(requestPedagogicalAnalysisWithUsage({}, { apiKey: "fictional-test-key", model: "m", fetchImpl }), (error: Error) => {
+    assert.ok(error instanceof ModelCallError);
+    assert.equal(error.message, "OPENAI_REQUEST_FAILED:500");
+    assert.ok((error as InstanceType<typeof ModelCallError>).latencyMs >= 0);
+    assert.doesNotMatch(error.message, /secret/);
+    return true;
+  });
+});

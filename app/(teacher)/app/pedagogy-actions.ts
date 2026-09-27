@@ -10,7 +10,7 @@ import {
   pedagogicalAiConfigured,
   pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
-import { pedagogicalAiHourlyLimit } from "@/lib/pedagogy/openai-client";
+import { ModelCallError, pedagogicalAiHourlyLimit, pedagogicalReasoningEffort, type ModelUsage } from "@/lib/pedagogy/openai-client";
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
 import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
@@ -50,6 +50,67 @@ function failure(error: unknown, fallback = GENERIC_ERROR): Failure {
   if (error instanceof AccessError) return { ok: false, error: error.message };
   console.error("FOCUS pedagogy action failed", error instanceof Error ? error.message : error);
   return { ok: false, error: error instanceof SchemaOutdatedError ? SCHEMA_OUTDATED_MESSAGE : fallback };
+}
+
+type UsageOutcome =
+  | "errors_found"
+  | "no_error_observed"
+  | "insufficient_evidence"
+  | "reused"
+  | "model_error"
+  | "timeout"
+  | "invalid_output"
+  | "persistence_error";
+
+/**
+ * One usage row and one log line per analysis request: model, latency,
+ * tokens, outcome. No student identifier or content. Recording never
+ * changes the analysis result.
+ */
+async function recordUsage(
+  supabase: SupabaseClient,
+  event: {
+    assessmentId: string;
+    runId: string | null;
+    model: string;
+    outcome: UsageOutcome;
+    modelCalled: boolean;
+    latencyMs?: number | null;
+    usage?: ModelUsage | null;
+    rejectedCandidates?: number;
+  },
+) {
+  const reasoningEffort = event.modelCalled ? pedagogicalReasoningEffort() : null;
+  const line = {
+    event: "focus.ai_usage",
+    model: event.model,
+    reasoningEffort,
+    outcome: event.outcome,
+    reused: event.outcome === "reused",
+    modelCalled: event.modelCalled,
+    latencyMs: event.latencyMs ?? null,
+    inputTokens: event.usage?.inputTokens ?? null,
+    outputTokens: event.usage?.outputTokens ?? null,
+    reasoningTokens: event.usage?.reasoningTokens ?? null,
+    totalTokens: event.usage?.totalTokens ?? null,
+    rejectedCandidates: event.rejectedCandidates ?? 0,
+  };
+  console.info(JSON.stringify(line));
+  const { error } = await supabase.rpc("focus_record_ai_usage", {
+    p_assessment_id: event.assessmentId,
+    p_analysis_run_id: event.runId,
+    p_model: event.model,
+    p_reasoning_effort: reasoningEffort,
+    p_outcome: event.outcome,
+    p_model_called: event.modelCalled,
+    p_latency_ms: event.latencyMs == null ? null : Math.min(Math.round(event.latencyMs), 600_000),
+    p_input_tokens: line.inputTokens,
+    p_output_tokens: line.outputTokens,
+    p_reasoning_tokens: line.reasoningTokens,
+    p_total_tokens: line.totalTokens,
+    p_rejected_candidates: Math.min(line.rejectedCandidates, 100),
+  });
+  if (error) console.error("FOCUS AI usage not recorded", { code: error.code });
 }
 
 async function session() {
@@ -488,6 +549,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
         .eq("analysis_run_id", run.id)
         .is("superseded_at", null);
       ensureOk(count.error, "Recommandations réutilisées");
+      await recordUsage(supabase, { assessmentId: assessment.id, runId: run.id, model, outcome: "reused", modelCalled: false });
       return {
         ok: true,
         assessmentId: assessment.id,
@@ -501,7 +563,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     }
 
     const persistNoEvidence = async (reason: string, usedModel: string) => {
-      const { error } = await supabase.rpc("focus_persist_no_evidence", {
+      const { data, error } = await supabase.rpc("focus_persist_no_evidence", {
         p_school_id: context.schoolId,
         p_student_id: studentId,
         p_assessment_id: assessment.id,
@@ -510,12 +572,14 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
         p_reason: reason,
       });
       ensureOk(error, "Trace d’analyse insuffisante");
+      return typeof data === "string" ? data : null;
     };
 
     if (!aiInput.questions.some((question) => question.responseText.trim())) {
       // No answer: the model is not called at all.
       const reason = "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
-      await persistNoEvidence(reason, model);
+      const runId = await persistNoEvidence(reason, model);
+      await recordUsage(supabase, { assessmentId: assessment.id, runId, model, outcome: "insufficient_evidence", modelCalled: false });
       revalidatePath(`/app/eleves/${studentId}`);
       return {
         ok: true,
@@ -530,10 +594,12 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     }
 
     const limit = pedagogicalAiHourlyLimit();
+    // Every model call counts, including failed ones; reuses do not.
     const recent = await supabase
-      .from("ai_analysis_runs")
+      .from("ai_usage_events")
       .select("id", { count: "exact", head: true })
       .eq("teacher_id", teacherId)
+      .eq("model_called", true)
       .gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
     ensureOk(recent.error, "Analyses récentes");
     if ((recent.count ?? 0) >= limit)
@@ -550,6 +616,14 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       if (message === "OPENAI_API_KEY_MISSING")
         return { ok: false, error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée." };
       console.error("FOCUS pedagogical AI request failed", message);
+      await recordUsage(supabase, {
+        assessmentId: assessment.id,
+        runId: null,
+        model,
+        outcome: message === "OPENAI_TIMEOUT" ? "timeout" : /INVALID_OUTPUT|EMPTY_OUTPUT/.test(message) ? "invalid_output" : "model_error",
+        modelCalled: true,
+        latencyMs: error instanceof ModelCallError ? error.latencyMs : null,
+      });
       if (message === "OPENAI_TIMEOUT")
         return { ok: false, error: "Le service d’analyse n’a pas répondu à temps. Aucune recommandation n’a été enregistrée ; réessayez." };
       return { ok: false, error: "L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard." };
@@ -574,8 +648,10 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     if (validated.rejected.length)
       console.warn("FOCUS model candidates rejected", validated.rejected.map((item) => item.reason));
 
+    const called = { model: modelResult.model, modelCalled: true, latencyMs: modelResult.latencyMs, usage: modelResult.usage, rejectedCandidates: validated.rejected.length };
     if (validated.status === "insufficient_evidence") {
-      await persistNoEvidence(validated.insufficientReason, modelResult.model);
+      const runId = await persistNoEvidence(validated.insufficientReason, modelResult.model);
+      await recordUsage(supabase, { assessmentId: assessment.id, runId, outcome: "insufficient_evidence", ...called });
       revalidatePath(`/app/eleves/${studentId}`);
       return {
         ok: true,
@@ -595,7 +671,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       responseIdByQuestion: new Map(responses.map((response) => [response.question_id, response.id])),
       priorErrors: [],
     });
-    const { error } = await supabase.rpc("focus_persist_pedagogical_analysis", {
+    const { data: runId, error } = await supabase.rpc("focus_persist_pedagogical_analysis", {
       p_school_id: context.schoolId,
       p_student_id: studentId,
       p_assessment_id: assessment.id,
@@ -606,8 +682,15 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     });
     if (error) {
       console.error("FOCUS pedagogical analysis persistence failed", { code: error.code, message: error.message });
+      await recordUsage(supabase, { assessmentId: assessment.id, runId: null, outcome: "persistence_error", ...called });
       return { ok: false, error: "L’analyse a été produite mais n’a pas pu être enregistrée de façon sûre. Aucune recommandation n’a été conservée." };
     }
+    await recordUsage(supabase, {
+      assessmentId: assessment.id,
+      runId: typeof runId === "string" ? runId : null,
+      outcome: payload.recommendations.length > 0 ? "errors_found" : "no_error_observed",
+      ...called,
+    });
     revalidatePath(`/app/eleves/${studentId}`);
     revalidatePath(`/app/evaluations/${assessment.id}`);
     return {

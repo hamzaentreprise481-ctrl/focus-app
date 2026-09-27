@@ -49,13 +49,62 @@ export function openAiBaseUrl(value = process.env.OPENAI_BASE_URL) {
   return DEFAULT_BASE_URL;
 }
 
+export type ReasoningEffort = "low" | "medium" | "high";
+
+/** FOCUS_AI_REASONING_EFFORT, when valid; "low" otherwise. */
+export function pedagogicalReasoningEffort(value = process.env.FOCUS_AI_REASONING_EFFORT): ReasoningEffort {
+  return value === "medium" || value === "high" ? value : "low";
+}
+
+/** Token counts reported by the provider (absent fields stay null). */
+export interface ModelUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  totalTokens: number | null;
+}
+
+/** A failed model call keeps its latency; the message is a FOCUS code only. */
+export class ModelCallError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly latencyMs: number,
+  ) {
+    super(code);
+  }
+}
+
+const count = (value: unknown) => (Number.isInteger(value) && (value as number) >= 0 ? (value as number) : null);
+
+export function usageFrom(payload: unknown): ModelUsage {
+  const usage = (payload as { usage?: Record<string, unknown> } | null)?.usage;
+  const details = usage?.output_tokens_details as Record<string, unknown> | undefined;
+  return {
+    inputTokens: count(usage?.input_tokens),
+    outputTokens: count(usage?.output_tokens),
+    reasoningTokens: count(details?.reasoning_tokens),
+    totalTokens: count(usage?.total_tokens),
+  };
+}
+
 // Shared by the server action and the opt-in live campaign. Never log the
 // provider's error body: it may echo text from a student's response.
-export async function requestPedagogicalAnalysis(
+export async function requestPedagogicalAnalysisWithUsage(
   input: unknown,
-  options: { apiKey: string; model: string; fetchImpl?: typeof fetch; baseUrl?: string; timeoutMs?: number },
-): Promise<ModelPedagogicalAnalysis> {
-  let response: Response;
+  options: {
+    apiKey: string;
+    model: string;
+    fetchImpl?: typeof fetch;
+    baseUrl?: string;
+    timeoutMs?: number;
+    reasoningEffort?: ReasoningEffort;
+  },
+): Promise<{ analysis: ModelPedagogicalAnalysis; usage: ModelUsage; latencyMs: number }> {
+  const started = Date.now();
+  const fail = (code: string): never => {
+    throw new ModelCallError(code, Date.now() - started);
+  };
+  let response: Response | undefined;
   try {
     response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
       method: "POST",
@@ -67,7 +116,7 @@ export async function requestPedagogicalAnalysis(
       },
       body: JSON.stringify({
         model: options.model,
-        reasoning: { effort: "low" },
+        reasoning: { effort: options.reasoningEffort ?? "low" },
         input: [
           {
             role: "system",
@@ -90,21 +139,30 @@ export async function requestPedagogicalAnalysis(
     });
   } catch (error) {
     const name = error instanceof Error ? error.name : "";
-    throw new Error(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+    fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
   }
-  if (!response.ok) throw new Error(`OPENAI_REQUEST_FAILED:${response.status}`);
+  if (!response!.ok) fail(`OPENAI_REQUEST_FAILED:${response!.status}`);
 
   let payload: unknown;
   try {
-    payload = await response.json();
+    payload = await response!.json();
   } catch {
-    throw new Error("OPENAI_INVALID_OUTPUT");
+    fail("OPENAI_INVALID_OUTPUT");
   }
   const text = outputText(payload);
-  if (!text) throw new Error("OPENAI_EMPTY_OUTPUT");
+  if (!text) fail("OPENAI_EMPTY_OUTPUT");
+  let analysis: ModelPedagogicalAnalysis;
   try {
-    return JSON.parse(text) as ModelPedagogicalAnalysis;
+    analysis = JSON.parse(text) as ModelPedagogicalAnalysis;
   } catch {
-    throw new Error("OPENAI_INVALID_OUTPUT");
+    return fail("OPENAI_INVALID_OUTPUT");
   }
+  return { analysis, usage: usageFrom(payload), latencyMs: Date.now() - started };
+}
+
+export async function requestPedagogicalAnalysis(
+  input: unknown,
+  options: Parameters<typeof requestPedagogicalAnalysisWithUsage>[1],
+): Promise<ModelPedagogicalAnalysis> {
+  return (await requestPedagogicalAnalysisWithUsage(input, options)).analysis;
 }

@@ -18,7 +18,7 @@ est hors périmètre.
 
 ## Migrations à appliquer (dans l’ordre)
 
-`20260926120000` → `20260926190000` (liste et contenu dans le README). Elles
+`20260926120000` → `20260927100000` (liste et contenu dans le README). Elles
 ont été exécutées ensemble sur PostgreSQL (PGlite) avec les rôles Supabase et
 toute la suite de tests ; la migration du programme a été rejouée sur une
 réplique des identifiants live : 44 UUID conservés, 55 nœuds ajoutés, aucune

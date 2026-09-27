@@ -58,6 +58,7 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 | `20260926180000_teacher_work_queue` | Lecture « À traiter » du tableau de bord (SECURITY INVOKER) |
 | `20260926190000_security_performance_hardening` | Recommandations des advisors Supabase : anon sans accès aux tables, `(select auth.uid())` dans les policies, index des clés étrangères |
 | `20260927090000_schema_version` | `focus_schema_version()` : version du schéma lue par `/api/health` (seule fonction SECURITY DEFINER ouverte à anon, ne renvoie qu’une version) |
+| `20260927100000_ai_usage_events` | Usage IA par requête (modèle, latence, jetons, issue, réutilisation), sans contenu ni identifiant d’élève ; voir [docs/AI_USAGE.md](./docs/AI_USAGE.md) |
 
 Le code de cette branche a besoin de ces migrations. Sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. Les appliquer **dans l’ordre**, d’abord sur une branche Supabase ou une copie, puis relancer les advisors et le parcours professeur. Ne rien appliquer en production sans l’accord du propriétaire.
 
@@ -79,7 +80,8 @@ Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté 
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production et Preview | Projet Supabase FOCUS ; clé publiable, jamais `service_role` |
 | `OPENAI_API_KEY` | Serveur uniquement | Analyse pédagogique ; jamais en `NEXT_PUBLIC_` |
 | `FOCUS_AI_MODEL` | Serveur | Modèle d’analyse (défaut `gpt-5.6-terra`) |
-| `FOCUS_AI_HOURLY_LIMIT` | Serveur | Analyses par professeur et par heure (défaut 150) |
+| `FOCUS_AI_HOURLY_LIMIT` | Serveur | Appels au modèle par professeur et par heure (défaut 150) |
+| `FOCUS_AI_REASONING_EFFORT` | Serveur | `low` (défaut), `medium` ou `high` |
 | `FOCUS_DEMO_REQUEST_URL` | Facultatif | Formulaire HTTPS vérifié ; sinon la vitrine indique que les demandes ne sont pas ouvertes |
 
 `SUPABASE_SERVICE_ROLE_KEY` ne sert qu’aux commandes d’administration du programme (`npm run curriculum -- apply|export`) dans un shell local ; jamais dans Vercel ni dans l’application (un test le vérifie). Redéployer après toute modification des variables `NEXT_PUBLIC_`.

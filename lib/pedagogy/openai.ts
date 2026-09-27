@@ -1,8 +1,12 @@
 import "server-only";
 
 import type { AiCurriculumNode } from "@/lib/curriculum/graph";
-import type { ModelPedagogicalAnalysis } from "@/lib/pedagogy/types";
-import { openAiBaseUrl, requestPedagogicalAnalysis } from "@/lib/pedagogy/openai-client";
+import {
+  ModelCallError,
+  openAiBaseUrl,
+  pedagogicalReasoningEffort,
+  requestPedagogicalAnalysisWithUsage,
+} from "@/lib/pedagogy/openai-client";
 
 interface AnalyzeQuestionInput {
   assessmentId: string;
@@ -92,13 +96,11 @@ export async function probePedagogicalAiConnection(): Promise<{
   }
 }
 
-export async function analyzePedagogicalEvidence(
-  input: PedagogicalAiInput,
-): Promise<{ model: string; analysis: ModelPedagogicalAnalysis }> {
+export async function analyzePedagogicalEvidence(input: PedagogicalAiInput) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY_MISSING");
+  if (!apiKey) throw new ModelCallError("OPENAI_API_KEY_MISSING", 0);
 
   const model = pedagogicalAiModel();
-  const analysis = await requestPedagogicalAnalysis(input, { apiKey, model });
-  return { model, analysis };
+  const result = await requestPedagogicalAnalysisWithUsage(input, { apiKey, model, reasoningEffort: pedagogicalReasoningEffort() });
+  return { model, ...result };
 }

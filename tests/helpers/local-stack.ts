@@ -241,7 +241,13 @@ export async function startModelStandIn(port: number, script: ScriptedError[] = 
     calls.push(body);
     const input = JSON.parse(body.input[1].content[0].text) as AiInput;
     const output = scriptedAnalysis(input, script);
-    res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(output) }] }] }));
+    // Fixed, clearly synthetic token counts so usage recording is exercised.
+    res.end(
+      JSON.stringify({
+        output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(output) }] }],
+        usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100, output_tokens_details: { reasoning_tokens: 10 } },
+      }),
+    );
   });
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
   return {

@@ -3,7 +3,7 @@
 -- one DO block that raises at the first failed check. Success prints
 -- "FOCUS staging verification: OK".
 --
--- Checks: schema version; the 44 curriculum UUIDs captured from live on
+-- Checks: schema version (20260927100000); the 44 curriculum UUIDs captured from live on
 -- 2026-09-26 are unchanged; the Seconde graph (99 active nodes, 330
 -- relationships) and its catalogue (272 objectives, 99 typical errors,
 -- 99 remediations); RLS on every public table; nothing granted to anon;
@@ -22,8 +22,8 @@ begin
   -- 1. Schema version (Supabase records each migration it applied).
   if to_regclass('supabase_migrations.schema_migrations') is not null then
     select max(version) into v_version from supabase_migrations.schema_migrations;
-    if v_version is distinct from '20260927090000' then
-      raise exception 'schema version is %, expected 20260927090000', v_version;
+    if v_version is distinct from '20260927100000' then
+      raise exception 'schema version is %, expected 20260927100000', v_version;
     end if;
   end if;
 
@@ -121,7 +121,7 @@ begin
     'focus_save_assessment', 'focus_save_assessment_questions', 'focus_save_student_responses',
     'focus_persist_pedagogical_analysis', 'focus_persist_no_evidence', 'focus_review_pedagogical_recommendation',
     'focus_teacher_work_queue', 'focus_curriculum_graph', 'focus_schema_version', 'focus_import_curriculum',
-    'focus_import_curriculum_catalogue'
+    'focus_import_curriculum_catalogue', 'focus_record_ai_usage'
   ]) as f
   where not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = f);
   if v_missing is not null then raise exception 'missing functions: %', v_missing; end if;

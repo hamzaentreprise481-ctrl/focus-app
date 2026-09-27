@@ -42,7 +42,7 @@ test("staging verification fails on a changed UUID, a missing migration or an an
   try {
     const cases: Array<[string, string, RegExp]> = [
       ["update public.curriculum_nodes set active = false where code = 'MATH.ALG.DISTRIBUTIVITE'", "", /live curriculum identifiers changed or inactive: MATH\.ALG\.DISTRIBUTIVITE/],
-      ["delete from supabase_migrations.schema_migrations where version = '20260927090000'", "", /schema version is 20260926190000/],
+      ["delete from supabase_migrations.schema_migrations where version = '20260927100000'", "", /schema version is 20260927090000/],
       ["grant select on public.profiles to anon", "", /anon has privileges on: profiles/],
       ["update public.curriculum_typical_errors set active = false where code = (select min(code) from public.curriculum_typical_errors)", "", /expected 99 typical errors, found 98/],
     ];

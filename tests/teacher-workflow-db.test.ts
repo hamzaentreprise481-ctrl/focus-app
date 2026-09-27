@@ -483,3 +483,31 @@ test("a teacher of another subject in the same class cannot record or supersede 
   // The maths teacher's analysis is untouched.
   assert.equal(await activeRuns(assessmentId, a.students[0]), 1);
 });
+
+test("AI usage is recorded only through the audited function, for the caller's own assessments", async () => {
+  const assessmentId = await assessment();
+  const record = (user: string, overrides: Record<string, unknown> = {}) => {
+    const values = { run: null, outcome: "errors_found", called: true, latency: 1200, input: 900, output: 150, reasoning: 40, total: 1050, ...overrides };
+    return as<{ id: string }>(
+      user,
+      "select public.focus_record_ai_usage($1, $2, 'test-model', 'low', $3, $4, $5, $6, $7, $8, $9, 2) as id",
+      [assessmentId, values.run, values.outcome, values.called, values.latency, values.input, values.output, values.reasoning, values.total],
+    );
+  };
+  await record(a.teacher);
+  await record(a.teacher, { outcome: "reused", called: false, latency: null, input: null, output: null, reasoning: null, total: null });
+  const rows = await teacher<{ outcome: string; model_called: boolean; total_tokens: number | null; teacher_id: string }>(
+    "select outcome, model_called, total_tokens, teacher_id from public.ai_usage_events order by created_at, outcome",
+  );
+  assert.deepEqual(rows.map((row) => [row.outcome, row.model_called, row.total_tokens]).sort(), [["errors_found", true, 1050], ["reused", false, null]]);
+
+  // A reuse with tokens, an unknown outcome, another teacher, direct writes: refused.
+  await assert.rejects(record(a.teacher, { outcome: "reused", called: false }), /check/);
+  await assert.rejects(record(a.teacher, { outcome: "great_success" }), /check/);
+  await assert.rejects(record(otherTeacher), /not accessible/);
+  await assert.rejects(teacher("insert into public.ai_usage_events(school_id, teacher_id, model, outcome, model_called) values ($1, $2, 'm', 'reused', false)", [a.school, a.teacher]), /permission denied/);
+  await assert.rejects(teacher("update public.ai_usage_events set total_tokens = 0"), /permission denied/);
+  assert.deepEqual(await as(otherTeacher, "select 1 from public.ai_usage_events"), []);
+  // A run of another assessment cannot be attached.
+  await assert.rejects(record(a.teacher, { run: randomUUID() }), /run not accessible/);
+});

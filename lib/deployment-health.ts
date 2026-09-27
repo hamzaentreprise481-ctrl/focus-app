@@ -5,7 +5,7 @@
 import { authConfig } from "@/lib/auth/config";
 
 /** The last migration this code needs; tests pin it to the newest file. */
-export const REQUIRED_SCHEMA_VERSION = "20260927090000";
+export const REQUIRED_SCHEMA_VERSION = "20260927100000";
 
 export interface DeploymentHealth {
   service: "focus-teacher";

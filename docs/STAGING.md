@@ -1,6 +1,6 @@
 # Staging — rehearse the migrations on a real Supabase database
 
-The eight migrations after the live head (`20260926120000` → `20260927090000`)
+The nine migrations after the live head (`20260926120000` → `20260927100000`)
 have only run on PostgreSQL in PGlite. Before the live project, they must run
 on a **real Supabase database that holds a copy of the live data**, because the
 key check — the 44 curriculum UUIDs stay the same — is only meaningful on live
@@ -48,9 +48,9 @@ returns `ce217d6976dbfcbf2f714e3143cea930` (the live fingerprint).
 
 ```bash
 supabase link --project-ref <staging-ref>
-supabase db push --dry-run     # lists exactly the eight new migrations
+supabase db push --dry-run     # lists exactly the nine new migrations
 supabase db push
-supabase migration list        # now ends at 20260927090000
+supabase migration list        # now ends at 20260927100000
 ```
 
 ## 3. Verify
