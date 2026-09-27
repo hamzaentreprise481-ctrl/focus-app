@@ -128,7 +128,7 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
 
         <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
           <h2 className="text-[15px] font-semibold text-ink">
-            Difficultés fréquentes par compétence
+            Niveaux fragiles par compétence
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
             Part des élèves encore fragiles ou non maîtrisés, parmi ceux évalués
@@ -161,7 +161,7 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
 
       <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
         <h2 className="text-[15px] font-semibold text-ink">
-          Élèves en difficulté sur cette évaluation
+          Résultats à regarder de plus près
         </h2>
         <p className="mt-1 text-sm text-ink-soft">
           Comparés uniquement à leurs évaluations antérieures dans cette classe,
@@ -187,7 +187,7 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
                   </Link>
                   <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
                 </div>
-                <span className="shrink-0 tabular-nums text-attention">
+                <span className="shrink-0 tabular-nums text-ink-soft">
                   {formatScore(s.score)} / 20
                 </span>
               </li>

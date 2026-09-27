@@ -1045,7 +1045,7 @@ export function analyzeEvaluation(
 
       let reason: string | null = null;
       if (gap !== null && gap >= 2.5) {
-        reason = `en retrait de ${round1(gap)} pts par rapport à sa moyenne des évaluations antérieures`;
+        reason = `en retrait de ${fr(gap)} points par rapport à sa moyenne des évaluations antérieures`;
       } else if (weakSkillCount >= 2) {
         reason = `${weakSkillCount} compétences en difficulté sur cette évaluation`;
       } else if (gap !== null && gap >= 1.5 && weakSkillCount >= 1) {

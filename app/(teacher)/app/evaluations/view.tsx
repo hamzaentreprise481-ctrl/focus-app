@@ -78,7 +78,7 @@ export default function EvaluationsPage() {
                   {analysis.presentCount}
                   {analysis.absentStudents.length > 0 && (
                     <span className="text-muted">
-                      · {analysis.absentStudents.length} absent(s)
+                      · {analysis.absentStudents.length} absent{analysis.absentStudents.length > 1 ? "s" : ""}
                     </span>
                   )}
                 </div>

@@ -27,7 +27,7 @@ function EvolutionCell({ evolution }: { evolution: number | null }) {
     );
   if (evolution < -0.3)
     return (
-      <span className="inline-flex items-center gap-1 text-attention">
+      <span className="inline-flex items-center gap-1 text-watch">
         <TrendingDown className="h-3.5 w-3.5" />
         {formatScore(evolution)}
       </span>
