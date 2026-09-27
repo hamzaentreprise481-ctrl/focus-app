@@ -52,14 +52,19 @@ export function migrationFiles() {
     .map((name) => path.join(MIGRATIONS_DIR, name));
 }
 
-export async function createMigratedDatabase(options: { upTo?: string } = {}) {
+export async function createMigratedDatabase(options: { upTo?: string; recordVersions?: boolean } = {}) {
   const db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(SUPABASE_PLATFORM);
+  // Like the Supabase CLI: each applied migration is recorded by version.
+  if (options.recordVersions)
+    await db.exec("create schema supabase_migrations; create table supabase_migrations.schema_migrations (version text primary key, name text)");
   for (const file of migrationFiles()) {
     const name = path.basename(file);
     if (options.upTo && name > options.upTo) break;
     try {
       await db.exec(readFileSync(file, "utf8"));
+      if (options.recordVersions)
+        await db.query("insert into supabase_migrations.schema_migrations(version, name) values ($1, $2)", [name.slice(0, 14), name.slice(15, -4)]);
     } catch (error) {
       throw new Error(
         `Migration ${name} failed: ${error instanceof Error ? error.message : String(error)}`,

@@ -276,7 +276,7 @@ export async function startLocalStack(options: {
   /** PostgREST max-rows of the stand-in (default 1000, as on Supabase). */
   maxRows?: number;
 }): Promise<LocalStack> {
-  const db = await createMigratedDatabase({ upTo: options.upTo });
+  const db = await createMigratedDatabase({ upTo: options.upTo, recordVersions: true });
   const ids = await seedLocalSchool(db);
   const accounts: LocalAccount[] = [
     { email: LOCAL_TEACHER.email, password: LOCAL_TEACHER.password, userId: LOCAL_TEACHER.id },

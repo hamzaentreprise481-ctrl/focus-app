@@ -35,8 +35,12 @@ prouver avec le vrai modèle. Branche : `claude/finish-focus-v1`.
   `api.openai.com`. `npm run test:ai-live` s’arrête donc avec « BLOCKED ».
 - Aucune Preview Vercel de cette branche n’a été testée : l’accès au projet
   Vercel est refusé (403) et `*.vercel.app` n’est pas joignable d’ici.
-- La route `/api/ai-health` (Preview seulement) contrôle l’accès au modèle par
-  `GET /v1/models/{model}` ; un succès ne prouve pas qu’une analyse réussit.
+- `/api/health` (Preview et local seulement) indique le commit déployé, la
+  présence des variables Supabase et OpenAI, la version du schéma de la base
+  et un accès au modèle par `GET /v1/models/{model}` ; un succès ne prouve
+  pas qu’une analyse réussit. Le workflow `FOCUS Preview verification` le lit
+  pour chaque déploiement Vercel et n’est vert que si ce déploiement exécute
+  exactement ce commit et est prêt.
 
 ## À faire, dans cet ordre
 

@@ -40,7 +40,9 @@ test("no SECURITY DEFINER function is executable by anon, and each pins its sear
     await rows(`
       select p.proname from pg_proc p
       where p.pronamespace = 'public'::regnamespace and p.prosecdef and ${NOT_EXTENSION}
-        and has_function_privilege('anon', p.oid, 'execute')`),
+        and has_function_privilege('anon', p.oid, 'execute')
+        -- The one allowed: returns the schema version string, nothing else.
+        and p.proname <> 'focus_schema_version'`),
     [],
   );
   assert.deepEqual(
@@ -96,4 +98,20 @@ test("anon is refused; a signed-in teacher still reads exactly their own rows", 
   } finally {
     await db.exec("rollback");
   }
+});
+
+test("focus_schema_version reports the newest applied migration, and only that", async () => {
+  await db.exec("begin");
+  try {
+    await db.exec("create schema supabase_migrations; create table supabase_migrations.schema_migrations (version text primary key, name text)");
+    await db.exec("insert into supabase_migrations.schema_migrations values ('20260925214642', 'a'), ('20260927090000', 'b')");
+    await db.exec("set local role anon");
+    const [{ v }] = await rows<{ v: string }>("select public.focus_schema_version() as v");
+    assert.equal(v, "20260927090000");
+    await assert.rejects(db.query("select 1 from supabase_migrations.schema_migrations"), /permission denied/);
+  } finally {
+    await db.exec("rollback");
+  }
+  const [{ v }] = await rows<{ v: string | null }>("select public.focus_schema_version() as v");
+  assert.equal(v, null, "no migration table: no version, no error");
 });

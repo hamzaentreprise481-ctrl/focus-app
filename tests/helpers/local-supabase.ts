@@ -428,6 +428,8 @@ export async function startLocalSupabase(
   // --- Auth ------------------------------------------------------------------
 
   async function handleAuth(req: IncomingMessage, res: ServerResponse, url: URL) {
+    if (url.pathname === "/auth/v1/health" && req.method === "GET")
+      return send(res, 200, { version: "local-stand-in", name: "GoTrue", description: "FOCUS test stand-in" });
     if (url.pathname === "/auth/v1/token" && req.method === "POST") {
       const body = JSON.parse((await readBody(req)) || "{}") as Record<string, string>;
       if (url.searchParams.get("grant_type") === "refresh_token") {

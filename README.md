@@ -57,6 +57,7 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 | `20260926170000_curriculum_catalogue_work_seconde_2026` | Catalogue de Seconde (272 objectifs, 99 erreurs types, 99 remédiations) |
 | `20260926180000_teacher_work_queue` | Lecture « À traiter » du tableau de bord (SECURITY INVOKER) |
 | `20260926190000_security_performance_hardening` | Recommandations des advisors Supabase : anon sans accès aux tables, `(select auth.uid())` dans les policies, index des clés étrangères |
+| `20260927090000_schema_version` | `focus_schema_version()` : version du schéma lue par `/api/health` (seule fonction SECURITY DEFINER ouverte à anon, ne renvoie qu’une version) |
 
 Le code de cette branche a besoin de ces migrations. Sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. Les appliquer **dans l’ordre**, d’abord sur une branche Supabase ou une copie, puis relancer les advisors et le parcours professeur. Ne rien appliquer en production sans l’accord du propriétaire.
 
@@ -101,6 +102,18 @@ npm run check:deployment -- https://votre-domaine-focus
 ```
 
 Les tests de base de données exécutent toutes les migrations sur PostgreSQL (PGlite) avec les rôles `anon`, `authenticated` et `service_role` : ils prouvent le comportement du schéma du dépôt, pas la configuration d’un projet Supabase réel. `check:deployment` ne fait que des lectures anonymes.
+
+### Vérification d’une Preview
+
+Pour chaque déploiement Vercel, le workflow **FOCUS Preview verification** (`.github/workflows/preview-verify.yml`) lit `/api/health` sur l’URL de **ce** déploiement et publie un statut « FOCUS Preview verified (…) » sur le commit :
+
+- `VERIFIED` : le déploiement exécute exactement ce commit ; Supabase est configuré et joignable, le schéma est à jour (`focus_schema_version()` ≥ la version requise par le code), la clé OpenAI est présente et le modèle accessible ;
+- `NOT READY` : bon commit, mais l’un de ces éléments manque (le détail est dans le résumé du job) ;
+- `UNVERIFIED` : rien n’est prouvé (protection Vercel, autre commit, URL injoignable). Avec Vercel Authentication, créer un secret « Protection Bypass for Automation » et l’enregistrer comme secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`.
+
+`/api/health` n’existe pas en production et ne renvoie que des booléens, des versions, le nom du modèle et le commit — jamais une valeur de variable. À la main : `node scripts/verify-preview.mjs <url> <sha>`.
+
+Ce statut prouve la configuration, pas le parcours : la connexion réelle et l’analyse d’une copie restent à tester sur la Preview.
 
 ## Limites connues
 
