@@ -60,6 +60,7 @@ test("a persistent difficulty cites the dated competency observations it rests o
   // Its reliability is that of the explicit competency observations.
   assert.equal(analysis.confidence, analysis.skillMasteries.find((m) => m.skillId === "k")!.confidence);
   assert.ok(analysis.recommendedActions.every((a) => a.because === "Fractions"));
+  assert.equal(analysis.signalBasis, "3 observations de « Fractions »");
 });
 
 test("grades alone never produce a competency in the evidence", () => {
@@ -90,6 +91,7 @@ test("reliability follows sample size and consistency, never severity", () => {
   assert.equal(absent.confidence, "limitee");
   assert.match(absent.evidence.find((e) => e.label === "Absence")!.detail, /« Contrôle 2 » \(02\/10\/2026\)/);
   assert.equal(absent.scoredCount, 2);
+  assert.equal(absent.signalBasis, "2 évaluations notées");
 });
 
 test("blank, absent and competency-only results stay distinct in the evidence", () => {

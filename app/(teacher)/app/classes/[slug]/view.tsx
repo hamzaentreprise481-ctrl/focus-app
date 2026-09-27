@@ -9,6 +9,11 @@ import { analyzeClass } from "@/lib/analysis";
 import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { useSchoolData } from "@/lib/school-data-context";
 import { StudentRoster } from "@/components/students/student-roster";
+import {
+  ClassRecentEvaluations,
+  ClassSkillSignals,
+  ClassStudentGroups,
+} from "@/components/classes/class-overview";
 
 export default function ClassRosterPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -17,95 +22,68 @@ export default function ClassRosterPage() {
   if (!loaded || storageError) return <DataLoadState />;
   if (!dataset.classes.some((c) => c.id === slug)) notFound();
 
-  const { classInfo, studentAnalyses, weakestSkills } = analyzeClass(
-    slug,
-    dataset,
-  );
-
+  const overview = analyzeClass(slug, dataset);
+  const { classInfo, studentAnalyses } = overview;
+  const evaluations = dataset.evaluations
+    .filter((e) => e.classId === slug)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const latest = evaluations[0];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <DataLoadState />
-      <div>
-        <p className="text-sm text-ink-soft">{classInfo.subject}</p>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
-          {classInfo.name}
-        </h1>
-      </div>
-      <ExportPdfButton target={{ kind: "class", id: slug }} />
-      <nav
-        aria-label="Dans cette classe"
-        className="flex flex-wrap items-center gap-4 text-sm"
-      >
-        <a href="#eleves" className="text-brand">
-          Élèves
-        </a>
-        <a href="#evaluations" className="text-brand">
-          Évaluations
-        </a>
-        <a href="#competences" className="text-brand">
-          Compétences
-        </a>
-        <Button asChild variant="secondary">
-          <Link href={`/app/evaluations/nouvelle?classe=${encodeURIComponent(slug)}`}>Ajouter une évaluation</Link>
-        </Button>
-      </nav>
-      <section id="eleves" className="scroll-mt-5">
-        <h2 className="mb-4 text-lg font-semibold">Élèves</h2>
-        <StudentRoster analyses={studentAnalyses} skills={dataset.skills} />
-      </section>
-      <section
-        id="evaluations"
-        className="scroll-mt-5 border-t border-border pt-6"
-      >
-        <h2 className="text-lg font-semibold">Évaluations de la classe</h2>
-        <ul className="mt-4 divide-y divide-border">
-          {dataset.evaluations
-            .filter((e) => e.classId === slug)
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .map((e) => (
-              <li key={e.id}>
-                <Link
-                  href={`/app/evaluations/${e.id}`}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
-                >
-                  <span className="font-medium">{e.name}</span>
-                  <span className="text-ink-soft">{formatDate(e.date)} →</span>
-                </Link>
-              </li>
-            ))}
-        </ul>
-      </section>
-      <section
-        id="competences"
-        className="scroll-mt-5 border-t border-border pt-6"
-      >
-        <h2 className="text-lg font-semibold">Compétences à explorer</h2>
-        <p className="mt-2 text-sm text-ink-soft">
-          Synthèse des niveaux explicitement renseignés. Ces indices ne sont pas
-          des taux de réussite mesurés.
-        </p>
-        <ul className="mt-4 divide-y divide-border">
-          {weakestSkills.map((s) => (
-            <li
-              key={s.skillId}
-              className="flex flex-wrap justify-between gap-3 py-3 text-sm"
-            >
-              <span>{s.name}</span>
-              <span className="text-ink-soft">
-                Indice {s.percent}/100 · {s.sampleSize} élèves documentés
-              </span>
-            </li>
-          ))}
-        </ul>
-        {!weakestSkills.length && (
-          <p className="mt-3 text-sm text-ink-soft">
-            Renseignez des compétences lors d’une évaluation pour les retrouver
-            ici.
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-ink-soft">
+            {classInfo.subject}
+            {classInfo.level ? ` · ${classInfo.level}` : ""}
           </p>
-        )}
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+            {classInfo.name}
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            {classInfo.studentIds.length} élève{classInfo.studentIds.length > 1 ? "s" : ""} ·{" "}
+            {evaluations.length} évaluation{evaluations.length > 1 ? "s" : ""}
+            {latest ? ` · dernière le ${formatDate(latest.date)}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild>
+            <Link href={`/app/evaluations/nouvelle?classe=${encodeURIComponent(slug)}`}>
+              Ajouter une évaluation
+            </Link>
+          </Button>
+          <ExportPdfButton target={{ kind: "class", id: slug }} />
+        </div>
+      </header>
+
+      {!classInfo.studentIds.length ? (
+        <p className="rounded-xl border border-border bg-surface p-5 text-sm text-ink-soft">
+          Aucun élève n’est inscrit dans cette classe. Les inscriptions sont
+          gérées par l’établissement ; elles apparaîtront ici dès qu’elles
+          seront enregistrées.
+        </p>
+      ) : !evaluations.length ? (
+        <p className="rounded-xl border border-border bg-surface p-5 text-sm text-ink-soft">
+          Aucune évaluation pour l’instant. Ajoutez la première : FOCUS
+          proposera une lecture de la classe dès que des résultats seront
+          saisis.
+        </p>
+      ) : (
+        <>
+          <ClassStudentGroups overview={overview} />
+          <ClassSkillSignals overview={overview} dataset={dataset} />
+        </>
+      )}
+
+      <ClassRecentEvaluations overview={overview} dataset={dataset} />
+
+      <section id="eleves" className="scroll-mt-5" aria-labelledby="roster-title">
+        <h2 id="roster-title" className="mb-4 text-lg font-semibold">
+          Tous les élèves
+        </h2>
+        <StudentRoster analyses={studentAnalyses} skills={dataset.skills} />
       </section>
     </div>
   );
 }
-

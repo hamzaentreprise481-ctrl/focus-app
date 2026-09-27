@@ -63,8 +63,10 @@ export interface StudentAnalysis {
   evidence: EvidenceItem[];
   /** How far the pattern can be trusted: sample size and consistency. */
   confidence: ConfidenceLevel;
-  /** Evaluations with a recorded score ("Basé sur N évaluations"). */
+  /** Evaluations with a recorded score. */
   scoredCount: number;
+  /** What the reliability rests on, for "Basé sur …". */
+  signalBasis: string;
   skillMasteries: SkillMastery[];
   weakestSkill: (SkillMastery & { percent: number }) | null;
   timeline: { evaluation: Evaluation; score: number | null; absent: boolean }[];
@@ -712,6 +714,11 @@ export function analyzeStudent(
     confidence = atMost(bySample, "moderee");
   else confidence = bySample;
 
+  const signalBasis =
+    pattern === "difficulte_persistante"
+      ? `${persistentSkill!.testedCount} observation${persistentSkill!.testedCount > 1 ? "s" : ""} de « ${persistentSkill!.name} »`
+      : `${n} évaluation${n > 1 ? "s" : ""} notée${n > 1 ? "s" : ""}`;
+
   const tracedActions = recommendedActions.map((action) =>
     actionBecause[0] ? { ...action, because: actionBecause[0] } : action,
   );
@@ -731,6 +738,7 @@ export function analyzeStudent(
     evidence,
     confidence,
     scoredCount: n,
+    signalBasis,
     skillMasteries,
     weakestSkill,
     timeline,
@@ -778,6 +786,8 @@ export interface SkillSignal {
   persistent: number;
   /** Levels rising between first and last observation. */
   improving: number;
+  /** Students whose last level is fragile or not mastered, persistent first. */
+  concernedStudentIds: string[];
   confidence: ConfidenceLevel;
 }
 
@@ -853,10 +863,17 @@ export function analyzeClass(
   const classEvaluations = dataset.evaluations.filter((e) => e.classId === classId);
   const skillSignals: SkillSignal[] = dataset.skills
     .map((skill) => {
-      const masteries = studentAnalyses
-        .map((a) => a.skillMasteries.find((m) => m.skillId === skill.id))
-        .filter((m): m is SkillMastery => !!m && m.testedCount > 0);
+      const observed = studentAnalyses.flatMap((a) => {
+        const mastery = a.skillMasteries.find((m) => m.skillId === skill.id);
+        return mastery && mastery.testedCount > 0 ? [{ studentId: a.studentId, mastery }] : [];
+      });
+      const masteries = observed.map((o) => o.mastery);
       const weak = (level?: SkillLevel) => level === "fragile" || level === "non_maitrise";
+      const isPersistent = (m: SkillMastery) => m.lastTwoLevels.length === 2 && m.lastTwoLevels.every(weak);
+      const concernedStudentIds = observed
+        .filter((o) => weak(o.mastery.lastTwoLevels.at(-1)))
+        .sort((a, b) => Number(isPersistent(b.mastery)) - Number(isPersistent(a.mastery)))
+        .map((o) => o.studentId);
       const evaluationCount = classEvaluations.filter(
         (evaluation) =>
           evaluation.skillIds.includes(skill.id) &&
@@ -880,9 +897,10 @@ export function analyzeClass(
         name: skill.name,
         evaluationCount,
         documented,
-        fragileNow: masteries.filter((m) => weak(m.lastTwoLevels.at(-1))).length,
-        persistent: masteries.filter((m) => m.lastTwoLevels.length === 2 && m.lastTwoLevels.every(weak)).length,
+        fragileNow: concernedStudentIds.length,
+        persistent: masteries.filter(isPersistent).length,
         improving: masteries.filter((m) => m.trend === "hausse").length,
+        concernedStudentIds,
         confidence,
       };
     })

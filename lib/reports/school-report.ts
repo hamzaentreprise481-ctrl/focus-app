@@ -52,11 +52,21 @@ function confirmedObservations(pedagogy: ReportPedagogy) {
 /** Export only the requested resource, using the same snapshot as the screen. */
 export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarget, pedagogy?: ReportPedagogy): SchoolReport {
   if (target.kind === "class") {
-    const { classInfo, studentAnalyses, weakestSkills } = analyzeClass(target.id, dataset);
+    const { classInfo, studentAnalyses, weakestSkills, groups, skillSignals } = analyzeClass(target.id, dataset);
+    const names = (list: { name: string }[]) => (list.length ? list.map((a) => a.name).join(", ") : "Aucun élève");
+    const nameOf = new Map(studentAnalyses.map((a) => [a.studentId, a.name]));
+    const signals = skillSignals.filter((signal) => signal.fragileNow > 0);
     return {
       title: `Suivi de classe - ${classInfo.name}`,
       subtitle: `${classInfo.subject} · ${studentAnalyses.length} élèves`,
       sections: [
+        { title: "Où porter son attention (règles explicites, à confirmer)", paragraphs: [
+          `À examiner : ${names(groups.toExamine)}`,
+          `À suivre : ${names(groups.toFollow)}`,
+          `En progrès : ${names(groups.improving)}`,
+          `Recul insuffisant : ${names(groups.insufficient)}`,
+        ] },
+        { title: "Points à travailler (niveaux de compétence saisis)", paragraphs: signals.length ? signals.map((signal) => `${signal.name} : ${signal.fragileNow} sur ${signal.documented} élèves documentés au dernier niveau fragile ou non maîtrisé${signal.persistent ? `, dont ${signal.persistent} sur deux observations consécutives` : ""} · ${CONFIDENCE_LABEL[signal.confidence]} · ${signal.evaluationCount} évaluation(s)\nÉlèves concernés : ${signal.concernedStudentIds.map((id) => nameOf.get(id) ?? "Élève").join(", ")}`) : ["Aucun niveau fragile ou non maîtrisé dans les dernières observations saisies."] },
         { title: "Situation des élèves", paragraphs: studentAnalyses.map((a) => `${a.name} · ${score(a.average)}\n${a.summary}`) },
         { title: "Compétences à explorer", paragraphs: weakestSkills.length ? weakestSkills.map((s) => `${s.name} : indice ${s.percent}/100 · ${s.sampleSize} élèves documentés. Cet indice n'est pas un taux de réussite.`) : ["Aucune compétence documentée."] },
         { title: "Évaluations de la classe", paragraphs: dataset.evaluations.filter((e) => e.classId === target.id).toSorted((a, b) => b.date.localeCompare(a.date)).map((e) => `${formatDate(e.date)} · ${e.name}`) },
@@ -69,7 +79,13 @@ export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarg
     return {
       title: `Dossier élève - ${a.name}`, subtitle: `${c?.name ?? ""} · ${c?.subject ?? ""}`,
       sections: [
-        { title: "Synthèse pédagogique", paragraphs: [a.summary, a.narrative, `Moyenne des notes renseignées : ${score(a.average)}`] },
+        { title: "Synthèse pédagogique", paragraphs: [
+          a.summary,
+          `Fiabilité du signal : ${CONFIDENCE_LABEL[a.confidence]} · basé sur ${a.signalBasis}`,
+          ...a.evidence.map((item) => `${item.label} : ${item.detail}`),
+          a.narrative,
+          `Moyenne des notes renseignées : ${score(a.average)}`,
+        ] },
         { title: "Compétences observées", paragraphs: a.skillMasteries.map((s) => `${s.name} : ${s.testedCount ? SKILL_LEVEL_LABEL[s.lastTwoLevels.at(-1)!] : "Non renseigné"} · ${s.testedCount} observation(s) · ${CONFIDENCE_LABEL[s.confidence]}`) },
         { title: "Observations datées", paragraphs: studentEvidence(target.id, a.classId, dataset).map((row) => {
           const state = row.state === "absent" ? "Absent(e)" : row.state === "missing" ? "Non renseigné" : row.state === "skills_only" ? "Compétences uniquement" : score(row.score);
@@ -77,7 +93,7 @@ export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarg
           return `${formatDate(row.evaluation.date)} · ${row.evaluation.name}\n${state}${levels.length ? "\n" + levels.join(" · ") : ""}`;
         }) },
         ...(pedagogy ? [{ title: "Observations sur copies confirmées par le professeur", paragraphs: confirmedObservations(pedagogy) }] : []),
-        { title: "Pistes à confirmer par le professeur", paragraphs: a.recommendedActions.length ? a.recommendedActions.map((action) => `${action.label} · durée indicative : ${action.minutes} min`) : ["Poursuivre ou compléter les observations."] },
+        { title: "Pistes à confirmer par le professeur", paragraphs: a.recommendedActions.length ? a.recommendedActions.map((action) => `${action.label} · durée indicative : ${action.minutes} min${action.because ? ` · en lien avec : ${action.because}` : ""}`) : ["Poursuivre ou compléter les observations."] },
       ],
     };
   }
