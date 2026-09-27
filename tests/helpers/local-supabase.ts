@@ -418,6 +418,34 @@ export async function startLocalSupabase(
         return send(res, 204);
       }
 
+      if (req.method === "POST") {
+        // Plain inserts (no upsert, no returning), as the caller.
+        const body = JSON.parse((await readBody(req)) || "{}") as Record<string, unknown> | Record<string, unknown>[];
+        const types = await columnTypes(table);
+        for (const row of Array.isArray(body) ? body : [body]) {
+          const values: unknown[] = [];
+          const columns = Object.keys(row);
+          const placeholders = columns.map((column) => {
+            const type = types.get(column);
+            if (!type) throw Object.assign(new Error(`column ${table}.${column} does not exist`), { code: "42703" });
+            const value = row[column];
+            values.push(value === null ? null : typeof value === "object" ? JSON.stringify(value) : String(value));
+            return `$${values.length}::${type}`;
+          });
+          await asCaller(identity, () =>
+            db.query(`insert into public.${table} (${columns.join(", ")}) values (${placeholders.join(", ")})`, values),
+          );
+        }
+        return send(res, 201);
+      }
+
+      if (req.method === "DELETE") {
+        const values: unknown[] = [];
+        const where = await whereClause(table, url.searchParams, values);
+        await asCaller(identity, () => db.query(`delete from public.${table} t ${where}`, values));
+        return send(res, 204);
+      }
+
       return send(res, 405, { code: "PGRST000", message: `method ${req.method} not supported by the local stand-in` });
     } catch (error) {
       const { status, body } = pgError(error);

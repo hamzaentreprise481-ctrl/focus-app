@@ -29,7 +29,11 @@ create table auth.users (
   raw_app_meta_data jsonb not null default '{}'::jsonb,
   raw_user_meta_data jsonb not null default '{}'::jsonb,
   is_anonymous boolean not null default false,
-  created_at timestamptz not null default now()
+  instance_id uuid,
+  aud text,
+  role text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
