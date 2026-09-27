@@ -201,10 +201,16 @@ test("claims about the student stay local to the answer; no non-pedagogical judg
     "L’élève ne maîtrise pas du tout la distributivité.",
     "Il se trompe toujours sur les parenthèses.",
     "Des lacunes graves en calcul littéral.",
+    // Adverbs between the verb and its negation (found by the benchmark).
+    "L’élève ne comprend absolument rien aux mathématiques.",
+    "Il ne sait vraiment pas développer.",
+    "Elle est nulle en calcul.",
   ])
     assert.deepEqual(reasons({ errors: [candidate({ explanation })] }), ["overstated_or_non_pedagogical"], explanation);
   for (const recommendedAction of ["Signaler un possible trouble dyscalculique.", "Parler du manque de travail avec la famille."])
     assert.deepEqual(reasons({ errors: [candidate({ recommendedAction })] }), ["overstated_or_non_pedagogical"], recommendedAction);
+  // A precise, local explanation is not an overstatement.
+  assert.deepEqual(reasons({ errors: [candidate({ explanation: "Dans cette réponse, le facteur 3 n’est appliqué qu’au premier terme de la parenthèse." })] }), []);
   // Ordinary instructions in the action are fine, including "toujours" and "attention".
   assert.deepEqual(
     reasons({ errors: [candidate({ recommendedAction: "Faire attention au signe et toujours écrire l’étape 3×x + 3×2." })] }),

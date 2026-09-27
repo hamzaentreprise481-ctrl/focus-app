@@ -42,3 +42,6 @@ next-env.d.ts
 
 !.env.example
 qa-artifacts/
+
+# Offline self-test reports of the AI benchmark (live reports are kept)
+benchmark-results/*-reference-*.json

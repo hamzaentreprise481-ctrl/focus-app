@@ -11,7 +11,7 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "test:routes": "node --import tsx --test tests/integration/*.test.ts",
     "check:deployment": "node scripts/check-deployment.mjs",
-    "test:ai-live": "node --import tsx scripts/run-pedagogy-live-campaign.ts",
+    "test:ai-live": "node --import tsx scripts/run-pedagogy-benchmark.ts",
     "curriculum": "node --import tsx scripts/curriculum.ts",
     "curriculum:check": "node --import tsx scripts/curriculum.ts validate curriculum/packages/math/seconde-gt-2026-2027"
   },

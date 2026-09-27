@@ -99,7 +99,7 @@ npm run test            # unitaires, schéma réel (PGlite) avec RLS, parcours, 
 npm run build
 npm run test:routes     # après build ; vraies routes contre un double Supabase Auth
 npm run curriculum:check
-npm run test:ai-live    # opt-in : vrai modèle, nécessite OPENAI_API_KEY
+npm run test:ai-live    # opt-in : 47 copies synthétiques, vrai modèle, nécessite OPENAI_API_KEY (--reference : auto-test hors ligne)
 npm run check:deployment -- https://votre-domaine-focus
 ```
 

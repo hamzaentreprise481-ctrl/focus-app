@@ -61,7 +61,7 @@ const ERROR_TYPES = new Set([
 // One answer never supports a claim about the student in general, and FOCUS
 // never produces medical, psychological, behavioural or effort judgements.
 const OVERSTATED =
-  /\b(ne ma[iî]trise (pas|rien|aucun)|ne sait (pas|rien)|ne comprend (pas|rien)|incapable|toujours|jamais|syst[ée]matiquement|aucune (notion|connaissance|compr[ée]hension|base)|lacunes? (graves?|profondes?|importantes?|majeures?)|tr[èe]s (grande|grosse)s? difficult[ée]s?|niveau tr[èe]s faible)\b/i;
+  /\b(ne (ma[iî]trise|sait|comprend)\s+(?:[a-zà-ÿ’']+\s+){0,2}?(pas|rien|aucun\w*)|nul(le)? en|incapable|toujours|jamais|syst[ée]matiquement|aucune (notion|connaissance|compr[ée]hension|base)|lacunes? (graves?|profondes?|importantes?|majeures?)|tr[èe]s (grande|grosse)s? difficult[ée]s?|niveau tr[èe]s faible)\b/i;
 const NON_PEDAGOGICAL =
   /\b(dys(lexi|calculi|praxi|orthographi)\w*|tdah|hyperactiv\w*|trouble\w*|handicap\w*|paresse\w*|paresseu\w*|fain[ée]ant\w*|manque (de travail|d.effort|de s[ée]rieux)|d[ée]motiv\w*|comportement\w*|d[ée]crocheu\w*)\b/i;
 

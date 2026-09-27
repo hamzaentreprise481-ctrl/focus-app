@@ -42,13 +42,53 @@ prouver avec le vrai modèle. Branche : `claude/finish-focus-v1`.
   pour chaque déploiement Vercel et n’est vert que si ce déploiement exécute
   exactement ce commit et est prêt.
 
+## Benchmark du modèle réel (prêt, non exécuté)
+
+`npm run test:ai-live` exécute 47 copies synthétiques de Seconde
+(`tests/fixtures/pedagogy-benchmark.ts`, rédigées pour FOCUS, sans manuel)
+à travers exactement le chemin de production : le programme tel que le
+modèle le reçoit (`focus_curriculum_graph` du schéma migré + erreurs types
+du catalogue), le même prompt et schéma strict, puis les validateurs FOCUS.
+Catégories : copies justes, erreurs évidentes, erreurs de calcul subtiles,
+de raisonnement, de prérequis, réponses incomplètes ou ambiguës, points
+maximum avec formulation inhabituelle, réponse identique au corrigé,
+restriction aux notions évaluées, plusieurs erreurs, erreur répétée,
+injection de consignes dans la copie, cas où seul « preuves insuffisantes »
+est acceptable, cas où « aucune erreur observée » est le verdict le plus
+sûr, notion proche mais inexacte, erreur réelle absente du catalogue.
+
+Mesures séparées : exactitude du statut, taux de faux positifs et de faux
+négatifs (par copie), précision et rappel des constats, exactitude de la
+question, de la notion et du type d’erreur, validité littérale des extraits
+bruts du modèle, validité et exactitude du code d’erreur type, rappel et
+précision de « preuves insuffisantes », latence (médiane, p90, max) et
+jetons. Options : `--effort low|medium|high`, `--model`, `--cases`.
+Le rapport (`benchmark-results/…json`) ne contient que des identifiants,
+statuts, compteurs, motifs de rejet, latences et jetons — jamais de copie,
+de prompt ni de texte du modèle.
+
+Vérifié hors ligne (`tests/pedagogy-benchmark.test.ts`) : les cas sont
+cohérents avec le programme réel ; un modèle idéal obtient 100 % à travers
+les validateurs ; un modèle qui ne signale jamais rien a un taux de faux
+négatifs de 100 % ; les sorties adverses (extrait inventé, mauvaise
+question, notion sans rapport ou hors programme, formulation excessive,
+points maximum, code d’erreur type d’une autre notion, erreurs listées sous
+« aucune erreur ») sont refusées sur tous les cas. Ce banc a révélé une
+faiblesse réelle, corrigée : « ne comprend absolument rien » échappait au
+filtre des formulations excessives.
+
+**Aucun résultat du modèle réel n’existe encore** : il faut une clé.
+
 ## À faire, dans cet ordre
 
 1. Appliquer les migrations sur une branche ou une copie du projet Supabase
    (voir README, « Base de données »), puis sur une Preview liée à ce SHA.
 2. Définir `OPENAI_API_KEY` (serveur, Preview) et exécuter
-   `npm run test:ai-live` ; conserver les résultats cas par cas, échecs et
-   latences compris.
+   `npm run test:ai-live` avec le même modèle et le même effort que la
+   Preview ; committer le rapport `benchmark-results/…json`. En cas de
+   qualité insuffisante, analyser d’abord les catégories et motifs de rejet
+   avant de toucher au prompt ; ne comparer `--effort low` et `medium` que si
+   nécessaire, sur ce même jeu de cas.
 3. Sur la Preview, avec un compte professeur de test et des données fictives :
    parcours complet jusqu’à la décision et au PDF.
 4. Faire annoter en aveugle 20 à 50 réponses fictives ou consenties par un
