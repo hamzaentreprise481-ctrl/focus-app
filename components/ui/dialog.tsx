@@ -26,12 +26,14 @@ export function DialogContent({
         className={cn(
           "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2",
           "rounded-[var(--radius-lg)] border border-border bg-surface p-6 shadow-xl",
-          className
+          className,
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <RadixDialog.Title className="text-base font-semibold text-ink">{title}</RadixDialog.Title>
+            <RadixDialog.Title className="text-base font-semibold text-ink">
+              {title}
+            </RadixDialog.Title>
             {description && (
               <RadixDialog.Description className="mt-1 text-sm text-ink-soft">
                 {description}

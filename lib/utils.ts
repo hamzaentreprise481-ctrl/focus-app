@@ -8,6 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("fr-FR", {
+    timeZone: "UTC",
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -17,6 +18,7 @@ export function formatDate(iso: string): string {
 export function formatDateShort(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("fr-FR", {
+    timeZone: "UTC",
     day: "numeric",
     month: "short",
   });
