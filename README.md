@@ -91,6 +91,18 @@ node --import tsx scripts/admin-invite-teacher.ts --project-ref <ref> --email pr
 
 `--project-ref` doit correspondre à l’URL (garde-fou contre une erreur de projet). Sans `--commit`, rien n’est envoyé.
 
+### « Connexion impossible » : diagnostic
+
+Ce message reprend la réponse de Supabase Auth (`invalid_credentials`) : l’adresse n’a pas de compte dans le projet, ou le mot de passe est différent. Les anciens identifiants de démonstration (`prof@focus.fr`) n’existent pas dans Supabase Auth et ne fonctionneront jamais. Depuis une machine qui atteint Supabase :
+
+```bash
+FOCUS_CHECK_SUPABASE_URL=https://<ref>.supabase.co FOCUS_CHECK_SUPABASE_KEY=<clé publiable> \
+FOCUS_CHECK_EMAIL=<adresse du professeur> FOCUS_CHECK_PASSWORD=<mot de passe> \
+npm run check:login -- --project-ref <ref>
+```
+
+Une ligne PASS/FAIL par étape du parcours de l’application : connexion, session vérifiée, `app_metadata.role`, profil, établissement, affectations, lectures sous RLS, version du schéma, renouvellement, déconnexion, refus anonyme. Aucun mot de passe, jeton ni contenu n’est affiché ; une clé secrète est refusée.
+
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 
 ## Variables d’environnement
