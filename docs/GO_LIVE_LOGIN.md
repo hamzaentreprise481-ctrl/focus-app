@@ -56,6 +56,24 @@ apply, like `supabase migration repair`).
 
 Nobody knows the teacher account's password; only its owner may choose it.
 
+Observed on 27 September 2026 (auth logs, no secret read): a recovery
+e-mail was requested at 14:10:59 UTC and its link opened at 14:11:39. Auth
+logged that as an implicit login (one session, `last_sign_in_at` set), then
+redirected to `http://localhost:3000`, the project's current *Site URL*: the
+link never reached FOCUS, so no password was set (the stored hash did not
+change). Reopening it at 14:12:13 failed, since links are single-use. To fix,
+in Supabase → Authentication:
+
+1. *URL Configuration*: *Site URL* = the deployment that runs this V1 (not
+   `main`, which still serves the V0 prototype, and not localhost); add
+   `https://<that host>/auth/confirm` to *Redirect URLs*.
+2. *Email Templates* → *Reset Password*:
+   `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
+   (the default `{{ .ConfirmationURL }}` uses the implicit flow, which FOCUS
+   does not accept).
+3. Request a new link from `/connexion/mot-de-passe-oublie` on that
+   deployment, choose the password, then sign in and run the final check.
+
 ## The migrations were safe to apply (evidence gathered before)
 
 - Additive only on existing data: new tables, functions, policies, nullable
