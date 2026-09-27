@@ -219,6 +219,7 @@ export async function readSchoolData(
         level: row.level,
         subject: subjectNames.sort((a, b) => collator.compare(a, b)).join(" · "),
         subjectId: assignment.subject_id,
+        subjectIds: [...new Set(classAssignments.map((a) => a.subject_id))],
         schoolId: assignment.school_id,
         teacher: teacherName ?? "",
         studentIds: enrollmentByClass.get(row.id) ?? [],
@@ -242,6 +243,7 @@ export async function readSchoolData(
   const skills: Skill[] = competencyRows.map((row) => ({
     id: row.id,
     name: row.name,
+    subjectId: row.subject_id,
   }));
 
   const skillIdsByAssessment = new Map<string, string[]>();

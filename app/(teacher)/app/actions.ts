@@ -153,3 +153,65 @@ export async function saveEvaluationAction(
   revalidatePath("/app", "layout");
   return { ok: true };
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Deletes an evaluation created by mistake, with its results. Refused once
+ * copies have been analysed: the analyses and the teacher's decisions are
+ * part of the students' follow-up history and are never erased this way.
+ * RLS still decides (only the evaluation's own teacher may delete it); the
+ * checks here give a clear answer and confirm the row is really gone.
+ */
+export async function deleteEvaluationAction(evaluationId: string): Promise<SaveResult> {
+  const teacher = await requireTeacher();
+  const supabase = await createAuthClient();
+  if (!supabase) return { ok: false, error: "Supabase n’est pas configuré." };
+  if (typeof evaluationId !== "string" || !UUID.test(evaluationId))
+    return { ok: false, error: "Évaluation invalide." };
+
+  const found = await supabase
+    .from("assessments")
+    .select("id,teacher_id")
+    .eq("id", evaluationId)
+    .maybeSingle();
+  if (found.error) return { ok: false, error: "Impossible de vérifier cette évaluation." };
+  if (!found.data) return { ok: false, error: "Évaluation introuvable ou inaccessible." };
+  if (found.data.teacher_id !== teacher.id)
+    return { ok: false, error: "Seul le professeur qui a créé cette évaluation peut la supprimer." };
+
+  const runs = await supabase
+    .from("ai_analysis_runs")
+    .select("id", { count: "exact", head: true })
+    .eq("assessment_id", evaluationId);
+  if (runs.error)
+    return {
+      ok: false,
+      error: isSchemaOutdated(runs.error) ? SCHEMA_OUTDATED_MESSAGE : "Impossible de vérifier l’historique de cette évaluation.",
+    };
+  if ((runs.count ?? 0) > 0)
+    return {
+      ok: false,
+      error:
+        "Des copies de cette évaluation ont déjà été analysées : elle fait partie de l’historique du suivi des élèves et ne peut pas être supprimée. Vous pouvez corriger son titre, sa date et ses résultats.",
+    };
+
+  const removed = await supabase.from("assessments").delete().eq("id", evaluationId);
+  if (removed.error) {
+    console.error("FOCUS assessment delete failed", { code: removed.error.code, message: removed.error.message });
+    return {
+      ok: false,
+      error:
+        removed.error.code === "42501"
+          ? "Vous n’avez pas les droits nécessaires pour supprimer cette évaluation."
+          : "Suppression impossible. L’évaluation est conservée.",
+    };
+  }
+  // Row-level security turns a refused delete into "0 rows": check.
+  const still = await supabase.from("assessments").select("id").eq("id", evaluationId).maybeSingle();
+  if (still.error || still.data)
+    return { ok: false, error: "La suppression n’a pas été acceptée. L’évaluation est conservée." };
+
+  revalidatePath("/app", "layout");
+  return { ok: true };
+}

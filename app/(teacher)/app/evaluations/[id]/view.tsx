@@ -11,6 +11,7 @@ import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
 import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment-evidence-workspace";
+import { DeleteEvaluationButton } from "@/components/evaluations/delete-evaluation-button";
 
 export default function EvaluationDetailPage({ initialStudentId }: { initialStudentId?: string }) {
   const { id } = useParams<{ id: string }>();
@@ -61,14 +62,23 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
         </div>
       </div>
 
-      <ExportPdfButton target={{ kind: "evaluation", id: id }} />
-      {editableEvaluationIds.includes(id) && (
-        <Button asChild>
-          <Link href={`/app/evaluations/${id}/modifier`}>
-            Compléter ou corriger les résultats
-          </Link>
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {editableEvaluationIds.includes(id) && (
+          <Button asChild>
+            <Link href={`/app/evaluations/${id}/modifier`}>
+              Compléter ou corriger les résultats
+            </Link>
+          </Button>
+        )}
+        <ExportPdfButton target={{ kind: "evaluation", id: id }} />
+        {editableEvaluationIds.includes(id) && (
+          <DeleteEvaluationButton
+            evaluationId={id}
+            evaluationName={evaluation.name}
+            resultCount={analysis.recordedCount}
+          />
+        )}
+      </div>
       <p className="text-sm text-ink-soft">
         {analysis.recordedCount} élèves renseignés · {analysis.unrecordedCount}{" "}
         non renseignés. Les cases vides ne comptent ni comme zéro ni comme

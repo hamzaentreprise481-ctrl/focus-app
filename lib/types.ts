@@ -9,6 +9,8 @@ export type ConfidenceLevel = "aucune" | "limitee" | "moderee" | "forte";
 export interface Skill {
   id: string;
   name: string;
+  /** The competency's subject, to offer only the class's competencies. */
+  subjectId?: string;
 }
 
 export interface ClassInfo {
@@ -17,6 +19,8 @@ export interface ClassInfo {
   level: string;
   subject: string;
   subjectId?: string;
+  /** Every subject the teacher teaches in this class. */
+  subjectIds?: string[];
   schoolId?: string;
   teacher: string;
   studentIds: string[];
