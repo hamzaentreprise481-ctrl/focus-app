@@ -14,7 +14,7 @@ import {
 } from "@/lib/curriculum/graph";
 import { relatedNotionCodes } from "@/lib/pedagogy/analysis";
 import { ensureOk } from "@/lib/supabase-errors";
-import { selectAllIn } from "@/lib/supabase-pages";
+import { selectAll, selectAllIn } from "@/lib/supabase-pages";
 import type {
   AssessmentAnalysisState,
   CatalogueSuggestion,
@@ -34,6 +34,11 @@ export const CURRICULUM_SUBJECT_CODE = "MATH";
 
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const RECOMMENDATION_COLUMNS =
+  "id,analysis_run_id,assessment_id,curriculum_node_id,difficulty,evidence,confidence,explanation,recommended_action,teacher_decision,teacher_decided_at,teacher_note,superseded_at,catalogue_error_id,created_at";
+/** Superseded recommendations kept for the student's history view. */
+const HISTORY_WINDOW = 100;
 
 export class AccessError extends Error {}
 
@@ -175,18 +180,21 @@ export async function studentMathContext(supabase: SupabaseClient, teacherId: st
   const mathSubject = ((subjectsResponse.data ?? []) as Array<{ id: string; name: string; code: string | null }>).find(isMathSubject);
   if (!mathSubject) throw new AccessError("La V1 de l’IA pédagogique est limitée aux mathématiques.");
 
-  const assessmentsResponse = await supabase
-    .from("assessments")
-    .select("id,school_id,class_id,subject_id,teacher_id,title,date")
-    .eq("class_id", enrollment.class_id)
-    .eq("subject_id", mathSubject.id)
-    .order("date", { ascending: false });
-  ensureOk(assessmentsResponse.error, "Évaluations");
+  const assessments = await selectAll<AssessmentRow>("Évaluations", (from, to) =>
+    supabase
+      .from("assessments")
+      .select("id,school_id,class_id,subject_id,teacher_id,title,date", { count: "exact" })
+      .eq("class_id", enrollment.class_id)
+      .eq("subject_id", mathSubject.id)
+      .order("date", { ascending: false })
+      .order("id")
+      .range(from, to),
+  );
   return {
     schoolId: enrollment.school_id,
     classId: enrollment.class_id,
     classLevel: (classResponse.data as { level: string | null } | null)?.level ?? null,
-    assessments: (assessmentsResponse.data ?? []) as AssessmentRow[],
+    assessments,
   };
 }
 
@@ -415,23 +423,36 @@ export async function studentPedagogy(
   studentId: string,
 ) {
   const assessmentIds = context.assessments.map((assessment) => assessment.id);
-  const [{ questions, responses, tags }, runs, recommendationsResponse] = await Promise.all([
+  const [{ questions, responses, tags }, runs, currentRecommendations, supersededResponse] = await Promise.all([
     evidenceRows(supabase, assessmentIds, studentId),
     currentRuns(supabase, assessmentIds, studentId),
+    // Every current recommendation (a year of copies can exceed max-rows),
+    // plus a bounded window of the newest superseded ones for the history.
+    selectAllIn<RecommendationRow>("Recommandations pédagogiques", assessmentIds, (chunk, from, to) =>
+      supabase
+        .from("pedagogical_recommendations")
+        .select(RECOMMENDATION_COLUMNS, { count: "exact" })
+        .eq("student_id", studentId)
+        .in("assessment_id", chunk)
+        .is("superseded_at", null)
+        .order("id")
+        .range(from, to),
+    ),
     assessmentIds.length
       ? supabase
           .from("pedagogical_recommendations")
-          .select(
-            "id,analysis_run_id,assessment_id,curriculum_node_id,difficulty,evidence,confidence,explanation,recommended_action,teacher_decision,teacher_decided_at,teacher_note,superseded_at,catalogue_error_id,created_at",
-          )
+          .select(RECOMMENDATION_COLUMNS)
           .eq("student_id", studentId)
           .in("assessment_id", assessmentIds)
-          .order("created_at", { ascending: false })
-          .limit(200)
+          .not("superseded_at", "is", null)
+          .order("superseded_at", { ascending: false })
+          .limit(HISTORY_WINDOW)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  ensureOk(recommendationsResponse.error, "Recommandations pédagogiques");
-  const recommendationRows = (recommendationsResponse.data ?? []) as RecommendationRow[];
+  ensureOk(supersededResponse.error, "Historique des recommandations");
+  const recommendationRows = [...currentRecommendations, ...((supersededResponse.data ?? []) as RecommendationRow[])].sort(
+    (a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id),
+  );
 
   const graph = await curriculumGraph(supabase, context.classLevel);
   const missingIds = [...new Set(recommendationRows.map((row) => row.curriculum_node_id))].filter((id) => !graph.nodeById.has(id));

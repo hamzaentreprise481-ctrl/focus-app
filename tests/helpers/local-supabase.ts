@@ -240,10 +240,14 @@ export async function startLocalSupabase(
       if (["select", "order", "limit", "offset", "columns"].includes(key)) continue;
       const type = types.get(key);
       if (!type) throw Object.assign(new Error(`column ${table}.${key} does not exist`), { code: "42703" });
-      const dot = raw.indexOf(".");
-      const op = raw.slice(0, dot);
-      const operand = raw.slice(dot + 1);
+      // PostgREST's "not." prefix negates any operator (not.is.null, not.in.(…)).
+      const negated = raw.startsWith("not.");
+      const expression = negated ? raw.slice(4) : raw;
+      const dot = expression.indexOf(".");
+      const op = expression.slice(0, dot);
+      const operand = expression.slice(dot + 1);
       const column = `t.${key}`;
+      const before = clauses.length;
       const push = (value: unknown) => {
         values.push(value);
         return `$${values.length}`;
@@ -271,6 +275,7 @@ export async function startLocalSupabase(
         default:
           throw new Error(`unsupported filter operator ${op}`);
       }
+      if (negated && clauses.length > before) clauses[clauses.length - 1] = `not (${clauses[clauses.length - 1]})`;
     }
     return clauses.length ? `where ${clauses.join(" and ")}` : "";
   }
