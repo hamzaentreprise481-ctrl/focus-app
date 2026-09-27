@@ -101,6 +101,8 @@ FOCUS_CHECK_EMAIL=<adresse du professeur> FOCUS_CHECK_PASSWORD=<mot de passe> \
 npm run check:login -- --project-ref <ref>
 ```
 
+Avec `FOCUS_CHECK_APP_URL=<déploiement>` (et `VERCEL_AUTOMATION_BYPASS_SECRET` si la Preview est protégée), le même contrôle passe aussi par le vrai formulaire du déploiement : cookie HttpOnly, rechargement, pages classe/élèves/évaluations, déconnexion. État et étapes restantes : [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md).
+
 Une ligne PASS/FAIL par étape du parcours de l’application : connexion, session vérifiée, `app_metadata.role`, profil, établissement, affectations, lectures sous RLS, version du schéma, renouvellement, déconnexion, refus anonyme. Aucun mot de passe, jeton ni contenu n’est affiché ; une clé secrète est refusée.
 
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
