@@ -66,7 +66,7 @@ Le code de cette branche a besoin de ces migrations. Sans elles, l’application
 
 Utiliser le projet Supabase réservé à FOCUS ; ne jamais réutiliser les ressources d’un autre produit.
 
-1. Activer la connexion e-mail/mot de passe ; désactiver les inscriptions publiques et les connexions anonymes. Activer la protection contre les mots de passe divulgués (advisor Supabase).
+1. Activer la connexion e-mail/mot de passe ; désactiver les inscriptions publiques et les connexions anonymes. Activer la protection contre les mots de passe divulgués (advisor Supabase) et « Secure password change » (réauthentification exigée pour changer le mot de passe d’une session ancienne : la page /connexion/nouveau-mot-de-passe accepte aussi une session ouverte normalement).
 2. **URL Configuration** : *Site URL* = l’URL du déploiement FOCUS ; ajouter aux *Redirect URLs* `https://<domaine>/auth/confirm` (et l’URL des Previews utilisées pour la recette).
 3. **Email Templates** : les liens doivent passer par `/auth/confirm` avec un `token_hash` (vérifié côté serveur, à usage unique) :
    - *Reset Password* : `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
@@ -146,4 +146,4 @@ Ce statut prouve la configuration, pas le parcours : la connexion réelle et l�
 - La mesure de l’effet des remédiations n’est pas implémentée.
 - Aucune conformité RGPD n’est revendiquée : hébergement, durée de conservation, registre et analyse d’impact restent à établir avec l’établissement.
 
-Historique des audits : [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md), [AUDIT_2026-09-13.md](./AUDIT_2026-09-13.md), [DESIGN_AUDIT.md](./DESIGN_AUDIT.md).
+Historique des audits : [AUDIT_2026-09-11.md](./docs/history/AUDIT_2026-09-11.md), [AUDIT_2026-09-13.md](./docs/history/AUDIT_2026-09-13.md), [DESIGN_AUDIT.md](./docs/history/DESIGN_AUDIT.md).

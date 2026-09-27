@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { requestPedagogicalAnalysis } from "../lib/pedagogy/openai-client";
 import { PEDAGOGY_CAMPAIGN_CASES } from "./fixtures/pedagogy-campaign";
 
-test("the live campaign sends the same structured request as the teacher action", async () => {
+test("the model client sends the structured request built by the teacher action", async () => {
   const campaignCase = PEDAGOGY_CAMPAIGN_CASES.find(
     (item) => item.id === "calculation-distributivity",
   );

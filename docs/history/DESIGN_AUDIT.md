@@ -1,6 +1,8 @@
+> **Historique.** Constat daté, antérieur à la V1 actuelle ; ne décrit plus l’état du code. État courant : [README](../../README.md) et [FOCUS_PRODUCT.md](../../FOCUS_PRODUCT.md).
+
 # Latest audit
 
-The following is the historical PR audit. For the current pass, see [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md).
+The following is the historical PR audit (see also [AUDIT_2026-09-11.md](./AUDIT_2026-09-11.md)).
 
 # FOCUS — corrective product / UX audit
 
