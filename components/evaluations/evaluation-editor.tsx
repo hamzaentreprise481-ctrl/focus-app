@@ -144,8 +144,9 @@ export function EvaluationEditor({
 
   const readyToGrade =
     name.trim() !== "" && name.trim().length <= 200 && validDate(date);
-  const canSave =
-    loaded && !!classId && !storageError && !saving && readyToGrade && (gradedCount > 0 || !!initialEvaluation) && !hasErrors;
+  // Grades are optional: a teacher may create the assessment first, then add
+  // its subject, questions and copies, and grade later (or never on /20).
+  const canSave = loaded && !!classId && !storageError && !saving && readyToGrade && !hasErrors;
 
   const handleSave = async () => {
     if (!canSave || saveLock.current) return;

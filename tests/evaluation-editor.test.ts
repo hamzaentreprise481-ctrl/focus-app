@@ -76,3 +76,22 @@ test("editing can clear the last observation instead of retaining an incorrect g
   await waitFor(() => assert.ok(screen.getByText("Évaluation mise à jour")));
   assert.deepEqual(saved, []);
 });
+
+test("a new evaluation can be saved before any grade, to add its subject and copies first", async () => {
+  let saved: { evaluation: Evaluation; grades: RawGrade[] } | undefined;
+  mount(async (e, grades) => {
+    saved = { evaluation: e, grades };
+    return { ok: true };
+  });
+  // A name and a date are still required.
+  assert.equal(screen.queryByRole("button", { name: "Enregistrer l’évaluation" }), null);
+  fireEvent.change(screen.getByLabelText("Nom de l’évaluation"), { target: { value: "Développements" } });
+  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-02" } });
+  const button = screen.getByRole("button", { name: "Enregistrer l’évaluation" });
+  assert.equal((button as HTMLButtonElement).disabled, false);
+  fireEvent.click(button);
+  await waitFor(() => assert.ok(screen.getByText("Évaluation enregistrée")));
+  assert.equal(saved?.evaluation.name, "Développements");
+  assert.deepEqual(saved?.grades, []);
+  assert.ok(screen.getByRole("link", { name: "Ajouter le sujet et les copies" }));
+});
