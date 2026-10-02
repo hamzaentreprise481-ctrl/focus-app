@@ -14,9 +14,11 @@ import { ModelCallError, pedagogicalAiHourlyLimit, pedagogicalReasoningEffort, t
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
 import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
+import type { AnalysisFailureCode } from "@/lib/pedagogy/batch";
 import {
   AccessError,
   assessmentAccess,
+  assessmentReview,
   catalogueErrorsByCode,
   currentRuns,
   curriculumGraph,
@@ -35,6 +37,7 @@ import {
 import type {
   AssessmentDefinitionDraft,
   AssessmentDefinitionView,
+  PedagogicalRecommendationView,
   PedagogicalSnapshot,
   ResponseOverviewRow,
   StudentEvidenceView,
@@ -422,6 +425,20 @@ export async function loadResponseOverview(
   }
 }
 
+/** The current hypotheses and decisions of one assessment, every student. */
+export async function loadAssessmentReview(
+  assessmentId: string,
+): Promise<{ ok: true; items: Array<{ studentId: string; recommendation: PedagogicalRecommendationView }> } | Failure> {
+  try {
+    const { teacher, supabase } = await session();
+    const access = await assessmentAccess(supabase, teacher.id, assessmentId);
+    if (!access.isMath) return { ok: true, items: [] };
+    return { ok: true, items: await assessmentReview(supabase, access) };
+  } catch (error) {
+    return failure(error, "Impossible de charger les hypothèses de cette évaluation.");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Analysis
 // ---------------------------------------------------------------------------
@@ -450,7 +467,7 @@ type AnalysisOutcome =
       insufficientReason: string;
       rejectedCandidates: number;
     }
-  | Failure;
+  | (Failure & { code?: AnalysisFailureCode });
 
 export async function generatePedagogicalAnalysis(studentId: string, assessmentId?: string): Promise<AnalysisOutcome> {
   let teacherId: string;
@@ -605,6 +622,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     if ((recent.count ?? 0) >= limit)
       return {
         ok: false,
+        code: "rate_limited",
         error: `Limite de ${limit} analyses par heure atteinte. Vos copies sont enregistrées ; relancez l’analyse un peu plus tard.`,
       };
 
@@ -614,7 +632,11 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       if (message === "OPENAI_API_KEY_MISSING")
-        return { ok: false, error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée." };
+        return {
+          ok: false,
+          code: "ai_not_configured",
+          error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée.",
+        };
       console.error("FOCUS pedagogical AI request failed", message);
       await recordUsage(supabase, {
         assessmentId: assessment.id,

@@ -416,6 +416,79 @@ function catalogueSuggestions(
   ];
 }
 
+/** Teacher-facing views of recommendation rows: notion, quoted evidence, catalogue. */
+async function buildRecommendationViews(
+  supabase: SupabaseClient,
+  recommendationRows: RecommendationRow[],
+  graph: CurriculumIndex,
+  assessmentById: Map<string, { id: string; title: string; date: string }>,
+  questionById: Map<string, { position: number }>,
+): Promise<PedagogicalRecommendationView[]> {
+  const missingIds = [...new Set(recommendationRows.map((row) => row.curriculum_node_id))].filter((id) => !graph.nodeById.has(id));
+  const extraNodes = new Map<string, { code: string; title: string; source_locator: string; source: { source_url: string } | null }>();
+  if (missingIds.length) {
+    // Recommendations stay readable if an import later deactivated or
+    // re-scoped their node.
+    const response = await supabase
+      .from("curriculum_nodes")
+      .select("id,code,title,source_locator,source:curriculum_sources(source_url)")
+      .in("id", missingIds);
+    ensureOk(response.error, "Notions des recommandations");
+    for (const row of (response.data ?? []) as unknown as Array<{ id: string; code: string; title: string; source_locator: string; source: { source_url: string } | null }>)
+      extraNodes.set(row.id, row);
+  }
+  const nodeInfo = (id: string) => {
+    const node = graph.nodeById.get(id);
+    if (node)
+      return { code: node.code, title: node.title, sourceLocator: node.sourceLocator, sourceUrl: graph.summaryByCode.get(node.code)?.sourceUrl ?? "" };
+    const extra = extraNodes.get(id);
+    return extra ? { code: extra.code, title: extra.title, sourceLocator: extra.source_locator, sourceUrl: extra.source?.source_url ?? "" } : null;
+  };
+  const titles = (codes: string[] | undefined) =>
+    (codes ?? []).map((code) => graph.nodeByCode.get(code)?.title).filter((value): value is string => Boolean(value));
+  const catalogue = await catalogueFor(supabase, [...new Set(recommendationRows.map((row) => row.curriculum_node_id))]);
+
+  return recommendationRows.flatMap((row) => {
+    const node = nodeInfo(row.curriculum_node_id);
+    const assessment = assessmentById.get(row.assessment_id);
+    if (!node || !assessment) return [];
+    const summary = graph.summaryByCode.get(node.code);
+    const evidence = (Array.isArray(row.evidence) ? row.evidence : []).flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const value = item as Record<string, unknown>;
+      const questionId = typeof value.questionId === "string" ? value.questionId : "";
+      const excerpt = typeof value.excerpt === "string" ? value.excerpt : "";
+      const question = questionById.get(questionId);
+      if (!excerpt) return [];
+      return [{ questionId, questionLabel: question ? `Question ${question.position}` : "Question supprimée", excerpt }];
+    });
+    return [
+      {
+        id: row.id,
+        assessmentId: assessment.id,
+        assessmentTitle: assessment.title,
+        assessmentDate: assessment.date,
+        curriculumNodeCode: node.code,
+        curriculumNodeTitle: node.title,
+        difficulty: row.difficulty,
+        evidence,
+        confidence: row.confidence,
+        explanation: row.explanation,
+        recommendedAction: row.recommended_action,
+        sourceLocator: node.sourceLocator,
+        sourceUrl: node.sourceUrl,
+        prerequisites: titles(summary?.prerequisites),
+        competencies: titles(summary?.competencies),
+        status: recommendationStatus(row),
+        decidedAt: row.teacher_decided_at,
+        teacherNote: row.teacher_note,
+        createdAt: row.created_at,
+        catalogue: catalogueSuggestions(catalogue, row.curriculum_node_id, row.catalogue_error_id),
+      },
+    ];
+  });
+}
+
 /** Everything the student file needs about analyses and recommendations. */
 export async function studentPedagogy(
   supabase: SupabaseClient,
@@ -455,71 +528,9 @@ export async function studentPedagogy(
   );
 
   const graph = await curriculumGraph(supabase, context.classLevel);
-  const missingIds = [...new Set(recommendationRows.map((row) => row.curriculum_node_id))].filter((id) => !graph.nodeById.has(id));
-  const extraNodes = new Map<string, { code: string; title: string; source_locator: string; source: { source_url: string } | null }>();
-  if (missingIds.length) {
-    // Recommendations stay readable if an import later deactivated or
-    // re-scoped their node.
-    const response = await supabase
-      .from("curriculum_nodes")
-      .select("id,code,title,source_locator,source:curriculum_sources(source_url)")
-      .in("id", missingIds);
-    ensureOk(response.error, "Notions des recommandations");
-    for (const row of (response.data ?? []) as unknown as Array<{ id: string; code: string; title: string; source_locator: string; source: { source_url: string } | null }>)
-      extraNodes.set(row.id, row);
-  }
-  const nodeInfo = (id: string) => {
-    const node = graph.nodeById.get(id);
-    if (node)
-      return { code: node.code, title: node.title, sourceLocator: node.sourceLocator, sourceUrl: graph.summaryByCode.get(node.code)?.sourceUrl ?? "" };
-    const extra = extraNodes.get(id);
-    return extra ? { code: extra.code, title: extra.title, sourceLocator: extra.source_locator, sourceUrl: extra.source?.source_url ?? "" } : null;
-  };
-  const titles = (codes: string[] | undefined) =>
-    (codes ?? []).map((code) => graph.nodeByCode.get(code)?.title).filter((value): value is string => Boolean(value));
-  const catalogue = await catalogueFor(supabase, [...new Set(recommendationRows.map((row) => row.curriculum_node_id))]);
   const assessmentById = new Map(context.assessments.map((assessment) => [assessment.id, assessment]));
   const questionById = new Map(questions.map((question) => [question.id, question]));
-
-  const views: PedagogicalRecommendationView[] = recommendationRows.flatMap((row) => {
-    const node = nodeInfo(row.curriculum_node_id);
-    const assessment = assessmentById.get(row.assessment_id);
-    if (!node || !assessment) return [];
-    const summary = graph.summaryByCode.get(node.code);
-    const evidence = (Array.isArray(row.evidence) ? row.evidence : []).flatMap((item) => {
-      if (!item || typeof item !== "object") return [];
-      const value = item as Record<string, unknown>;
-      const questionId = typeof value.questionId === "string" ? value.questionId : "";
-      const excerpt = typeof value.excerpt === "string" ? value.excerpt : "";
-      const question = questionById.get(questionId);
-      if (!excerpt) return [];
-      return [{ questionId, questionLabel: question ? `Question ${question.position}` : "Question supprimée", excerpt }];
-    });
-    return [
-      {
-        id: row.id,
-        assessmentId: assessment.id,
-        assessmentTitle: assessment.title,
-        assessmentDate: assessment.date,
-        curriculumNodeCode: node.code,
-        curriculumNodeTitle: node.title,
-        difficulty: row.difficulty,
-        evidence,
-        confidence: row.confidence,
-        explanation: row.explanation,
-        recommendedAction: row.recommended_action,
-        sourceLocator: node.sourceLocator,
-        sourceUrl: node.sourceUrl,
-        prerequisites: titles(summary?.prerequisites),
-        competencies: titles(summary?.competencies),
-        status: recommendationStatus(row),
-        decidedAt: row.teacher_decided_at,
-        teacherNote: row.teacher_note,
-        createdAt: row.created_at,
-        catalogue: catalogueSuggestions(catalogue, row.curriculum_node_id, row.catalogue_error_id),
-      },
-    ];
-  });
+  const views = await buildRecommendationViews(supabase, recommendationRows, graph, assessmentById, questionById);
 
   // Per assessment: evidence and current analysis state.
   const questionsByAssessment = new Map<string, QuestionRow[]>();
@@ -606,6 +617,48 @@ export async function studentPedagogy(
     notions,
     assessments,
   };
+}
+
+/**
+ * The current hypotheses and decisions of one assessment, every student:
+ * what the teacher reviews after analysing the class's copies.
+ */
+export async function assessmentReview(
+  supabase: SupabaseClient,
+  access: Awaited<ReturnType<typeof assessmentAccess>>,
+): Promise<Array<{ studentId: string; recommendation: PedagogicalRecommendationView }>> {
+  const assessmentId = access.assessment.id;
+  const [rows, questionRows] = await Promise.all([
+    selectAll<RecommendationRow & { student_id: string }>("Hypothèses de l’évaluation", (from, to) =>
+      supabase
+        .from("pedagogical_recommendations")
+        .select(`${RECOMMENDATION_COLUMNS},student_id`, { count: "exact" })
+        .eq("assessment_id", assessmentId)
+        .is("superseded_at", null)
+        .order("created_at")
+        .order("id")
+        .range(from, to),
+    ),
+    selectAll<{ id: string; position: number }>("Questions", (from, to) =>
+      supabase
+        .from("assessment_questions")
+        .select("id,position", { count: "exact" })
+        .eq("assessment_id", assessmentId)
+        .order("position")
+        .range(from, to),
+    ),
+  ]);
+  if (!rows.length) return [];
+  const graph = await curriculumGraph(supabase, access.classLevel);
+  const views = await buildRecommendationViews(
+    supabase,
+    rows,
+    graph,
+    new Map([[assessmentId, access.assessment]]),
+    new Map(questionRows.map((question) => [question.id, question])),
+  );
+  const studentByRecommendation = new Map(rows.map((row) => [row.id, row.student_id]));
+  return views.map((recommendation) => ({ studentId: studentByRecommendation.get(recommendation.id)!, recommendation }));
 }
 
 const isUuidList = (value: unknown): value is string[] =>
