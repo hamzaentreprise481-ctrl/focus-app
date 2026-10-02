@@ -12,7 +12,7 @@ import path from "node:path";
 import { createMigratedDatabase, migrationFiles } from "./helpers/pg";
 
 const ROOT = path.join(__dirname, "..");
-const LIVE_HEAD = "20260925214642_supersede_edited_analysis_runs.sql";
+const LIVE_HEAD = "20260927100000_ai_usage_events.sql";
 
 function snapshot() {
   return readFileSync(path.join(ROOT, "supabase", "live-schema-fingerprint.tsv"), "utf8")
@@ -40,7 +40,7 @@ test("migrations up to the live head rebuild the live schema object for object",
 });
 
 test("migration versions already applied live keep their live version numbers", () => {
-  // supabase_migrations.schema_migrations on the live project, 2026-09-26.
+  // supabase_migrations.schema_migrations on the live project, 2026-10-02.
   const live = [
     "20260910164313_schema.sql",
     "20260910164329_authz_functions.sql",
@@ -57,6 +57,15 @@ test("migration versions already applied live keep their live version numbers", 
     "20260925213931_persist_no_evidence_atomically.sql",
     "20260925214407_review_pedagogical_recommendations.sql",
     "20260925214642_supersede_edited_analysis_runs.sql",
+    "20260926120000_curriculum_import_v1.sql",
+    "20260926140000_curriculum_catalogue_v1.sql",
+    "20260926150000_teacher_evidence_review_v1.sql",
+    "20260926160000_curriculum_work_seconde_2026.sql",
+    "20260926170000_curriculum_catalogue_work_seconde_2026.sql",
+    "20260926180000_teacher_work_queue.sql",
+    "20260926190000_security_performance_hardening.sql",
+    "20260927090000_schema_version.sql",
+    "20260927100000_ai_usage_events.sql",
   ];
   const files = migrationFiles().map((file) => path.basename(file));
   assert.deepEqual(files.slice(0, live.length), live);
