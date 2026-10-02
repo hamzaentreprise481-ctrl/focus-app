@@ -144,13 +144,13 @@ test("a teacher creates an assessment, enters the subject and copies, analyses t
   await review.getByText("Observation confirmée : elle entre dans le suivi de l’élève.").waitFor();
   await review.getByRole("button", { name: "À examiner (0)" }).waitFor();
   await review.getByRole("button", { name: "Décidées (1)" }).click();
-  await review.getByText("Observation confirmée par vous").waitFor();
+  await review.getByText("Observation confirmée par le professeur").waitFor();
   await shot(page, "2-decided");
 
   // 6. The student file shows the confirmed observation, and its PDF downloads.
   await review.getByRole("link", { name: "Suivi de l’élève" }).click();
   await page.waitForURL(/\/app\/eleves\/[0-9a-f-]{36}/);
-  await page.getByText("Observation confirmée par vous").first().waitFor();
+  await page.getByText("Observation confirmée par le professeur").first().waitFor();
   await page.getByText("« 2x + 3 »").first().waitFor();
   await shot(page, "3-student-file");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Exporter en PDF" }).click()]);

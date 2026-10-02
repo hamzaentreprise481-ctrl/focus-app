@@ -40,6 +40,9 @@ const failed: BatchItem = { studentId: "x", name: "X", status: "failed", error: 
 test("the loop stops on a missing key, the hourly limit or three failures in a row", () => {
   assert.match(batchStopReason([failed], "ai_not_configured") ?? "", /pas configurée/);
   assert.match(batchStopReason([failed], "rate_limited") ?? "", /limite horaire/);
+  // Not a mathematics assessment, or not this teacher's student: the action's own reason.
+  const refused: BatchItem = { studentId: "y", name: "Y", status: "failed", error: "La V1 de l’IA pédagogique est limitée aux mathématiques." };
+  assert.equal(batchStopReason([refused], "not_available"), "La V1 de l’IA pédagogique est limitée aux mathématiques.");
   assert.equal(batchStopReason([failed, failed]), null);
   assert.equal(batchStopReason([failed, failed, ok("errors_found", 1), failed]), null);
   assert.match(batchStopReason([ok("no_error_observed"), failed, failed, failed]) ?? "", /3 échecs consécutifs/);

@@ -42,6 +42,7 @@ export function StudentEvidenceEditor({
   );
   const [overview, setOverview] = useState<Map<string, ResponseOverviewRow>>(new Map());
   const [questionCount, setQuestionCount] = useState<number | null>(null);
+  const [analysisAvailable, setAnalysisAvailable] = useState(false);
   const [evidence, setEvidence] = useState<StudentEvidenceView | null>(null);
   const [draft, setDraft] = useState<StudentResponseDraft[]>([]);
   const [saved, setSaved] = useState("");
@@ -56,6 +57,7 @@ export function StudentEvidenceEditor({
     if (result.ok) {
       setOverview(new Map(result.rows.map((row) => [row.studentId, row])));
       setQuestionCount(result.questionCount);
+      setAnalysisAvailable(result.analysisAvailable);
     }
   }, []);
   const refreshOverview = useCallback(async () => applyOverview(await loadResponseOverview(assessmentId)), [applyOverview, assessmentId]);
@@ -188,7 +190,13 @@ export function StudentEvidenceEditor({
         </p>
       ) : (
         <>
-        {questionCount !== null && (
+        {questionCount !== null && !analysisAvailable && (
+          <p className="mt-4 rounded-lg bg-paper p-3 text-sm text-ink-soft">
+            L’analyse pédagogique automatique porte pour l’instant sur les copies de mathématiques : ces copies restent enregistrées
+            pour votre suivi.
+          </p>
+        )}
+        {questionCount !== null && analysisAvailable && (
           <ClassAnalysisPanel
             assessmentId={assessmentId}
             students={students}
@@ -353,14 +361,16 @@ export function StudentEvidenceEditor({
                     <Button variant="secondary" disabled={busy !== null || batchRunning || !dirty} onClick={() => void save(true)}>
                       Enregistrer et passer à l’élève suivant
                     </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={busy !== null || batchRunning || dirty || !current?.answeredCount}
-                      title={dirty ? "Enregistrez d’abord la copie" : undefined}
-                      onClick={() => void analyze()}
-                    >
-                      {busy === "analyze" ? "Analyse en cours…" : "Analyser cette copie"}
-                    </Button>
+                    {analysisAvailable && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy !== null || batchRunning || dirty || !current?.answeredCount}
+                        title={dirty ? "Enregistrez d’abord la copie" : undefined}
+                        onClick={() => void analyze()}
+                      >
+                        {busy === "analyze" ? "Analyse en cours…" : "Analyser cette copie"}
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-ink-soft">Lecture seule : cette évaluation appartient à un autre professeur.</p>

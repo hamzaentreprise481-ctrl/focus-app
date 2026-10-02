@@ -379,10 +379,10 @@ export async function saveStudentEvidence(
 
 export async function loadResponseOverview(
   assessmentId: string,
-): Promise<{ ok: true; rows: ResponseOverviewRow[]; questionCount: number } | Failure> {
+): Promise<{ ok: true; rows: ResponseOverviewRow[]; questionCount: number; analysisAvailable: boolean } | Failure> {
   try {
     const { teacher, supabase } = await session();
-    await assessmentAccess(supabase, teacher.id, assessmentId);
+    const access = await assessmentAccess(supabase, teacher.id, assessmentId);
     const [{ questions, responses }, runs, pending] = await Promise.all([
       evidenceRows(supabase, [assessmentId]),
       currentRuns(supabase, [assessmentId]),
@@ -419,7 +419,8 @@ export async function loadResponseOverview(
     }
     for (const item of (pending.data ?? []) as Array<{ student_id: string }>) row(item.student_id).pendingRecommendations++;
     for (const value of students.values()) value.needsAnalysis = value.answeredCount > 0 && !seenRun.has(value.studentId);
-    return { ok: true, rows: [...students.values()], questionCount: questions.length };
+    // The pedagogical AI V1 analyses mathematics copies only.
+    return { ok: true, rows: [...students.values()], questionCount: questions.length, analysisAvailable: access.isMath };
   } catch (error) {
     return failure(error, "Impossible de charger l’état des copies.");
   }
@@ -479,10 +480,15 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     supabase = current.supabase;
     context = await studentMathContext(supabase, teacherId, studentId);
   } catch (error) {
-    return failure(error, "Analyse impossible.");
+    // Not this teacher's student, or no mathematics: no other copy will do better.
+    return error instanceof AccessError ? { ...failure(error), code: "not_available" } : failure(error, "Analyse impossible.");
   }
   if (assessmentId !== undefined && !context.assessments.some((assessment) => assessment.id === assessmentId))
-    return { ok: false, error: "Cette évaluation n’est pas une évaluation de mathématiques de la classe de l’élève." };
+    return {
+      ok: false,
+      code: "not_available",
+      error: "Cette évaluation n’est pas une évaluation de mathématiques de la classe de l’élève.",
+    };
 
   try {
     const candidates = assessmentId ? context.assessments.filter((assessment) => assessment.id === assessmentId) : context.assessments;
