@@ -43,6 +43,7 @@ export function StudentEvidenceEditor({
   const [overview, setOverview] = useState<Map<string, ResponseOverviewRow>>(new Map());
   const [questionCount, setQuestionCount] = useState<number | null>(null);
   const [analysisAvailable, setAnalysisAvailable] = useState(false);
+  const [analysisUnavailableReason, setAnalysisUnavailableReason] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<StudentEvidenceView | null>(null);
   const [draft, setDraft] = useState<StudentResponseDraft[]>([]);
   const [saved, setSaved] = useState("");
@@ -58,6 +59,7 @@ export function StudentEvidenceEditor({
       setOverview(new Map(result.rows.map((row) => [row.studentId, row])));
       setQuestionCount(result.questionCount);
       setAnalysisAvailable(result.analysisAvailable);
+      setAnalysisUnavailableReason(result.analysisUnavailableReason);
     }
   }, []);
   const refreshOverview = useCallback(async () => applyOverview(await loadResponseOverview(assessmentId)), [applyOverview, assessmentId]);
@@ -190,11 +192,8 @@ export function StudentEvidenceEditor({
         </p>
       ) : (
         <>
-        {questionCount !== null && !analysisAvailable && (
-          <p className="mt-4 rounded-lg bg-paper p-3 text-sm text-ink-soft">
-            L’analyse pédagogique automatique porte pour l’instant sur les copies de mathématiques : ces copies restent enregistrées
-            pour votre suivi.
-          </p>
+        {questionCount !== null && !analysisAvailable && analysisUnavailableReason && (
+          <p className="mt-4 rounded-lg bg-paper p-3 text-sm text-ink-soft">{analysisUnavailableReason}</p>
         )}
         {questionCount !== null && analysisAvailable && (
           <ClassAnalysisPanel

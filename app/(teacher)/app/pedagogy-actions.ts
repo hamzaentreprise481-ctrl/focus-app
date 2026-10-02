@@ -379,26 +379,37 @@ export async function saveStudentEvidence(
 
 export async function loadResponseOverview(
   assessmentId: string,
-): Promise<{ ok: true; rows: ResponseOverviewRow[]; questionCount: number; analysisAvailable: boolean } | Failure> {
+): Promise<
+  | { ok: true; rows: ResponseOverviewRow[]; questionCount: number; analysisAvailable: boolean; analysisUnavailableReason: string | null }
+  | Failure
+> {
   try {
     const { teacher, supabase } = await session();
     const access = await assessmentAccess(supabase, teacher.id, assessmentId);
+    // The pedagogical AI V1 analyses mathematics copies only, and its output
+    // belongs to the teachers of the subject (also enforced by RLS).
+    const analysisAvailable = access.isMath && access.teachesSubject;
+    const none = Promise.resolve({ data: [] as unknown[], error: null });
     const [{ questions, responses }, runs, pending] = await Promise.all([
       evidenceRows(supabase, [assessmentId]),
-      currentRuns(supabase, [assessmentId]),
-      supabase
-        .from("pedagogical_recommendations")
-        .select("student_id,analysis_run_id")
-        .eq("assessment_id", assessmentId)
-        .is("superseded_at", null)
-        .is("teacher_decision", null),
+      analysisAvailable ? currentRuns(supabase, [assessmentId]) : Promise.resolve([]),
+      analysisAvailable
+        ? supabase
+            .from("pedagogical_recommendations")
+            .select("student_id,analysis_run_id")
+            .eq("assessment_id", assessmentId)
+            .is("superseded_at", null)
+            .is("teacher_decision", null)
+        : none,
     ]);
     ensureOk(pending.error, "Recommandations");
-    const allActive = await supabase
-      .from("pedagogical_recommendations")
-      .select("analysis_run_id")
-      .eq("assessment_id", assessmentId)
-      .is("superseded_at", null);
+    const allActive = analysisAvailable
+      ? await supabase
+          .from("pedagogical_recommendations")
+          .select("analysis_run_id")
+          .eq("assessment_id", assessmentId)
+          .is("superseded_at", null)
+      : await none;
     ensureOk(allActive.error, "Recommandations");
     const activeByRun = new Map<string, number>();
     for (const row of (allActive.data ?? []) as Array<{ analysis_run_id: string }>)
@@ -418,9 +429,19 @@ export async function loadResponseOverview(
       row(run.student_id).analysisStatus = runStatus(run, activeByRun.get(run.id) ?? 0);
     }
     for (const item of (pending.data ?? []) as Array<{ student_id: string }>) row(item.student_id).pendingRecommendations++;
-    for (const value of students.values()) value.needsAnalysis = value.answeredCount > 0 && !seenRun.has(value.studentId);
-    // The pedagogical AI V1 analyses mathematics copies only.
-    return { ok: true, rows: [...students.values()], questionCount: questions.length, analysisAvailable: access.isMath };
+    for (const value of students.values())
+      value.needsAnalysis = analysisAvailable && value.answeredCount > 0 && !seenRun.has(value.studentId);
+    return {
+      ok: true,
+      rows: [...students.values()],
+      questionCount: questions.length,
+      analysisAvailable,
+      analysisUnavailableReason: analysisAvailable
+        ? null
+        : !access.isMath
+          ? "L’analyse pédagogique automatique porte pour l’instant sur les copies de mathématiques : ces copies restent enregistrées pour votre suivi."
+          : "L’analyse des copies et ses hypothèses sont réservées aux professeurs de cette matière dans la classe.",
+    };
   } catch (error) {
     return failure(error, "Impossible de charger l’état des copies.");
   }
@@ -433,7 +454,8 @@ export async function loadAssessmentReview(
   try {
     const { teacher, supabase } = await session();
     const access = await assessmentAccess(supabase, teacher.id, assessmentId);
-    if (!access.isMath) return { ok: true, items: [] };
+    // AI output belongs to the teachers of the subject (also enforced by RLS).
+    if (!access.isMath || !access.teachesSubject) return { ok: true, items: [] };
     return { ok: true, items: await assessmentReview(supabase, access) };
   } catch (error) {
     return failure(error, "Impossible de charger les hypothèses de cette évaluation.");

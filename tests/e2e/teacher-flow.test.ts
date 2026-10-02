@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, type Browser, type Page } from "playwright-core";
-import { LOCAL_TEACHER, OTHER_TEACHER, startLocalStack, type LocalStack } from "../helpers/local-stack";
+import { fixtureUuid, LOCAL_TEACHER, OTHER_TEACHER, startLocalStack, type LocalStack } from "../helpers/local-stack";
 
 const APP_PORT = 3400;
 const origin = `http://127.0.0.1:${APP_PORT}`;
@@ -178,4 +178,29 @@ test("another teacher cannot open that assessment, and signed-out visitors are s
   await page.goto(`${origin}/app/evaluations`);
   assert.equal(await page.getByText("Contrôle — Développements (E2E)").count(), 0);
   await page.context().close();
+});
+
+test("a teacher of another subject in the same class sees the assessment, not its analysis", async () => {
+  assert.ok(assessmentUrl, "the first test created and analysed the assessment");
+  // The other teacher also teaches physics in Claire's class.
+  const physics = fixtureUuid("subject:physics");
+  await stack.db.query("insert into public.subjects(id, school_id, name, code) values ($1, $2, 'Physique-chimie', 'PC')", [physics, stack.ids.school]);
+  await stack.db.query("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [
+    stack.ids.school, OTHER_TEACHER.id, stack.ids.classId, physics,
+  ]);
+  try {
+    const { page, errors } = await newPage();
+    await signIn(page, OTHER_TEACHER);
+    await page.goto(assessmentUrl);
+    await page.getByRole("heading", { name: "Contrôle — Développements (E2E)" }).waitFor();
+    await page.getByText("L’analyse des copies et ses hypothèses sont réservées aux professeurs de cette matière dans la classe.").waitFor();
+    assert.equal(await page.locator("#hypotheses").count(), 0);
+    assert.equal(await page.getByRole("button", { name: /Analyser/ }).count(), 0);
+    await shot(page, "4-other-subject");
+    assert.deepEqual(errors, []);
+    await page.context().close();
+  } finally {
+    await stack.db.query("delete from public.teacher_assignments where teacher_id = $1 and subject_id = $2", [OTHER_TEACHER.id, physics]);
+    await stack.db.query("delete from public.subjects where id = $1", [physics]);
+  }
 });

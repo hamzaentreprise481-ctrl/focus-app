@@ -129,10 +129,9 @@ export async function assessmentAccess(supabase: SupabaseClient, teacherId: stri
     supabase.from("subjects").select("name,code").eq("id", assessment.subject_id).maybeSingle(),
     supabase
       .from("teacher_assignments")
-      .select("class_id")
+      .select("class_id,subject_id")
       .eq("teacher_id", teacherId)
-      .eq("class_id", assessment.class_id)
-      .limit(1),
+      .eq("class_id", assessment.class_id),
   ]);
   ensureOk(classResponse.error, "Classe");
   ensureOk(subjectResponse.error, "Matière");
@@ -145,6 +144,10 @@ export async function assessmentAccess(supabase: SupabaseClient, teacherId: stri
     classLevel: (classResponse.data as { level: string | null } | null)?.level ?? null,
     editable: assessment.teacher_id === teacherId,
     isMath: subject ? isMathSubject(subject) : false,
+    /** Teaches this subject in this class: may analyse, read and decide on AI output. */
+    teachesSubject: ((assignmentResponse.data ?? []) as Array<{ subject_id: string }>).some(
+      (row) => row.subject_id === assessment.subject_id,
+    ),
   };
 }
 

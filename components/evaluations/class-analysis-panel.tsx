@@ -84,7 +84,11 @@ export function ClassAnalysisPanel({
         }
         if (!mounted.current) return;
         setItems([...done]);
-        await onProgress();
+        try {
+          await onProgress();
+        } catch {
+          // The roster refresh is cosmetic: the analysis itself is saved.
+        }
         const reason = batchStopReason(done, code);
         if (reason) {
           setStopReason(reason);
