@@ -8,9 +8,10 @@ Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGEN
 
 - **Connexion** : comptes professeurs Supabase Auth, rôle `app_metadata.role = "teacher"` attribué par l’administrateur. Aucun identifiant de démonstration, aucune session simulée.
 - **Données** : classes, élèves, évaluations, résultats, sujets, copies et décisions sont lus et écrits dans Supabase, sous RLS, avec la session du professeur. L’application n’affiche aucun jeu fictif en secours et n’utilise pas le stockage du navigateur.
-- **Parcours** : tableau de bord « À traiter » → évaluation → sujet, questions, corrigé, barème et notions visées → copies (réponse exacte, points, annotation) → analyse (mathématiques) → hypothèses que le professeur confirme ou écarte, avec note → dossier élève longitudinal et export PDF.
-- **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
-- **Pas encore validé en conditions réelles** : les migrations de cette branche ne sont pas appliquées sur le projet Supabase, l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
+- **Parcours** : tableau de bord « À traiter » → évaluation (créée avant toute note) → sujet, questions, corrigé, barème et notions visées → copies (réponse exacte, points, annotation) → analyse de toutes les copies de la classe en une action, copie par copie (mathématiques) → hypothèses de l’évaluation que le professeur confirme ou écarte sur place, avec note → dossier élève longitudinal et export PDF.
+- **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Hypothèses, notes et décisions ne sont lisibles que par les professeurs de la classe **et de la matière** et l’administrateur de l’établissement — jamais par l’élève ni par les professeurs d’autres matières. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
+- **Base live** : les migrations jusqu’à `20260927100000` sont appliquées sur le projet Supabase ; son schéma est identique, objet pour objet, à celui que construisent ces migrations (empreinte relevée le 2 octobre 2026, `tests/schema-live.test.ts`). La migration `20261002120000` (durcissement des accès) est **dans le dépôt, pas encore sur le projet**.
+- **Pas encore validé en conditions réelles** : l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
 
 ## Développement
 
@@ -46,7 +47,7 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 
 ## Base de données
 
-`supabase/migrations/` reproduit exactement le schéma du projet live jusqu’à `20260925214642` (empreinte vérifiée par `tests/schema-live.test.ts`, mêmes versions que `supabase_migrations.schema_migrations`). Les migrations suivantes sont **dans le dépôt, pas encore sur le projet** :
+`supabase/migrations/` reproduit exactement le schéma du projet live jusqu’à `20260927100000` (empreinte relevée le 2 octobre 2026 et vérifiée par `tests/schema-live.test.ts`, mêmes versions que `supabase_migrations.schema_migrations`). Les migrations postérieures au 25 septembre :
 
 | Migration | Contenu |
 | --- | --- |
@@ -59,8 +60,9 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 | `20260926190000_security_performance_hardening` | Recommandations des advisors Supabase : anon sans accès aux tables, `(select auth.uid())` dans les policies, index des clés étrangères |
 | `20260927090000_schema_version` | `focus_schema_version()` : version du schéma lue par `/api/health` (seule fonction SECURITY DEFINER ouverte à anon, ne renvoie qu’une version) |
 | `20260927100000_ai_usage_events` | Usage IA par requête (modèle, latence, jetons, issue, réutilisation), sans contenu ni identifiant d’élève ; voir [docs/AI_USAGE.md](./docs/AI_USAGE.md) |
+| `20261002120000_access_integrity_hardening` | **Pas encore appliquée sur le projet.** Hypothèses IA, notes et décisions lisibles par les professeurs de la classe et de la matière et l’administrateur, plus par l’élève ni par les autres matières ; décision par un professeur actuellement affecté ; écritures directes soumises aux règles des fonctions `focus_*` (école et classe de l’évaluation, élèves inscrits, maximum ≥ points attribués, notions actives) ; plus de TRUNCATE/TRIGGER/REFERENCES pour `authenticated` ; tables V0 inutilisées en lecture seule |
 
-Le code de cette branche a besoin de ces migrations. Sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. Les appliquer **dans l’ordre**, d’abord sur une branche Supabase ou une copie, puis relancer les advisors et le parcours professeur. Ne rien appliquer en production sans l’accord du propriétaire.
+Le code de cette branche a besoin des migrations jusqu’à `20260927100000` ; sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. `20261002120000` ne change aucun appel de l’application : elle ferme des accès directs à PostgREST (tout compte Supabase Auth, y compris les comptes élèves fictifs qui ont un mot de passe, peut interroger l’API avec la clé publiable). `/api/health` la réclame (`NOT READY` tant qu’elle manque). L’appliquer d’abord sur une branche Supabase ou une copie, relancer les advisors et `supabase/staging/verify.sql`, puis le parcours professeur. Ne rien appliquer en production sans l’accord du propriétaire.
 
 ## Configuration Supabase Auth
 
@@ -119,6 +121,7 @@ npm run lint
 npm run test            # unitaires, schéma réel (PGlite) avec RLS, parcours, programme, sécurité
 npm run build
 npm run test:routes     # après build ; vraies routes contre un double Supabase Auth
+npm run test:e2e        # après build ; parcours professeur complet dans Chromium (stack locale, modèle scripté)
 npm run curriculum:check
 npm run test:ai-live    # opt-in : 47 copies synthétiques, vrai modèle, nécessite OPENAI_API_KEY (--reference : auto-test hors ligne)
 npm run check:deployment -- https://votre-domaine-focus
@@ -144,6 +147,8 @@ Ce statut prouve la configuration, pas le parcours : la connexion réelle et l�
 - L’analyse IA couvre les mathématiques de Seconde ; sa qualité n’est pas mesurée (revue en aveugle à faire).
 - Le catalogue (erreurs types, remédiations) est une proposition éditoriale FOCUS, validée par aucun enseignant ; 15 litiges du programme attendent leur auteur.
 - La mesure de l’effet des remédiations n’est pas implémentée.
+- Provenance des analyses : `focus_persist_pedagogical_analysis` vérifie chaque preuve (extrait littéral, notion liée, catalogue) mais ne peut pas prouver qu’un texte vient du modèle : un professeur qui appelle l’API directement peut enregistrer une « analyse » rédigée par lui, pour ses propres élèves et sa matière. Une signature serveur (secret côté Vercel vérifié en base) reste à concevoir.
+- Projet live : la protection contre les mots de passe divulgués est désactivée (Auth → Providers → Email, réglage du tableau de bord).
 - Aucune conformité RGPD n’est revendiquée : hébergement, durée de conservation, registre et analyse d’impact restent à établir avec l’établissement.
 
 Historique des audits : [AUDIT_2026-09-11.md](./docs/history/AUDIT_2026-09-11.md), [AUDIT_2026-09-13.md](./docs/history/AUDIT_2026-09-13.md), [DESIGN_AUDIT.md](./docs/history/DESIGN_AUDIT.md).

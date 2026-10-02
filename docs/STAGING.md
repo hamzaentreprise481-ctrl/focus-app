@@ -1,5 +1,12 @@
 # Staging — rehearse the migrations on a real Supabase database
 
+> **2 October 2026.** The nine migrations below are now applied on the live
+> project (schema identical to the repository, `tests/schema-live.test.ts`).
+> The same procedure applies to the next pending migration,
+> `20261002120000_access_integrity_hardening`: dump live, restore, mark every
+> version up to `20260927100000` as applied, `supabase db push`, then run
+> `supabase/staging/verify.sql` (it now expects `20261002120000`).
+
 The nine migrations after the live head (`20260926120000` → `20260927100000`)
 have only run on PostgreSQL in PGlite. Before the live project, they must run
 on a **real Supabase database that holds a copy of the live data**, because the
