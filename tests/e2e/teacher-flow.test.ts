@@ -133,7 +133,15 @@ test("a teacher creates an assessment, enters the subject and copies, analyses t
   await page.getByText("Toutes les copies enregistrées ont une analyse à jour.").waitFor();
   await shot(page, "1-class-analysed");
 
-  // 5. Review: the hypothesis quotes the copy; the teacher confirms it.
+  // 5. The dashboard sends the teacher to the assessment's hypotheses.
+  await page.goto(`${origin}/app`);
+  const queue = page.getByRole("list", { name: "Hypothèses IA à examiner" });
+  const row = queue.getByRole("link", { name: /Contrôle — Développements \(E2E\)/ });
+  assert.match((await row.textContent()) ?? "", /Adam Benali · 1 hypothèse/);
+  await row.click();
+  await page.waitForURL(`${assessmentUrl}#hypotheses`);
+
+  // 6. Review: the hypothesis quotes the copy; the teacher confirms it.
   const review = page.locator("#hypotheses");
   await review.getByRole("button", { name: "À examiner (1)" }).waitFor();
   const card = review.getByRole("article");
@@ -147,7 +155,7 @@ test("a teacher creates an assessment, enters the subject and copies, analyses t
   await review.getByText("Observation confirmée par le professeur").waitFor();
   await shot(page, "2-decided");
 
-  // 6. The student file shows the confirmed observation, and its PDF downloads.
+  // 7. The student file shows the confirmed observation, and its PDF downloads.
   await review.getByRole("link", { name: "Suivi de l’élève" }).click();
   await page.waitForURL(/\/app\/eleves\/[0-9a-f-]{36}/);
   await page.getByText("Observation confirmée par le professeur").first().waitFor();

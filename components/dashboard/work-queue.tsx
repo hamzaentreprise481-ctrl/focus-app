@@ -69,6 +69,15 @@ export function WorkQueue({ items, aiConfigured, error }: { items: ClassWorkItem
     );
   if (!items?.tracked) return null;
   const empty = !items.review.length && !items.analyse.length && !items.evidence.length;
+  // One row per assessment: its page lists every hypothesis, grouped by student.
+  const reviews: Array<{ evaluationId: string; evaluationName: string; count: number; students: string[] }> = [];
+  for (const item of items.review) {
+    const row = reviews.find((entry) => entry.evaluationId === item.evaluationId);
+    if (row) {
+      row.count += item.count;
+      row.students.push(item.studentName);
+    } else reviews.push({ evaluationId: item.evaluationId, evaluationName: item.evaluationName, count: item.count, students: [item.studentName] });
+  }
   return (
     <section aria-labelledby="queue-title">
       <h2 id="queue-title" className="text-lg font-semibold">
@@ -83,20 +92,24 @@ export function WorkQueue({ items, aiConfigured, error }: { items: ClassWorkItem
         </p>
       ) : (
         <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] items-start gap-4">
-          {items.review.length > 0 && (
+          {reviews.length > 0 && (
             <Group
               id="queue-review"
               icon={UserCheck}
               title="Hypothèses IA à examiner"
               hint="Confirmez ou écartez chaque hypothèse ; rien n’entre dans le suivi sans votre décision."
-              total={items.review.length}
+              total={reviews.length}
             >
-              {items.review.slice(0, LIMIT).map((item) => (
+              {reviews.slice(0, LIMIT).map((item) => (
                 <Row
-                  key={`${item.evaluationId}:${item.studentId}`}
-                  href={`/app/eleves/${item.studentId}#suivi-pedagogique`}
-                  title={item.studentName}
-                  detail={`${item.evaluationName} · ${plural(item.count, "hypothèse", "hypothèses")}`}
+                  key={item.evaluationId}
+                  href={`/app/evaluations/${item.evaluationId}#hypotheses`}
+                  title={item.evaluationName}
+                  detail={
+                    item.students.length === 1
+                      ? `${item.students[0]} · ${plural(item.count, "hypothèse", "hypothèses")}`
+                      : `${plural(item.count, "hypothèse", "hypothèses")} · ${plural(item.students.length, "élève", "élèves")}`
+                  }
                 />
               ))}
             </Group>

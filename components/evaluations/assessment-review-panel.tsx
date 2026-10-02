@@ -30,6 +30,7 @@ export function AssessmentReviewPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const lock = useRef(false);
+  const scrolled = useRef(false);
 
   const apply = useCallback((result: Awaited<ReturnType<typeof loadAssessmentReview>>) => {
     if (!result.ok) {
@@ -38,6 +39,11 @@ export function AssessmentReviewPanel({
     }
     setLoadError(null);
     setItems(result.items);
+    // Opened from the dashboard: the section only exists once loaded.
+    if (!scrolled.current && result.items.length && window.location.hash === "#hypotheses") {
+      scrolled.current = true;
+      requestAnimationFrame(() => document.getElementById("hypotheses")?.scrollIntoView({ block: "start" }));
+    }
   }, []);
 
   useEffect(() => {
