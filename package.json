@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:routes": "node --import tsx --test tests/integration/*.test.ts",
+    "test:e2e": "node --import tsx --test --test-concurrency=1 tests/e2e/*.test.ts",
     "check:deployment": "node scripts/check-deployment.mjs",
     "test:ai-live": "node --import tsx scripts/run-pedagogy-benchmark.ts",
     "curriculum": "node --import tsx scripts/curriculum.ts",
