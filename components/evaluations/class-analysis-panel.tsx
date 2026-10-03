@@ -38,6 +38,8 @@ export function ClassAnalysisPanel({
   const [stopReason, setStopReason] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const stopRequested = useRef(false);
+  // A double click must start one run, never start then stop it.
+  const started = useRef(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -48,7 +50,8 @@ export function ClassAnalysisPanel({
   }, []);
 
   async function run() {
-    if (running || blockedReason || !queue.length) return;
+    if (started.current || running || blockedReason || !queue.length) return;
+    started.current = true;
     const todo = [...queue];
     const done: BatchItem[] = [];
     stopRequested.current = false;
@@ -96,6 +99,7 @@ export function ClassAnalysisPanel({
         }
       }
     } finally {
+      started.current = false;
       if (mounted.current) {
         setCurrent(null);
         setRunning(false);
@@ -126,16 +130,9 @@ export function ClassAnalysisPanel({
           </p>
         </div>
         {running ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={stopping}
-            onClick={() => {
-              stopRequested.current = true;
-              setStopping(true);
-            }}
-          >
-            {stopping ? "Arrêt après cette copie…" : "Arrêter après cette copie"}
+          // Same place, disabled: the second click of a double click lands here.
+          <Button size="sm" disabled>
+            Analyse en cours…
           </Button>
         ) : (
           <Button
@@ -151,11 +148,25 @@ export function ClassAnalysisPanel({
       {!running && blockedReason && queue.length > 0 && <p className="mt-2 text-xs text-watch">{blockedReason}</p>}
 
       {current && (
-        <div className="mt-3" role="status" aria-live="polite">
-          <p className="text-sm text-ink">
-            Analyse {current.index} / {current.total} : {current.name}…
-          </p>
-          <progress className="mt-2 h-2 w-full" max={current.total} value={current.index - 1} aria-label="Progression de l’analyse" />
+        <div className="mt-3">
+          <div role="status" aria-live="polite">
+            <p className="text-sm text-ink">
+              Analyse {current.index} / {current.total} : {current.name}…
+            </p>
+            <progress className="mt-2 h-2 w-full" max={current.total} value={current.index - 1} aria-label="Progression de l’analyse" />
+          </div>
+          <Button
+            className="mt-2"
+            variant="secondary"
+            size="sm"
+            disabled={stopping}
+            onClick={() => {
+              stopRequested.current = true;
+              setStopping(true);
+            }}
+          >
+            {stopping ? "Arrêt après cette copie…" : "Arrêter après cette copie"}
+          </Button>
         </div>
       )}
       {!running && summary && (

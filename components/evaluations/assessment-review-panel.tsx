@@ -65,6 +65,11 @@ export function AssessmentReviewPanel({
       const result = await reviewPedagogicalRecommendation(recommendationId, decision, note);
       if (!result.ok) {
         setMessage({ tone: "error", text: result.error });
+        // The hypothesis may have been replaced meanwhile (copy edited
+        // elsewhere): the list and the copies' analysis state both changed.
+        const fresh = await loadAssessmentReview(assessmentId);
+        if (fresh.ok) setItems(fresh.items);
+        onDecided();
         return;
       }
       setMessage({
@@ -86,7 +91,8 @@ export function AssessmentReviewPanel({
       </section>
     );
   // Nothing analysed with a finding yet: the copies section says what to do.
-  if (!items || !items.length) return null;
+  // A refusal that emptied the list stays visible with its explanation.
+  if (!items || (!items.length && !message)) return null;
 
   const pending = items.filter((item) => item.recommendation.status === "pending");
   const decided = items.filter((item) => item.recommendation.status !== "pending");

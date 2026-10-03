@@ -202,10 +202,21 @@ export interface ModelStandIn {
 
 type AiInput = { questions: Array<{ assessmentId: string; questionId: string; responseText: string }> };
 
+/** An answer containing this marker makes the stand-in report insufficient evidence. */
+export const ILLEGIBLE_MARKER = "[illisible]";
+/** An answer containing this marker makes the stand-in fail with HTTP 500. */
+export const MODEL_FAILURE_MARKER = "[panne-modele]";
+
 export function scriptedAnalysis(input: AiInput, script: ScriptedError[]) {
   const answered = input.questions.filter((question) => question.responseText.trim());
   if (!answered.length)
     return { status: "insufficient_evidence", insufficientReason: "Aucune réponse n’est fournie.", errors: [] };
+  if (answered.every((question) => question.responseText.includes(ILLEGIBLE_MARKER)))
+    return {
+      status: "insufficient_evidence",
+      insufficientReason: "La réponse recopiée est trop incomplète pour identifier une erreur.",
+      errors: [],
+    };
   const errors = answered.flatMap((question) =>
     script
       .filter((entry) => question.responseText.includes(entry.excerpt))
@@ -226,7 +237,11 @@ export function scriptedAnalysis(input: AiInput, script: ScriptedError[]) {
     : { status: "no_error_observed", insufficientReason: "", errors: [] };
 }
 
-export async function startModelStandIn(port: number, script: ScriptedError[] = DEFAULT_SCRIPT): Promise<ModelStandIn> {
+export async function startModelStandIn(
+  port: number,
+  script: ScriptedError[] = DEFAULT_SCRIPT,
+  options: { delayMs?: number } = {},
+): Promise<ModelStandIn> {
   const calls: unknown[] = [];
   const server = createServer(async (req, res) => {
     let raw = "";
@@ -240,6 +255,12 @@ export async function startModelStandIn(port: number, script: ScriptedError[] = 
     const body = JSON.parse(raw);
     calls.push(body);
     const input = JSON.parse(body.input[1].content[0].text) as AiInput;
+    // A slow model: the app must show progress and stay usable.
+    if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    if (input.questions.some((question) => question.responseText.includes(MODEL_FAILURE_MARKER))) {
+      res.statusCode = 500;
+      return res.end(JSON.stringify({ error: { message: "scripted failure" } }));
+    }
     const output = scriptedAnalysis(input, script);
     // Fixed, clearly synthetic token counts so usage recording is exercised.
     res.end(
@@ -277,6 +298,8 @@ export async function startLocalStack(options: {
   supabasePort: number;
   modelPort: number;
   script?: ScriptedError[];
+  /** Latency of every scripted model response. */
+  modelDelayMs?: number;
   /** Last migration to apply, to reproduce a database that is behind the code. */
   upTo?: string;
   /** PostgREST max-rows of the stand-in (default 1000, as on Supabase). */
@@ -290,7 +313,7 @@ export async function startLocalStack(options: {
     { email: NON_TEACHER.email, password: NON_TEACHER.password, userId: NON_TEACHER.id },
   ];
   const supabase = await startLocalSupabase(db, { port: options.supabasePort, accounts, maxRows: options.maxRows });
-  const model = await startModelStandIn(options.modelPort, options.script);
+  const model = await startModelStandIn(options.modelPort, options.script, { delayMs: options.modelDelayMs });
   return {
     db,
     supabase,
