@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { useUnsavedChangesWarning } from "@/components/evaluations/assessment-definition-editor";
 import { ANALYSIS_STATUS_LABEL, analysisOutcomeMessage } from "@/components/students/pedagogy-labels";
+import { ClassAnalysisPanel } from "@/components/evaluations/class-analysis-panel";
 
 const textarea =
   "mt-1 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft";
@@ -21,26 +22,35 @@ export function StudentEvidenceEditor({
   assessmentId,
   students,
   definitionVersion,
+  decisionVersion = 0,
   initialStudentId,
+  onAnalysed,
 }: {
   assessmentId: string;
   students: { id: string; name: string }[];
   /** Changes when the definition was saved, to reload the questions. */
   definitionVersion: number;
+  /** Changes after a teacher decision, to refresh the counts (not the copy being edited). */
+  decisionVersion?: number;
   /** Student to open first (dashboard links), when in this class. */
   initialStudentId?: string;
+  /** Called after any analysis, so the review list reloads. */
+  onAnalysed?: () => void;
 }) {
   const [studentId, setStudentId] = useState(
     students.some((student) => student.id === initialStudentId) ? initialStudentId! : (students[0]?.id ?? ""),
   );
   const [overview, setOverview] = useState<Map<string, ResponseOverviewRow>>(new Map());
   const [questionCount, setQuestionCount] = useState<number | null>(null);
+  const [analysisAvailable, setAnalysisAvailable] = useState(false);
+  const [analysisUnavailableReason, setAnalysisUnavailableReason] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<StudentEvidenceView | null>(null);
   const [draft, setDraft] = useState<StudentResponseDraft[]>([]);
   const [saved, setSaved] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string; link?: boolean } | null>(null);
   const [busy, setBusy] = useState<"save" | "analyze" | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
   const lock = useRef(false);
   const scrolled = useRef(false);
 
@@ -48,6 +58,8 @@ export function StudentEvidenceEditor({
     if (result.ok) {
       setOverview(new Map(result.rows.map((row) => [row.studentId, row])));
       setQuestionCount(result.questionCount);
+      setAnalysisAvailable(result.analysisAvailable);
+      setAnalysisUnavailableReason(result.analysisUnavailableReason);
     }
   }, []);
   const refreshOverview = useCallback(async () => applyOverview(await loadResponseOverview(assessmentId)), [applyOverview, assessmentId]);
@@ -80,7 +92,7 @@ export function StudentEvidenceEditor({
     return () => {
       cancelled = true;
     };
-  }, [applyOverview, assessmentId, definitionVersion]);
+  }, [applyOverview, assessmentId, definitionVersion, decisionVersion]);
   useEffect(() => {
     if (!studentId) return;
     let cancelled = false;
@@ -93,12 +105,13 @@ export function StudentEvidenceEditor({
   }, [applyEvidence, assessmentId, studentId, definitionVersion]);
 
   const dirty = JSON.stringify(draft) !== saved;
-  useUnsavedChangesWarning(dirty);
+  useUnsavedChangesWarning(dirty || batchRunning);
 
   const change = (index: number, patch: Partial<StudentResponseDraft>) =>
     setDraft((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
 
   const selectStudent = (id: string) => {
+    if (batchRunning) return;
     if (dirty && !window.confirm("Les modifications de cette copie ne sont pas enregistrées. Changer d’élève quand même ?")) return;
     setMessage(null);
     setEvidence(null);
@@ -150,6 +163,7 @@ export function StudentEvidenceEditor({
       }
       setMessage({ tone: "ok", text: analysisOutcomeMessage(result), link: true });
       await Promise.all([refreshOverview(), loadStudent(studentId)]);
+      onAnalysed?.();
     } finally {
       lock.current = false;
       setBusy(null);
@@ -177,6 +191,32 @@ export function StudentEvidenceEditor({
           Ajoutez d’abord les questions et le corrigé ci-dessus, puis revenez saisir les copies.
         </p>
       ) : (
+        <>
+        {questionCount !== null && !analysisAvailable && analysisUnavailableReason && (
+          <p className="mt-4 rounded-lg bg-paper p-3 text-sm text-ink-soft">{analysisUnavailableReason}</p>
+        )}
+        {questionCount !== null && analysisAvailable && (
+          <ClassAnalysisPanel
+            assessmentId={assessmentId}
+            students={students}
+            overview={overview}
+            blockedReason={
+              dirty ? "Enregistrez d’abord la copie en cours." : busy !== null ? "Une autre action est en cours." : null
+            }
+            onRunningChange={(running) => {
+              setBatchRunning(running);
+              if (running) setMessage(null);
+              else {
+                void loadStudent(studentId);
+                onAnalysed?.();
+              }
+            }}
+            onProgress={async () => {
+              await refreshOverview();
+              onAnalysed?.();
+            }}
+          />
+        )}
         <div className="mt-5 grid gap-5 lg:grid-cols-[260px_1fr]">
           <div>
             <Label htmlFor="copy-student">Élève</Label>
@@ -314,20 +354,22 @@ export function StudentEvidenceEditor({
                 </ol>
                 {evidence.editable ? (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <Button type="submit" disabled={busy !== null || !dirty}>
+                    <Button type="submit" disabled={busy !== null || batchRunning || !dirty}>
                       {busy === "save" ? "Enregistrement…" : "Enregistrer la copie"}
                     </Button>
-                    <Button variant="secondary" disabled={busy !== null || !dirty} onClick={() => void save(true)}>
+                    <Button variant="secondary" disabled={busy !== null || batchRunning || !dirty} onClick={() => void save(true)}>
                       Enregistrer et passer à l’élève suivant
                     </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={busy !== null || dirty || !current?.answeredCount}
-                      title={dirty ? "Enregistrez d’abord la copie" : undefined}
-                      onClick={() => void analyze()}
-                    >
-                      {busy === "analyze" ? "Analyse en cours…" : "Analyser cette copie"}
-                    </Button>
+                    {analysisAvailable && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy !== null || batchRunning || dirty || !current?.answeredCount}
+                        title={dirty ? "Enregistrez d’abord la copie" : undefined}
+                        onClick={() => void analyze()}
+                      >
+                        {busy === "analyze" ? "Analyse en cours…" : "Analyser cette copie"}
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-ink-soft">Lecture seule : cette évaluation appartient à un autre professeur.</p>
@@ -349,6 +391,7 @@ export function StudentEvidenceEditor({
             )}
           </div>
         </div>
+        </>
       )}
     </section>
   );

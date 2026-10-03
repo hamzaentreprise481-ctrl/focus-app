@@ -17,7 +17,7 @@ import {
   RECOMMENDATION_STATUS_LABEL,
 } from "@/components/students/pedagogy-labels";
 
-function RecommendationCard({
+export function RecommendationCard({
   recommendation,
   onDecide,
   busy,
@@ -103,7 +103,7 @@ function RecommendationCard({
       </p>
       {recommendation.teacherNote && recommendation.status !== "pending" && (
         <p className="mt-2 text-sm text-ink-soft">
-          <span className="font-medium">Votre note :</span> {recommendation.teacherNote}
+          <span className="font-medium">Note :</span> {recommendation.teacherNote}
         </p>
       )}
       {recommendation.decidedAt && (
@@ -113,7 +113,7 @@ function RecommendationCard({
       {onDecide && (
         <div className="mt-4 border-t border-border pt-3">
           <label htmlFor={`note-${recommendation.id}`} className="block text-xs font-medium text-ink-soft">
-            Note pour vous (facultatif)
+            Note (facultatif) — lisible par les professeurs de cette matière dans la classe, jamais par l’élève
           </label>
           <textarea
             id={`note-${recommendation.id}`}

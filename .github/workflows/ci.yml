@@ -8,7 +8,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -23,3 +23,6 @@ jobs:
       - run: npm run test
       - run: npm run build
       - run: npm run test:routes
+      # Chromium for the end-to-end teacher flow (local stack, scripted model).
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run test:e2e
