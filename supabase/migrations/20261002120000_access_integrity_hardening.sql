@@ -524,3 +524,194 @@ revoke insert, update, delete on
   public.learning_activities,
   public.student_progress
 from authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 6. A recorded finding respects the teacher's grading, as in the app
+-- ---------------------------------------------------------------------------
+-- lib/pedagogy/analysis.ts refuses a finding on an answer given full marks or
+-- identical to the correction; any assigned teacher can call this function
+-- directly through PostgREST, so the database refuses them too.
+
+-- Same comparison as normalizeMathText: NFKC, lower case, × and · as *,
+-- − and – as -, no whitespace, no trailing . or ;
+create or replace function public.focus_normalize_math_text(p_value text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select regexp_replace(
+    regexp_replace(translate(lower(normalize(coalesce(p_value, ''), NFKC)), '×·−–', '**--'), '\s+', '', 'g'),
+    '[.;]+$', '')
+$$;
+revoke all on function public.focus_normalize_math_text(text) from public, anon, authenticated;
+
+create or replace function public.focus_persist_pedagogical_analysis(
+  p_school_id uuid,
+  p_student_id uuid,
+  p_assessment_id uuid,
+  p_model text,
+  p_input_hash text,
+  p_errors jsonb,
+  p_recommendations jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_run_id uuid;
+  v_error jsonb;
+  v_rec jsonb;
+  v_question_id uuid;
+  v_response_id uuid;
+  v_node_id uuid;
+  v_response_text text;
+  v_excerpt text;
+  v_awarded_points numeric;
+  v_max_points numeric;
+  v_correction_text text;
+  v_catalogue_id uuid;
+begin
+  perform public.focus_assert_analysis_context(p_school_id, p_student_id, p_assessment_id);
+  -- One analysis write at a time per student and assessment (double clicks).
+  perform pg_advisory_xact_lock(hashtextextended('focus.analysis:' || p_student_id || ':' || p_assessment_id, 0));
+  if nullif(btrim(coalesce(p_model, '')), '') is null or char_length(p_model) > 120
+     or coalesce(p_input_hash, '') !~ '^[0-9a-f]{64}$' then
+    raise exception 'invalid analysis metadata' using errcode = '22023';
+  end if;
+  if jsonb_typeof(coalesce(p_errors, '[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(p_recommendations, '[]'::jsonb)) <> 'array'
+     or jsonb_array_length(coalesce(p_errors, '[]'::jsonb)) > 12
+     or jsonb_array_length(coalesce(p_recommendations, '[]'::jsonb)) > 12 then
+    raise exception 'analysis payload must be arrays of at most 12 items' using errcode = '22023';
+  end if;
+
+  select id into v_run_id from public.ai_analysis_runs
+  where teacher_id = auth.uid() and student_id = p_student_id and assessment_id = p_assessment_id
+    and input_hash = p_input_hash and status = 'completed' and superseded_at is null
+  order by created_at desc limit 1;
+  if found then return v_run_id; end if;
+
+  -- The new analysis of the current evidence replaces the earlier ones.
+  perform public.focus_supersede_analyses(p_assessment_id, p_student_id);
+
+  insert into public.ai_analysis_runs (school_id, teacher_id, student_id, assessment_id, model, input_hash, status, completed_at)
+  values (p_school_id, auth.uid(), p_student_id, p_assessment_id, p_model, p_input_hash, 'completed', now())
+  returning id into v_run_id;
+
+  create temporary table if not exists focus_validated_errors (
+    question_id uuid, response_id uuid, node_id uuid, excerpt text, catalogue_error_id uuid
+  ) on commit drop;
+  truncate focus_validated_errors;
+
+  for v_error in select value from jsonb_array_elements(coalesce(p_errors, '[]'::jsonb)) loop
+    begin
+      v_question_id := (v_error->>'questionId')::uuid;
+      v_response_id := (v_error->>'responseId')::uuid;
+      v_node_id := (v_error->>'nodeId')::uuid;
+    exception when others then
+      raise exception 'invalid evidence reference' using errcode = '22023';
+    end;
+    v_excerpt := coalesce(v_error->>'evidenceExcerpt', '');
+    select sr.response_text, sr.awarded_points, q.max_points, q.correction_text
+    into v_response_text, v_awarded_points, v_max_points, v_correction_text
+    from public.student_responses sr
+    join public.assessment_questions q on q.id = sr.question_id
+    where sr.id = v_response_id and q.id = v_question_id and q.assessment_id = p_assessment_id
+      and sr.assessment_id = p_assessment_id and sr.student_id = p_student_id;
+    -- The excerpt is literally in the answer and says something: at least
+    -- three characters, or the whole (shorter) answer.
+    if v_response_text is null or position(v_excerpt in v_response_text) = 0
+       or not (char_length(btrim(v_excerpt)) >= 3 or btrim(v_excerpt) = btrim(v_response_text))
+       or btrim(v_excerpt) = '' or char_length(v_excerpt) > 500 then
+      raise exception 'invalid evidence reference' using errcode = '22023';
+    end if;
+    -- The teacher's judgement is final: no error on an answer given full
+    -- marks, or identical to the correction (as lib/pedagogy/analysis.ts).
+    if v_max_points is not null and v_awarded_points is not null and v_awarded_points >= v_max_points then
+      raise exception 'answer given full marks' using errcode = '22023';
+    end if;
+    if coalesce(v_correction_text, '') <> ''
+       and public.focus_normalize_math_text(v_response_text) = public.focus_normalize_math_text(v_correction_text) then
+      raise exception 'answer identical to the correction' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.curriculum_nodes n where n.id = v_node_id and n.active and n.node_type = 'notion') then
+      raise exception 'invalid curriculum notion' using errcode = '22023';
+    end if;
+    if not public.focus_notion_related_to_question(v_node_id, v_question_id) then
+      raise exception 'notion unrelated to the question' using errcode = '22023';
+    end if;
+    if coalesce(v_error->>'errorType', '') not in ('concept', 'calcul', 'raisonnement', 'representation', 'communication', 'methode', 'prerequis')
+       or nullif(btrim(coalesce(v_error->>'explanation', '')), '') is null
+       or char_length(v_error->>'explanation') > 900 then
+      raise exception 'invalid error description' using errcode = '22023';
+    end if;
+    -- An optional typical error of the catalogue, only for that notion.
+    v_catalogue_id := null;
+    if nullif(btrim(coalesce(v_error->>'catalogueErrorCode', '')), '') is not null then
+      select te.id into v_catalogue_id from public.curriculum_typical_errors te
+      where te.code = v_error->>'catalogueErrorCode' and te.node_id = v_node_id and te.active;
+      if v_catalogue_id is null then
+        raise exception 'catalogue error does not belong to the notion' using errcode = '22023';
+      end if;
+    end if;
+    insert into focus_validated_errors values (v_question_id, v_response_id, v_node_id, v_excerpt, v_catalogue_id);
+  end loop;
+
+  insert into public.error_observations (
+    analysis_run_id, school_id, student_id, assessment_id, question_id, student_response_id,
+    curriculum_node_id, error_type, evidence_excerpt, explanation, confidence, source, created_by, catalogue_error_id
+  )
+  select v_run_id, p_school_id, p_student_id, p_assessment_id, (e.value->>'questionId')::uuid,
+         (e.value->>'responseId')::uuid, (e.value->>'nodeId')::uuid, e.value->>'errorType',
+         e.value->>'evidenceExcerpt', btrim(e.value->>'explanation'),
+         public.focus_confidence_for(p_student_id, p_assessment_id, (e.value->>'nodeId')::uuid,
+           (select count(*)::integer from focus_validated_errors v where v.node_id = (e.value->>'nodeId')::uuid)),
+         'ai', auth.uid(),
+         (select te.id from public.curriculum_typical_errors te
+           where te.code = e.value->>'catalogueErrorCode' and te.node_id = (e.value->>'nodeId')::uuid and te.active)
+  from jsonb_array_elements(coalesce(p_errors, '[]'::jsonb)) e;
+
+  for v_rec in select value from jsonb_array_elements(coalesce(p_recommendations, '[]'::jsonb)) loop
+    begin
+      v_node_id := (v_rec->>'nodeId')::uuid;
+    exception when others then
+      raise exception 'invalid recommendation notion' using errcode = '22023';
+    end;
+    -- A recommendation exists only for a notion with validated evidence in
+    -- this analysis; its evidence is rebuilt from that evidence.
+    if not exists (select 1 from focus_validated_errors v where v.node_id = v_node_id) then
+      raise exception 'recommendation without evidence' using errcode = '22023';
+    end if;
+    if nullif(btrim(coalesce(v_rec->>'difficulty', '')), '') is null or char_length(v_rec->>'difficulty') > 220
+       or nullif(btrim(coalesce(v_rec->>'explanation', '')), '') is null or char_length(v_rec->>'explanation') > 900
+       or nullif(btrim(coalesce(v_rec->>'recommendedAction', '')), '') is null or char_length(v_rec->>'recommendedAction') > 700 then
+      raise exception 'invalid recommendation text' using errcode = '22023';
+    end if;
+    if exists (select 1 from public.pedagogical_recommendations r where r.analysis_run_id = v_run_id and r.curriculum_node_id = v_node_id) then
+      raise exception 'duplicate recommendation notion' using errcode = '22023';
+    end if;
+    insert into public.pedagogical_recommendations (
+      analysis_run_id, school_id, student_id, assessment_id, curriculum_node_id, difficulty, evidence,
+      confidence, explanation, recommended_action, created_by, catalogue_error_id
+    )
+    values (
+      v_run_id, p_school_id, p_student_id, p_assessment_id, v_node_id, btrim(v_rec->>'difficulty'),
+      (select jsonb_agg(jsonb_build_object('questionId', v.question_id, 'excerpt', v.excerpt))
+         from focus_validated_errors v where v.node_id = v_node_id),
+      public.focus_confidence_for(p_student_id, p_assessment_id, v_node_id,
+        (select count(*)::integer from focus_validated_errors v where v.node_id = v_node_id)),
+      btrim(v_rec->>'explanation'), btrim(v_rec->>'recommendedAction'), auth.uid(),
+      (select v.catalogue_error_id from focus_validated_errors v
+        where v.node_id = v_node_id and v.catalogue_error_id is not null limit 1)
+    );
+  end loop;
+
+  return v_run_id;
+end;
+$$;
+
+revoke all on function public.focus_persist_pedagogical_analysis(uuid, uuid, uuid, text, text, jsonb, jsonb) from public, anon;
+grant execute on function public.focus_persist_pedagogical_analysis(uuid, uuid, uuid, text, text, jsonb, jsonb) to authenticated;

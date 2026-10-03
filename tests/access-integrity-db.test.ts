@@ -8,6 +8,7 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
+import { normalizeMathText } from "@/lib/pedagogy/analysis";
 import { createMigratedDatabase, seedSchoolFixture, type SchoolFixtureIds } from "./helpers/pg";
 
 let db: PGlite;
@@ -284,6 +285,55 @@ test("a question's maximum and notions keep their rules on direct writes", async
     if (index < 5) await insert;
     else await assert.rejects(insert, /at most 6 notions/);
   }
+});
+
+test("a direct call cannot record a finding on an answer given full marks or identical to the correction", async () => {
+  const assessmentId = await assessment();
+  const [{ result }] = await teacher<{ result: { questionIds: string[] } }>(
+    "select public.focus_save_assessment_questions($1, '', '', $2::jsonb) as result",
+    [assessmentId, JSON.stringify([{ prompt: "Développer 3(x+2).", correctionText: "3(x+2) = 3x+6", maxPoints: "2", nodeCodes: ["MATH.ALG.DISTRIBUTIVITE"] }])],
+  );
+  const [question] = result.questionIds;
+  const node = await nodeId("MATH.ALG.DISTRIBUTIVITE");
+  const record = async (student: string, responseText: string, awardedPoints: string, excerpt: string) => {
+    await teacher("select public.focus_save_student_responses($1, $2, $3::jsonb)", [
+      assessmentId,
+      student,
+      JSON.stringify([{ questionId: question, responseText, awardedPoints }]),
+    ]);
+    const [{ id: responseId }] = await teacher<{ id: string }>(
+      "select id from public.student_responses where question_id = $1 and student_id = $2",
+      [question, student],
+    );
+    return teacher("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, $5::jsonb, '[]'::jsonb)", [
+      a.school,
+      student,
+      assessmentId,
+      hash(),
+      JSON.stringify([{ questionId: question, responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: excerpt, explanation: "Le 3 n’est appliqué qu’au premier terme." }]),
+    ]);
+  };
+  // Full marks: the teacher judged the answer right.
+  await assert.rejects(record(a.students[0], "3(x+2) = 3x+2", "2", "3x+2"), /full marks/);
+  // The correction itself, written differently (case, spaces, final full stop).
+  await assert.rejects(record(a.students[1], " 3(X + 2) = 3X + 6. ", "", "3X + 6"), /identical to the correction/);
+  // Neither: the same finding is recorded.
+  await record(a.students[0], "3(x+2) = 3x+2", "1", "3x+2");
+  const { rows } = await db.query<{ n: number }>("select count(*)::int as n from public.error_observations where assessment_id = $1", [assessmentId]);
+  assert.equal(rows[0].n, 1);
+});
+
+test("the database compares an answer with the correction exactly as the app does", async () => {
+  const samples = ["2 × (x − 3).", "2·x – 3;;", "3X + 6. ", "ｘ² + 1", "  ", "a.b;c"];
+  for (const sample of samples) {
+    const { rows } = await db.query<{ value: string }>("select public.focus_normalize_math_text($1) as value", [sample]);
+    assert.equal(rows[0].value, normalizeMathText(sample), JSON.stringify(sample));
+  }
+  // Only the persistence function (its owner) uses it.
+  const { rows } = await db.query<{ allowed: boolean }>(
+    "select has_function_privilege('authenticated', 'public.focus_normalize_math_text(text)', 'execute') as allowed",
+  );
+  assert.equal(rows[0].allowed, false);
 });
 
 test("API roles hold no TRUNCATE, TRIGGER or REFERENCES, and the unused V0 tables are read-only", async () => {

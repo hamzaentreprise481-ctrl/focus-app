@@ -131,10 +131,15 @@ begin
     'focus_save_assessment', 'focus_save_assessment_questions', 'focus_save_student_responses',
     'focus_persist_pedagogical_analysis', 'focus_persist_no_evidence', 'focus_review_pedagogical_recommendation',
     'focus_teacher_work_queue', 'focus_curriculum_graph', 'focus_schema_version', 'focus_import_curriculum',
-    'focus_import_curriculum_catalogue', 'focus_record_ai_usage', 'teaches_class_subject'
+    'focus_import_curriculum_catalogue', 'focus_record_ai_usage', 'teaches_class_subject', 'focus_normalize_math_text'
   ]) as f
   where not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = f);
   if v_missing is not null then raise exception 'missing functions: %', v_missing; end if;
+  -- A recorded finding respects the teacher's grading (section 6 of 20261002120000).
+  if pg_get_functiondef('public.focus_persist_pedagogical_analysis(uuid, uuid, uuid, text, text, jsonb, jsonb)'::regprocedure)
+     !~ 'answer given full marks' then
+    raise exception 'focus_persist_pedagogical_analysis does not refuse findings on full marks';
+  end if;
 
   raise notice 'FOCUS staging verification: OK';
 end;
