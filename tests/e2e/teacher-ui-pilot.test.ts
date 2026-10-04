@@ -643,9 +643,7 @@ test("sellability: honest demo contact, measurable pilot and unassigned teacher 
     await page.goto(origin);
     await noPageOverflow(page);
     await accessibilityCheck(page, "marketing");
-    await page
-      .getByText("Exemple illustratif · réponse et analyse fictives")
-      .waitFor();
+    await page.getByText("Données fictives de démonstration").waitFor();
     const contact = await page
       .getByRole("link", { name: /^Demander une démonstration/ })
       .first()

@@ -2,7 +2,7 @@
 
 ## Git et périmètre
 
-- Branche : `work/ui-pilot-v1`, PR empilée sur `ccr-38fbcf41-7sndhr` (PR #8).
+- Branche : `work/ui-pilot-v1`, [PR #9](https://github.com/hamzaentreprise481-ctrl/focus-app/pull/9), empilée sur `ccr-38fbcf41-7sndhr` (PR #8).
 - SHA initial, enregistré avant modifications : `da19bcf8389cf4212327f0e9a17878161fc256ac`.
 - Base canonique intégrée après publication de Claude : `572251323b0c32c5cd4b9b7f9a8aa3c38f6e3956`.
 - `main` reste la V0. Cette branche ne constitue pas un déploiement autonome.
@@ -56,6 +56,7 @@ Composants : `work-queue`, `class-overview`, `evaluation-editor`, `assessment-de
 | `npm run typecheck`, `npm run lint` | Réussis |
 | `npm run build` | Build de production réussi |
 | `npm test` | 276 tests réussis |
+| `npm run test:routes` | 31 tests d’intégration existants réussis, assertions DB/Auth inchangées |
 | `npm run test:e2e` | 16 scénarios Chromium : 9 existants + 7 UI/pilote ; cinq sélecteurs UI existants suivent le libellé singulier corrigé (aucune assertion backend changée) |
 | Responsive | 1920, 1366, 1024, 820, 390 px ; 10 écrans Teacher par largeur |
 | Accessibilité | 50 scans axe-core WCAG 2 A/AA et 2.1 A/AA ; zéro violation automatique |
@@ -64,13 +65,15 @@ Composants : `work-queue`, `class-overview`, `evaluation-editor`, `assessment-de
 
 [ACCESSIBILITY_AUDIT.json](ACCESSIBILITY_AUDIT.json) contient les résultats et les contrôles qu’axe ne peut pas conclure automatiquement. Ce n’est pas une certification WCAG. Chromium est réellement lancé avec Playwright ; le daemon `agent-browser` n’a pas démarré dans cet environnement.
 
-Reproduction : `npm ci --ignore-scripts`, `npx playwright-core install chromium`, puis typecheck, lint, test, build et `FOCUS_E2E_SCREENSHOTS=/tmp/focus-ui-proof npm run test:e2e`.
+Reproduction : `npm ci --ignore-scripts`, `npx playwright-core install chromium`, puis typecheck, lint, test, build, test:routes et `FOCUS_E2E_SCREENSHOTS=/tmp/focus-ui-proof npm run test:e2e`. Pour les tests d’intégration, `PLAYWRIGHT_BROWSERS_PATH` doit pointer vers le répertoire où Chromium est installé, ou Chrome doit être présent sur le système. Dans ce conteneur, les tests utilisent Chromium Headless Shell via un chemin de lancement temporaire compatible avec le helper existant ; celui-ci est inchangé.
 
 Audit axe facultatif, sans dépendance produit ajoutée : installer `@axe-core/playwright` dans un répertoire temporaire ; passer son chemin absolu dans `FOCUS_UI_AXE_MODULE` et le fichier de sortie dans `FOCUS_UI_AXE_REPORT` lors de l’exécution de `tests/e2e/teacher-ui-pilot.test.ts`.
 
 Captures sélectionnées : [screenshots/README.md](screenshots/README.md). Toutes viennent du navigateur et de la pile fictive locale. Les dates futures des évaluations initiales sont des fixtures. Aucun seed de démonstration en production, tableau JS métier de substitution ni `localStorage` métier ajouté.
 
 ## Backend transmis à Claude
+
+La première CI distante a relevé trois incompatibilités UI : résultats encore repliés après sélection d’une compétence, suppression cachée dans le volet des résultats et libellé de démonstration changé. Corrections dans les vues : ouverture des résultats à la sélection, gestion en pied d’évaluation, mention « Données fictives de démonstration ». Aucun test d’intégration, assertion DB/Auth ou fichier CI modifié. Les 31 tests d’intégration sont réexécutés avec ces corrections.
 
 Aucune nouvelle anomalie backend reproductible confirmée par cette passe UI. Les pannes forcées sont des tests. Les points suivants sont **hérités du statut de Claude**, et non des constats personnels sur le live.
 

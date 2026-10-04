@@ -79,7 +79,8 @@ export default function PresentationPage() {
             aria-labelledby="preview-caption"
           >
             <figcaption id="preview-caption">
-              Exemple illustratif · réponse et analyse fictives
+              Données fictives de démonstration · réponse et analyse
+              illustratives
             </figcaption>
             <div className={styles.proofTop}>
               <FileText size={18} aria-hidden="true" />

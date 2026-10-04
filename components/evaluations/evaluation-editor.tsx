@@ -416,7 +416,7 @@ export function EvaluationEditor({
 
       {readyToGrade && (
         <details
-          open={!!initialEvaluation}
+          open={!!initialEvaluation || selectedSkills.length > 0}
           className="rounded-[var(--radius-lg)] border border-border bg-surface p-5"
         >
           <summary className="cursor-pointer text-base font-semibold">

@@ -89,11 +89,6 @@ export default function EvaluationDetailPage({
                   Compléter ou corriger les résultats
                 </Link>
               </Button>
-              <DeleteEvaluationButton
-                evaluationId={id}
-                evaluationName={evaluation.name}
-                resultCount={analysis.recordedCount}
-              />
             </div>
           )}
           <dl className="grid gap-4 sm:grid-cols-3">
@@ -196,6 +191,19 @@ export default function EvaluationDetailPage({
           )}
         </div>
       </details>
+      {editableEvaluationIds.includes(id) && (
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+          <p className="max-w-2xl text-sm text-ink-soft">
+            Les évaluations dont des copies ont été analysées sont conservées
+            pour le suivi. Vous pouvez corriger leurs résultats.
+          </p>
+          <DeleteEvaluationButton
+            evaluationId={id}
+            evaluationName={evaluation.name}
+            resultCount={analysis.recordedCount}
+          />
+        </footer>
+      )}
     </div>
   );
 }
