@@ -333,7 +333,8 @@ export function PedagogicalAiPanel({ studentId }: { studentId: string }) {
                               ? "erreur confirmée"
                               : observation.teacherDecision === "dismissed"
                                 ? "hypothèse écartée"
-                                : "erreur à examiner"}
+                                : // Not decided yet: an AI hypothesis, never an established error.
+                                  "hypothèse à examiner"}
                         </li>
                       ))}
                     </ol>
