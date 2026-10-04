@@ -87,6 +87,13 @@ export function usageFrom(payload: unknown): ModelUsage {
   };
 }
 
+/**
+ * The model gets at most this long per copy. The pages whose Server Actions
+ * call it allow 120 s (maxDuration), which leaves room for the database work
+ * around the call (tests/function-duration.test.ts).
+ */
+export const MODEL_TIMEOUT_MS = 90_000;
+
 // Shared by the server action and the opt-in live campaign. Never log the
 // provider's error body: it may echo text from a student's response.
 export async function requestPedagogicalAnalysisWithUsage(
@@ -109,7 +116,7 @@ export async function requestPedagogicalAnalysisWithUsage(
     response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
       method: "POST",
       // A stuck provider must not hold the teacher's request indefinitely.
-      signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? MODEL_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${options.apiKey}`,
         "Content-Type": "application/json",
