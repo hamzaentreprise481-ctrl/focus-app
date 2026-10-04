@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { AiCurriculumNode } from "@/lib/curriculum/graph";
+import { engineSigningKey } from "@/lib/pedagogy/engine-signature";
 import {
   ModelCallError,
   openAiBaseUrl,
@@ -35,8 +36,9 @@ export function pedagogicalAiModel() {
   return process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
 }
 
+/** The model key and the signing key that lets the database accept its output. */
 export function pedagogicalAiConfigured() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(process.env.OPENAI_API_KEY) && engineSigningKey() !== null;
 }
 
 export async function probePedagogicalAiConnection(): Promise<{

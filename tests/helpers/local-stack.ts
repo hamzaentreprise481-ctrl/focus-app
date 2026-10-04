@@ -17,6 +17,7 @@ import { evaluations } from "../fixtures/demo-dataset/data/evaluations";
 import { seedRawGrades } from "../fixtures/demo-dataset/data/grades";
 import { skills } from "../fixtures/demo-dataset/data/skills";
 import { students } from "../fixtures/demo-dataset/data/students";
+import { installEngineKey, TEST_ENGINE_KEY } from "./engine";
 import { createMigratedDatabase } from "./pg";
 import { startLocalSupabase, type LocalAccount, type LocalSupabase } from "./local-supabase";
 
@@ -307,6 +308,8 @@ export async function startLocalStack(options: {
 }): Promise<LocalStack> {
   const db = await createMigratedDatabase({ upTo: options.upTo, recordVersions: true });
   const ids = await seedLocalSchool(db);
+  // The engine signing key, in the database and in the app's environment.
+  await installEngineKey(db);
   const accounts: LocalAccount[] = [
     { email: LOCAL_TEACHER.email, password: LOCAL_TEACHER.password, userId: LOCAL_TEACHER.id },
     { email: OTHER_TEACHER.email, password: OTHER_TEACHER.password, userId: OTHER_TEACHER.id },
@@ -325,6 +328,7 @@ export async function startLocalStack(options: {
       OPENAI_API_KEY: "local-stand-in-key",
       OPENAI_BASE_URL: model.url,
       FOCUS_AI_MODEL: "scripted-stand-in",
+      FOCUS_ANALYSIS_SIGNING_KEY: TEST_ENGINE_KEY,
       VERCEL: "",
     },
     async close() {

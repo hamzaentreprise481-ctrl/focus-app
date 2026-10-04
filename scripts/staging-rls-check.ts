@@ -136,6 +136,24 @@ async function main() {
           p_reason: "check",
         });
         check("teacher B cannot record an analysis on it", denied(analysis.error));
+        // Teacher A cannot write AI output either: only the FOCUS server's signed envelope is accepted.
+        const forged = await a.supabase.rpc("focus_persist_no_evidence", {
+          p_school_id: subject?.school_id,
+          p_student_id: student,
+          p_assessment_id: assessmentId,
+          p_model: "check",
+          p_input_hash: "0".repeat(64),
+          p_reason: "check",
+        });
+        check("teacher A cannot record an analysis by calling the persistence function", denied(forged.error));
+        const unsigned = await a.supabase.rpc("focus_record_engine_analysis", {
+          p_envelope: JSON.stringify({
+            v: 1, kind: "no_evidence", teacherId: a.id, schoolId: subject?.school_id, studentId: student, assessmentId,
+            model: "check", inputHash: "0".repeat(64), evidenceVersion: "0".repeat(32), issuedAt: new Date().toISOString(), reason: "check",
+          }),
+          p_signature: "0".repeat(64),
+        });
+        check("teacher A cannot record an analysis the FOCUS server did not sign", denied(unsigned.error) || unsigned.error?.code === "55000");
       }
       const removed = await a.supabase.from("assessments").delete().eq("id", assessmentId);
       check("the fictitious assessment is deleted", !removed.error);

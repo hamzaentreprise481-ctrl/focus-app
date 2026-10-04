@@ -8,6 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { buildCurriculumIndex, parseCurriculumGraphPayload } from "../lib/curriculum/graph";
 import { relatedNotionCodes } from "../lib/pedagogy/analysis";
+import { installEngineKey, RECORD_SQL, signedEnvelope } from "./helpers/engine";
 import { createMigratedDatabase, seedSchoolFixture, type SchoolFixtureIds } from "./helpers/pg";
 
 let db: PGlite;
@@ -18,6 +19,7 @@ let otherStudent: string;
 
 before(async () => {
   db = await createMigratedDatabase();
+  await installEngineKey(db);
   a = await seedSchoolFixture(db, { students: [null, null, null] as unknown as string[] });
   const one = async (sql: string, params: unknown[] = []) => (await db.query<{ id: string }>(sql, params)).rows[0].id;
   otherTeacher = await one(`insert into auth.users(email, raw_app_meta_data) values ('b@example.test', '{"role":"teacher"}') returning id`);
@@ -86,6 +88,21 @@ const nodeId = async (code: string) =>
   (await db.query<{ id: string }>("select id from public.curriculum_nodes where code = $1", [code])).rows[0].id;
 const hash = () => createHash("sha256").update(randomUUID()).digest("hex");
 
+/** Records an analysis as the FOCUS server would, signed for `user`. */
+async function recordAs(
+  user: string,
+  assessmentId: string,
+  studentId: string,
+  result: { errors: unknown[]; recommendations?: unknown[] } | { reason: string },
+) {
+  const fields = { teacherId: user, schoolId: a.school, studentId, assessmentId, inputHash: hash() };
+  const signed = await signedEnvelope(
+    db,
+    "reason" in result ? { ...fields, kind: "no_evidence", reason: result.reason } : { ...fields, kind: "analysis", ...result },
+  );
+  return as<{ run: string }>(user, RECORD_SQL, [signed.p_envelope, signed.p_signature]);
+}
+
 async function analyse(assessmentId: string, studentId: string, errors: Array<{ questionId: string; node: string; excerpt: string; confidence?: string }>) {
   const responses = await teacher<{ id: string; question_id: string }>(
     "select id, question_id from public.student_responses where assessment_id = $1 and student_id = $2",
@@ -103,17 +120,10 @@ async function analyse(assessmentId: string, studentId: string, errors: Array<{ 
       confidence: error.confidence ?? "forte",
     });
   const nodes = [...new Set(payloadErrors.map((item) => item.nodeId))];
-  const [{ run }] = await teacher<{ run: string }>(
-    "select public.focus_persist_pedagogical_analysis($1, $2, $3, 'test-model', $4, $5::jsonb, $6::jsonb) as run",
-    [
-      a.school,
-      studentId,
-      assessmentId,
-      hash(),
-      JSON.stringify(payloadErrors),
-      JSON.stringify(nodes.map((id) => ({ nodeId: id, difficulty: "Distribuer", explanation: "Explication", recommendedAction: "Action", confidence: "forte", evidence: [{ questionId: "forged", excerpt: "forged" }] }))),
-    ],
-  );
+  const [{ run }] = await recordAs(a.teacher, assessmentId, studentId, {
+    errors: payloadErrors,
+    recommendations: nodes.map((id) => ({ nodeId: id, difficulty: "Distribuer", explanation: "Explication", recommendedAction: "Action", confidence: "forte", evidence: [{ questionId: "forged", excerpt: "forged" }] })),
+  });
   return run;
 }
 
@@ -311,22 +321,16 @@ test("persisted errors must quote the answer meaningfully, target a notion and r
   // A recommendation needs validated evidence on its own notion.
   const [{ id: responseId }] = await teacher<{ id: string }>("select id from public.student_responses where question_id = $1", [q]);
   await assert.rejects(
-    teacher("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, $5::jsonb, $6::jsonb)", [
-      a.school,
-      a.students[0],
-      assessmentId,
-      hash(),
-      JSON.stringify([{ questionId: q, responseId, nodeId: await nodeId("MATH.ALG.DISTRIBUTIVITE"), errorType: "calcul", evidenceExcerpt: "3x+2", explanation: "e" }]),
-      JSON.stringify([{ nodeId: await nodeId("MATH.ALG.FACTORISATION_SIMPLE"), difficulty: "d", explanation: "e", recommendedAction: "a" }]),
-    ]),
+    recordAs(a.teacher, assessmentId, a.students[0], {
+      errors: [{ questionId: q, responseId, nodeId: await nodeId("MATH.ALG.DISTRIBUTIVITE"), errorType: "calcul", evidenceExcerpt: "3x+2", explanation: "e" }],
+      recommendations: [{ nodeId: await nodeId("MATH.ALG.FACTORISATION_SIMPLE"), difficulty: "d", explanation: "e", recommendedAction: "a" }],
+    }),
     /recommendation without evidence/,
   );
   assert.equal(await activeRuns(assessmentId), 0);
-  // The other teacher cannot analyse a student of this class.
-  await assert.rejects(
-    as(otherTeacher, "select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'r')", [a.school, a.students[0], assessmentId, hash()]),
-    /not accessible/,
-  );
+  // The other teacher cannot analyse a student of this class, even with an
+  // envelope the engine signed for them.
+  await assert.rejects(recordAs(otherTeacher, assessmentId, a.students[0], { reason: "r" }), /not accessible/);
 });
 
 test("TypeScript and SQL agree on which notions relate to a question's assessed notions", async () => {
@@ -428,7 +432,7 @@ test("the dashboard work queue follows evidence, analyses and decisions, through
   assert.deepEqual(current.needsAnalysisStudentIds, sorted([a.students[0], a.students[1]]));
 
   await analyse(assessmentId, a.students[0], [{ questionId: q, node: "MATH.ALG.DISTRIBUTIVITE", excerpt: "3x+2" }]);
-  await teacher("select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'Réponse juste')", [a.school, a.students[1], assessmentId, hash()]);
+  await recordAs(a.teacher, assessmentId, a.students[1], { reason: "Réponse juste" });
   current = (await row(assessmentId))!;
   assert.deepEqual(current.needsAnalysisStudentIds, []);
   assert.deepEqual(current.pendingReviews, [{ studentId: a.students[0], count: 1 }]);
@@ -472,14 +476,8 @@ test("a teacher of another subject in the same class cannot record or supersede 
 
   // The colleague teaches the class (and may read it), but not this subject.
   assert.equal((await as(colleague, "select 1 from public.assessments where id = $1", [assessmentId])).length, 1);
-  await assert.rejects(
-    as(colleague, "select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'r')", [a.school, a.students[0], assessmentId, hash()]),
-    /not accessible/,
-  );
-  await assert.rejects(
-    as(colleague, "select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, '[]'::jsonb, '[]'::jsonb)", [a.school, a.students[0], assessmentId, hash()]),
-    /not accessible/,
-  );
+  await assert.rejects(recordAs(colleague, assessmentId, a.students[0], { reason: "r" }), /not accessible/);
+  await assert.rejects(recordAs(colleague, assessmentId, a.students[0], { errors: [] }), /not accessible/);
   // The maths teacher's analysis is untouched.
   assert.equal(await activeRuns(assessmentId, a.students[0]), 1);
 });

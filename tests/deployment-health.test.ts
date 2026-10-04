@@ -10,6 +10,7 @@ import { deploymentHealth, REQUIRED_SCHEMA_VERSION } from "../lib/deployment-hea
 const SHA = "e8d5873b58139d80402aace0588d56cfe557afa5";
 const KEY = "sb_publishable_fixture-key-must-not-leak";
 const ai = { configured: true, ok: true, model: "fixture-model", apiStatus: 200, error: null };
+const SIGNING = "5e".repeat(32);
 
 function withEnv<T>(values: Record<string, string | undefined>, run: () => Promise<T>) {
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
@@ -34,12 +35,22 @@ test("health proves commit, Supabase, schema and model without revealing any val
       String(url).endsWith("/auth/v1/health")
         ? new Response("{}", { status: 200 })
         : new Response(JSON.stringify(REQUIRED_SCHEMA_VERSION), { status: 200 })) as typeof fetch;
-    const health = await deploymentHealth(async () => ai, { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_SHA: SHA, VERCEL_GIT_COMMIT_REF: "claude/finish-focus-v1" }, fetchImpl);
+    const env = { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_SHA: SHA, VERCEL_GIT_COMMIT_REF: "claude/finish-focus-v1", FOCUS_ANALYSIS_SIGNING_KEY: SIGNING };
+    const health = await deploymentHealth(async () => ai, env, fetchImpl);
     assert.equal(health.ready, true);
+    assert.equal(health.ai.signingKeyConfigured, true);
     assert.equal(health.gitSha, SHA);
     assert.equal(health.supabase.schemaUpToDate, true);
     const text = JSON.stringify(health);
     assert.doesNotMatch(text, /fixture-key|project\.supabase\.co/);
+    assert.ok(!text.includes(SIGNING) && !text.includes("5e5e"), "the signing key never appears");
+
+    // Without the signing key nothing could be recorded: not ready.
+    for (const value of [undefined, "", "too-short", "5e".repeat(16).slice(1)]) {
+      const unsigned = await deploymentHealth(async () => ai, { ...env, FOCUS_ANALYSIS_SIGNING_KEY: value }, fetchImpl);
+      assert.equal(unsigned.ai.signingKeyConfigured, false, String(value));
+      assert.equal(unsigned.ready, false, String(value));
+    }
 
     const outdated = await deploymentHealth(async () => ai, { VERCEL_ENV: "preview" }, (async (url: string | URL) =>
       String(url).endsWith("/auth/v1/health") ? new Response("{}") : new Response(JSON.stringify("20260925214642"))) as typeof fetch);

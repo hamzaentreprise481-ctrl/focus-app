@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { normalizeMathText } from "@/lib/pedagogy/analysis";
+import { installEngineKey, RECORD_SQL, signedEnvelope } from "./helpers/engine";
 import { createMigratedDatabase, seedSchoolFixture, type SchoolFixtureIds } from "./helpers/pg";
 
 let db: PGlite;
@@ -24,6 +25,7 @@ const one = async (sql: string, params: unknown[] = []) => (await db.query<{ id:
 
 before(async () => {
   db = await createMigratedDatabase();
+  await installEngineKey(db);
   a = await seedSchoolFixture(db, { students: [null, null] as unknown as string[] });
   const user = (email: string) =>
     one(`insert into auth.users(email, raw_app_meta_data) values ($1, '{"role":"teacher"}') returning id`, [email]);
@@ -119,17 +121,17 @@ async function analysedCopy() {
   ]);
   const [{ id: responseId }] = await teacher<{ id: string }>("select id from public.student_responses where question_id = $1", [question]);
   const node = await nodeId("MATH.ALG.DISTRIBUTIVITE");
-  const [{ run }] = await teacher<{ run: string }>(
-    "select public.focus_persist_pedagogical_analysis($1, $2, $3, 'test-model', $4, $5::jsonb, $6::jsonb) as run",
-    [
-      a.school,
-      a.students[0],
-      assessmentId,
-      hash(),
-      JSON.stringify([{ questionId: question, responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: "3x+2", explanation: "Le 3 n’est appliqué qu’au premier terme." }]),
-      JSON.stringify([{ nodeId: node, difficulty: "Distribuer", explanation: "Explication", recommendedAction: "Action" }]),
-    ],
-  );
+  const signed = await signedEnvelope(db, {
+    kind: "analysis",
+    teacherId: a.teacher,
+    schoolId: a.school,
+    studentId: a.students[0],
+    assessmentId,
+    inputHash: hash(),
+    errors: [{ questionId: question, responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: "3x+2", explanation: "Le 3 n’est appliqué qu’au premier terme." }],
+    recommendations: [{ nodeId: node, difficulty: "Distribuer", explanation: "Explication", recommendedAction: "Action" }],
+  });
+  const [{ run }] = await teacher<{ run: string }>(RECORD_SQL, [signed.p_envelope, signed.p_signature]);
   const [{ id: recommendation }] = await teacher<{ id: string }>("select id from public.pedagogical_recommendations where analysis_run_id = $1", [run]);
   await teacher("select public.focus_review_pedagogical_recommendation($1, 'validate', 'Note privée du professeur')", [recommendation]);
   return { assessmentId, question, run, recommendation };
@@ -287,7 +289,7 @@ test("a question's maximum and notions keep their rules on direct writes", async
   }
 });
 
-test("a direct call cannot record a finding on an answer given full marks or identical to the correction", async () => {
+test("the database refuses a finding on an answer given full marks or identical to the correction", async () => {
   const assessmentId = await assessment();
   const [{ result }] = await teacher<{ result: { questionIds: string[] } }>(
     "select public.focus_save_assessment_questions($1, '', '', $2::jsonb) as result",
@@ -305,13 +307,16 @@ test("a direct call cannot record a finding on an answer given full marks or ide
       "select id from public.student_responses where question_id = $1 and student_id = $2",
       [question, student],
     );
-    return teacher("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, $5::jsonb, '[]'::jsonb)", [
-      a.school,
-      student,
+    const signed = await signedEnvelope(db, {
+      kind: "analysis",
+      teacherId: a.teacher,
+      schoolId: a.school,
+      studentId: student,
       assessmentId,
-      hash(),
-      JSON.stringify([{ questionId: question, responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: excerpt, explanation: "Le 3 n’est appliqué qu’au premier terme." }]),
-    ]);
+      inputHash: hash(),
+      errors: [{ questionId: question, responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: excerpt, explanation: "Le 3 n’est appliqué qu’au premier terme." }],
+    });
+    return teacher(RECORD_SQL, [signed.p_envelope, signed.p_signature]);
   };
   // Full marks: the teacher judged the answer right.
   await assert.rejects(record(a.students[0], "3(x+2) = 3x+2", "2", "3x+2"), /full marks/);

@@ -75,10 +75,15 @@ begin
   perform public.focus_save_student_responses(a1, s1, jsonb_build_array(jsonb_build_object(
     'questionId', q1, 'responseText', '3(x+2) = 3x+2', 'awardedPoints', '1', 'teacherAnnotation', 'Revoir la distributivité')));
   select id into resp1 from public.student_responses where question_id = q1 and student_id = s1;
+  -- The analysis itself is recorded as the administrator running the probe
+  -- (still as the maths teacher, auth.uid() = t): since 20261004090000 the
+  -- API roles reach it only through an engine-signed envelope.
+  execute 'reset role';
   run1 := public.focus_persist_pedagogical_analysis(school_a, s1, a1, 'rls-probe', repeat('a', 64),
     jsonb_build_array(jsonb_build_object('questionId', q1, 'responseId', resp1, 'nodeId', node, 'errorType', 'calcul',
       'evidenceExcerpt', '3x+2', 'explanation', 'Le 3 n’est appliqué qu’au premier terme.')),
     jsonb_build_array(jsonb_build_object('nodeId', node, 'difficulty', 'Distribuer', 'explanation', 'Explication', 'recommendedAction', 'Action')));
+  execute 'set local role authenticated';
   select id into rec1 from public.pedagogical_recommendations where analysis_run_id = run1;
   perform public.focus_review_pedagogical_recommendation(rec1, 'validate', 'Note privée du professeur');
   execute 'reset role';
@@ -209,6 +214,26 @@ begin
     msg := 'ALLOWED';
   exception when others then msg := 'refused: ' || sqlerrm; end;
   r := jsonb_set(r, '{maths_teacher,copy_for_student_of_other_class}', to_jsonb(msg));
+  -- An "analysis" written by the teacher, not by the FOCUS engine.
+  begin
+    perform public.focus_persist_pedagogical_analysis(school_a, s1, a1, 'gpt-forged', repeat('c', 64), '[]'::jsonb, '[]'::jsonb);
+    msg := 'ALLOWED';
+  exception when others then msg := 'refused: ' || sqlerrm; end;
+  r := jsonb_set(r, '{maths_teacher,record_forged_analysis}', to_jsonb(msg));
+  begin
+    perform public.focus_record_engine_analysis(
+      jsonb_build_object('v', 1, 'kind', 'no_evidence', 'teacherId', t, 'schoolId', school_a, 'studentId', s1, 'assessmentId', a1,
+        'model', 'gpt-forged', 'inputHash', repeat('c', 64), 'evidenceVersion', repeat('0', 32), 'issuedAt', now(), 'reason', 'r')::text,
+      repeat('0', 64));
+    msg := 'ALLOWED';
+  exception when others then msg := 'refused: ' || sqlerrm; end;
+  r := jsonb_set(r, '{maths_teacher,record_unsigned_envelope}', to_jsonb(msg));
+  begin
+    delete from public.assessments where id = a1;
+    get diagnostics n = row_count;
+    msg := case when n > 0 then 'ALLOWED' else 'no row deleted' end;
+  exception when others then msg := 'refused: ' || sqlerrm; end;
+  r := jsonb_set(r, '{maths_teacher,delete_analysed_assessment}', to_jsonb(msg));
   execute 'reset role';
 
   -- ------------------------------------------------------------------ anon

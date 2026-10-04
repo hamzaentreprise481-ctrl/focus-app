@@ -14,6 +14,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { asRole, createMigratedDatabase, migrationFiles } from "./helpers/pg";
 import { LIVE } from "./helpers/work-curriculum";
 import { LOCAL_TEACHER, seedLocalSchool } from "./helpers/local-stack";
+import { installEngineKey } from "./helpers/engine";
 
 const LIVE_HEAD = "20260925214642_supersede_edited_analysis_runs.sql";
 // Measured on project wznqeofsvbutbvbyxfab on 2026-09-27, with COLLATE "C".
@@ -107,6 +108,7 @@ test("the migrations after the 25 September live head upgrade it without losing 
     const kept = await db.query<{ n: number }>("select count(*)::int as n from public.curriculum_nodes where id = any($1::uuid[]) and active", [liveIds]);
     assert.equal(Number(kept.rows[0].n), 44, "the 44 live nodes keep their UUIDs and stay active");
 
+    await installEngineKey(db);
     await db.exec(readFileSync(path.join(__dirname, "..", "supabase", "staging", "verify.sql"), "utf8"));
 
     const teacherAfter = await asTeacher(db, async () => ({

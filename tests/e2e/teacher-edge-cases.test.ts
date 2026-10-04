@@ -207,6 +207,35 @@ test("a refresh during the class analysis keeps what is done and offers the rest
   await page.context().close();
 });
 
+test("a copy edited while the model reads it is not recorded with the old text", async () => {
+  const { page, errors } = await teacherPage();
+  const title = "Cas limites — copie modifiée";
+  await assessmentWithQuestion(page, title);
+  await enterCopy(page, "Adam Benali", "2(x + 3) = 2x + 3", "0,5");
+  const calls = stack.model.calls.length;
+  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).click();
+  // The model has the copy; meanwhile it is corrected elsewhere (another tab).
+  while (stack.model.calls.length === calls) await delay(20);
+  await stack.db.query(
+    `update public.student_responses r set response_text = '2(x + 3) = 2x + 6'
+     from public.assessments a where a.id = r.assessment_id and a.title = $1`,
+    [title],
+  );
+  await page
+    .getByText("Adam Benali : La copie, le sujet ou le corrigé a changé pendant l’analyse : rien n’a été enregistré. Relancez l’analyse de cette copie.")
+    .waitFor({ timeout: 30_000 });
+  const recorded = await stack.db.query<{ n: number }>(
+    `select count(*)::int as n from public.ai_analysis_runs r join public.assessments a on a.id = r.assessment_id where a.title = $1`,
+    [title],
+  );
+  assert.equal(recorded.rows[0].n, 0, "nothing was recorded for the text the model read");
+  // Relaunched, the analysis reads the corrected copy: no error, no hypothesis.
+  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).click();
+  await page.getByText("1 copie analysée : 1 copie sans erreur observée — ce n’est pas une preuve de maîtrise.").waitFor({ timeout: 30_000 });
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
 test("direct URLs to missing or foreign records answer plainly", async () => {
   const { page } = await teacherPage();
   for (const [path, text] of [

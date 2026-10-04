@@ -3,12 +3,14 @@
 -- one DO block that raises at the first failed check. Success prints
 -- "FOCUS staging verification: OK".
 --
--- Checks: schema version (20261002120000); the 44 curriculum UUIDs captured from live on
+-- Checks: schema version (20261004090000); the 44 curriculum UUIDs captured from live on
 -- 2026-09-26 are unchanged; the Seconde graph (99 active nodes, 330
 -- relationships) and its catalogue (272 objectives, 99 typical errors,
 -- 99 remediations); RLS on every public table; nothing granted to anon;
 -- the only definer function anon may run; no per-row auth.uid() policy;
--- the functions the application calls exist.
+-- the functions the application calls exist; AI output is recorded only
+-- through the signed engine entry point, whose key is installed and
+-- unreadable by the API roles.
 --
 -- Kept in sync with tests/fixtures/live-curriculum-ids.json by
 -- tests/staging-verify.test.ts, which also runs it on a replica.
@@ -22,8 +24,8 @@ begin
   -- 1. Schema version (Supabase records each migration it applied).
   if to_regclass('supabase_migrations.schema_migrations') is not null then
     select max(version) into v_version from supabase_migrations.schema_migrations;
-    if v_version is distinct from '20261002120000' then
-      raise exception 'schema version is %, expected 20261002120000', v_version;
+    if v_version is distinct from '20261004090000' then
+      raise exception 'schema version is %, expected 20261004090000', v_version;
     end if;
   end if;
 
@@ -131,7 +133,8 @@ begin
     'focus_save_assessment', 'focus_save_assessment_questions', 'focus_save_student_responses',
     'focus_persist_pedagogical_analysis', 'focus_persist_no_evidence', 'focus_review_pedagogical_recommendation',
     'focus_teacher_work_queue', 'focus_curriculum_graph', 'focus_schema_version', 'focus_import_curriculum',
-    'focus_import_curriculum_catalogue', 'focus_record_ai_usage', 'teaches_class_subject', 'focus_normalize_math_text'
+    'focus_import_curriculum_catalogue', 'focus_record_ai_usage', 'teaches_class_subject', 'focus_normalize_math_text',
+    'focus_record_engine_analysis', 'focus_analysis_evidence_versions'
   ]) as f
   where not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = f);
   if v_missing is not null then raise exception 'missing functions: %', v_missing; end if;
@@ -139,6 +142,20 @@ begin
   if pg_get_functiondef('public.focus_persist_pedagogical_analysis(uuid, uuid, uuid, text, text, jsonb, jsonb)'::regprocedure)
      !~ 'answer given full marks' then
     raise exception 'focus_persist_pedagogical_analysis does not refuse findings on full marks';
+  end if;
+
+  -- 7. AI output only from the FOCUS engine (20261004090000).
+  select string_agg(p.proname, ', ') into v_missing from pg_proc p
+  where p.pronamespace = 'public'::regnamespace
+    and p.proname in ('focus_persist_pedagogical_analysis', 'focus_persist_no_evidence')
+    and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'));
+  if v_missing is not null then raise exception 'API roles may record AI output directly: %', v_missing; end if;
+  if has_schema_privilege('authenticated', 'focus_private', 'usage') or has_schema_privilege('anon', 'focus_private', 'usage')
+     or has_schema_privilege('service_role', 'focus_private', 'usage') then
+    raise exception 'an API role can read the engine key schema focus_private';
+  end if;
+  if not exists (select 1 from focus_private.engine_keys) then
+    raise exception 'engine signing key not installed: insert it into focus_private.engine_keys (docs/STAGING.md)';
   end if;
 
   raise notice 'FOCUS staging verification: OK';

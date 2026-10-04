@@ -189,12 +189,9 @@ export async function deleteEvaluationAction(evaluationId: string): Promise<Save
       ok: false,
       error: isSchemaOutdated(runs.error) ? SCHEMA_OUTDATED_MESSAGE : "Impossible de vérifier l’historique de cette évaluation.",
     };
-  if ((runs.count ?? 0) > 0)
-    return {
-      ok: false,
-      error:
-        "Des copies de cette évaluation ont déjà été analysées : elle fait partie de l’historique du suivi des élèves et ne peut pas être supprimée. Vous pouvez corriger son titre, sa date et ses résultats.",
-    };
+  const analysed =
+    "Des copies de cette évaluation ont déjà été analysées : elle fait partie de l’historique du suivi des élèves et ne peut pas être supprimée. Vous pouvez corriger son titre, sa date et ses résultats.";
+  if ((runs.count ?? 0) > 0) return { ok: false, error: analysed };
 
   const removed = await supabase.from("assessments").delete().eq("id", evaluationId);
   if (removed.error) {
@@ -204,7 +201,10 @@ export async function deleteEvaluationAction(evaluationId: string): Promise<Save
       error:
         removed.error.code === "42501"
           ? "Vous n’avez pas les droits nécessaires pour supprimer cette évaluation."
-          : "Suppression impossible. L’évaluation est conservée.",
+          : // The database keeps analysed assessments (an analysis may have been recorded meanwhile).
+            removed.error.code === "55000"
+            ? analysed
+            : "Suppression impossible. L’évaluation est conservée.",
     };
   }
   // Row-level security turns a refused delete into "0 rows": check.

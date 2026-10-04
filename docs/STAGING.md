@@ -2,10 +2,12 @@
 
 > **2 October 2026.** The nine migrations below are now applied on the live
 > project (schema identical to the repository, `tests/schema-live.test.ts`).
-> The same procedure applies to the next pending migration,
-> `20261002120000_access_integrity_hardening`: dump live, restore, mark every
-> version up to `20260927100000` as applied, `supabase db push`, then run
-> `supabase/staging/verify.sql` (it now expects `20261002120000`).
+> The same procedure applies to the next pending migrations,
+> `20261002120000_access_integrity_hardening` and
+> `20261004090000_engine_signed_analyses`: dump live, restore, mark every
+> version up to `20260927100000` as applied, `supabase db push`, install the
+> engine key (section 2), then run `supabase/staging/verify.sql` (it now
+> expects `20261004090000`) and `supabase/staging/rls-probe.sql`.
 
 The nine migrations after the live head (`20260926120000` → `20260927100000`)
 have only run on PostgreSQL in PGlite. Before the live project, they must run
@@ -58,6 +60,14 @@ supabase link --project-ref <staging-ref>
 supabase db push --dry-run     # lists exactly the nine new migrations
 supabase db push
 supabase migration list        # now ends at 20260927100000
+```
+
+Then install the engine signing key once in staging (SQL editor), with the
+same value as the Preview's `FOCUS_ANALYSIS_SIGNING_KEY` (`openssl rand -hex 32`):
+
+```sql
+insert into focus_private.engine_keys (id, secret) values (1, decode('<hex>', 'hex'))
+on conflict (id) do update set secret = excluded.secret, rotated_at = now();
 ```
 
 ## 3. Verify
