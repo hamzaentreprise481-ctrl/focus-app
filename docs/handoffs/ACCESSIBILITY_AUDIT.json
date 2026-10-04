@@ -1,0 +1,413 @@
+{
+  "environment": "local fictitious school and scripted model; not production",
+  "tool": "axe-core WCAG 2 A/AA and 2.1 A/AA; keyboard and overflow assertions in the UI suite",
+  "results": [
+    {
+      "name": "delete-dialog",
+      "width": 1920,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-hidden-focus",
+          "nodes": 10
+        }
+      ]
+    },
+    {
+      "name": "dashboard",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "classes",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "classe",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "evaluations",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "evaluation",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "nouvelle",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "resultats",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "eleves",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "eleve",
+      "width": 1366,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "parametres",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "delete-dialog",
+      "width": 1366,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-hidden-focus",
+          "nodes": 10
+        }
+      ]
+    },
+    {
+      "name": "delete-dialog",
+      "width": 1024,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-hidden-focus",
+          "nodes": 10
+        }
+      ]
+    },
+    {
+      "name": "dashboard",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "classes",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "classe",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "evaluations",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "evaluation",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "nouvelle",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "resultats",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "eleves",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "eleve",
+      "width": 820,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "parametres",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "delete-dialog",
+      "width": 820,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-hidden-focus",
+          "nodes": 10
+        }
+      ]
+    },
+    {
+      "name": "dashboard",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "classes",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "classe",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "evaluations",
+      "width": 390,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "evaluation",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "nouvelle",
+      "width": 390,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "resultats",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "eleves",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "eleve",
+      "width": 390,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "parametres",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "delete-dialog",
+      "width": 390,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-hidden-focus",
+          "nodes": 10
+        }
+      ]
+    },
+    {
+      "name": "pending-hypotheses",
+      "width": 1366,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": 1
+        },
+        {
+          "id": "color-contrast",
+          "nodes": 14
+        }
+      ]
+    },
+    {
+      "name": "pending-hypotheses",
+      "width": 1024,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": 1
+        },
+        {
+          "id": "color-contrast",
+          "nodes": 12
+        }
+      ]
+    },
+    {
+      "name": "pending-hypotheses",
+      "width": 820,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "pending-hypotheses",
+      "width": 390,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "longitudinal-confirmed",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "longitudinal-confirmed",
+      "width": 820,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "longitudinal-confirmed",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "analysis-error",
+      "width": 1366,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": 1
+        },
+        {
+          "id": "color-contrast",
+          "nodes": 32
+        }
+      ]
+    },
+    {
+      "name": "sign-in-error",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "password-recovery",
+      "width": 1366,
+      "violations": [],
+      "incomplete": []
+    },
+    {
+      "name": "marketing",
+      "width": 1920,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "marketing",
+      "width": 1366,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "marketing",
+      "width": 1024,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "marketing",
+      "width": 820,
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "marketing",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    }
+  ]
+}

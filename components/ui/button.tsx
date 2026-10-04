@@ -18,8 +18,8 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-sm gap-1.5",
-  md: "h-10 px-4 text-sm gap-2",
+  sm: "min-h-9 px-3 py-1.5 text-sm gap-1.5",
+  md: "min-h-10 px-4 py-2 text-sm gap-2",
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -33,7 +33,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         {...(!asChild ? { type: type ?? "button" } : {})}
         className={cn(
-          "inline-flex items-center justify-center rounded-[var(--radius-sm)] font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
+          "inline-flex max-w-full items-center justify-center rounded-[var(--radius-sm)] text-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:shrink-0",
           variantClasses[variant],
           sizeClasses[size],
           className,

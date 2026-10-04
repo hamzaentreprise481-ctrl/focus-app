@@ -2,11 +2,9 @@
 import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
 import { notFound, useParams } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { analyzeStudent } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { Breadcrumbs, SectionNav } from "@/components/ui/page-header";
 import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
 import { StudentSynthesis } from "@/components/students/student-synthesis";
@@ -42,34 +40,45 @@ export default function StudentProfilePage() {
     <div className="space-y-8">
       <DataLoadState />
       <header>
-        <Link
-          href={`/app/classes/${student.classId}`}
-          className="inline-flex items-center gap-1 text-sm text-ink-soft hover:text-ink"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          {classInfo?.name}
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: "Accueil", href: "/app" },
+            {
+              label: classInfo?.name ?? "Classe",
+              href: `/app/classes/${student.classId}`,
+            },
+            { label: "Suivi individuel" },
+          ]}
+        />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               {student.name}
             </h1>
             <p className="mt-1 text-sm text-ink-soft">
-              {classInfo?.name} · {classInfo?.subject} · {observed.length} évaluation{observed.length > 1 ? "s" : ""} renseignée{observed.length > 1 ? "s" : ""}
+              {classInfo?.name} · {classInfo?.subject} · {observed.length}{" "}
+              évaluation{observed.length > 1 ? "s" : ""} renseignée
+              {observed.length > 1 ? "s" : ""}
             </p>
           </div>
-          {analysis.pattern === "donnees_insuffisantes" ? (
-            <span className="text-sm text-ink-soft">Recul encore limité</span>
-          ) : (
-            <StatusBadge status={analysis.status} />
-          )}
+          <ExportPdfButton target={{ kind: "student", id }} />
         </div>
       </header>
 
-      <ExportPdfButton target={{ kind: "student", id: id }} />
+      <SectionNav
+        label="Dans la fiche élève"
+        items={[
+          { label: "Copies et observations", href: "#suivi-pedagogique" },
+          { label: "Compétences", href: "#competences" },
+          { label: "Évaluations dans le temps", href: "#evolution" },
+        ]}
+      />
 
-      <StudentSynthesis analysis={analysis} firstName={student.name.split(" ")[0]} />
-
+      <PedagogicalAiPanel studentId={id} />
+      <StudentSynthesis
+        analysis={analysis}
+        firstName={student.name.split(" ")[0]}
+      />
       <section aria-labelledby="observations">
         <h2 id="observations" className="text-lg font-semibold">
           Ce qui a été observé
@@ -96,7 +105,10 @@ export default function StudentProfilePage() {
             <p className="mt-2 text-sm text-ink-soft">
               {fragile.length
                 ? fragile
-                    .map((s) => `${s.name} (${s.testedCount} observation${s.testedCount > 1 ? "s" : ""})`)
+                    .map(
+                      (s) =>
+                        `${s.name} (${s.testedCount} observation${s.testedCount > 1 ? "s" : ""})`,
+                    )
                     .join(" · ")
                 : "Aucun niveau fragile ou non maîtrisé dans les dernières observations renseignées."}
             </p>
@@ -104,10 +116,9 @@ export default function StudentProfilePage() {
         </div>
       </section>
 
-      <PedagogicalAiPanel studentId={id} />
-
       <section
         className="rounded-xl border border-border bg-surface p-5"
+        id="competences"
         aria-labelledby="skills-title"
       >
         <h2 id="skills-title" className="text-lg font-semibold">
@@ -120,7 +131,13 @@ export default function StudentProfilePage() {
         <SkillMasteryList skills={analysis.skillMasteries} />
       </section>
 
-      <EvidenceTimeline studentId={id} classId={student.classId} dataset={dataset} />
+      <div id="evolution" className="scroll-mt-6">
+        <EvidenceTimeline
+          studentId={id}
+          classId={student.classId}
+          dataset={dataset}
+        />
+      </div>
 
       <details className="insights-disclosure border-t border-border pt-4">
         <summary className="cursor-pointer rounded-lg py-3 text-lg font-semibold">
@@ -159,4 +176,3 @@ export default function StudentProfilePage() {
     </div>
   );
 }
-

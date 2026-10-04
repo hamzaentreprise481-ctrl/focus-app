@@ -2,29 +2,26 @@
 
 import { useSchoolData } from "@/lib/school-data-context";
 import { Button } from "@/components/ui/button";
+import { SectionLoading, Feedback } from "@/components/ui/feedback";
 
 export function DataLoadState() {
   const { loaded, storageError, retryStorage } = useSchoolData();
   if (!loaded)
     return (
-      <p role="status" className="py-6 text-sm text-ink-soft">
-        Chargement des données de l’établissement…
-      </p>
+      <SectionLoading label="Chargement des données de l’établissement…" />
     );
   if (!storageError) return null;
 
   return (
-    <div
-      role="alert"
-      className="my-4 rounded-lg border border-border bg-surface p-4 text-sm"
-    >
+    <Feedback tone="error">
+      <p className="font-semibold">Données momentanément indisponibles</p>
       <p>{storageError}</p>
       <p className="mt-2 text-ink-soft">
-        FOCUS n’affiche pas de données fictives à la place des données serveur.
+        Réessayez le chargement pour retrouver vos classes et vos évaluations.
       </p>
       <Button className="mt-3" variant="secondary" onClick={retryStorage}>
         Réessayer
       </Button>
-    </div>
+    </Feedback>
   );
 }

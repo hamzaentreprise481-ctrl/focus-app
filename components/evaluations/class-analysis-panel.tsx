@@ -141,7 +141,7 @@ export function ClassAnalysisPanel({
             disabled={!!blockedReason || !queue.length}
             title={blockedReason ?? undefined}
           >
-            {queue.length ? `Analyser les ${queue.length} copie${queue.length > 1 ? "s" : ""} non analysée${queue.length > 1 ? "s" : ""}` : "Rien à analyser"}
+            {queue.length === 1 ? "Analyser la copie non analysée" : queue.length > 1 ? `Analyser les ${queue.length} copies non analysées` : "Rien à analyser"}
           </Button>
         )}
       </div>

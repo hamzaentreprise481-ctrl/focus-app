@@ -1,213 +1,201 @@
 "use client";
-import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
-import { Button } from "@/components/ui/button";
-import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { useSchoolData } from "@/lib/school-data-context";
-import { DistributionChart } from "@/components/evaluations/distribution-chart";
-import { formatDate, formatScore } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Breadcrumbs, PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/feedback";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment-evidence-workspace";
 import { DeleteEvaluationButton } from "@/components/evaluations/delete-evaluation-button";
+import { DistributionChart } from "@/components/evaluations/distribution-chart";
+import { ExportPdfButton } from "@/components/reports/export-pdf-button";
+import { formatDate, formatScore } from "@/lib/utils";
 
-export default function EvaluationDetailPage({ initialStudentId }: { initialStudentId?: string }) {
+export default function EvaluationDetailPage({
+  initialStudentId,
+}: {
+  initialStudentId?: string;
+}) {
   const { id } = useParams<{ id: string }>();
-  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
-
+  const { dataset, loaded, storageError, editableEvaluationIds } =
+    useSchoolData();
   if (!loaded || storageError) return <DataLoadState />;
-
-  if (!dataset.evaluations.some((e) => e.id === id)) {
+  if (!dataset.evaluations.some((e) => e.id === id))
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">
-          Évaluation introuvable dans votre espace
-        </h1>
-        <p className="text-ink-soft">
-          Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès.
-        </p>
-        <Link className="text-brand" href="/app/evaluations">
-          Retour aux évaluations
-        </Link>
-      </div>
+      <EmptyState
+        title="Évaluation introuvable dans votre espace"
+        description="Cette évaluation n’existe pas dans les données auxquelles ce compte professeur a accès."
+        action={
+          <Button variant="secondary" asChild>
+            <Link href="/app/evaluations">Retour aux évaluations</Link>
+          </Button>
+        }
+      />
     );
-  }
 
   const analysis = analyzeEvaluation(id, dataset);
   const { evaluation } = analysis;
+  const classInfo = dataset.classes.find((c) => c.id === evaluation.classId);
   const classStudents = dataset.students
-    .filter((student) => student.classId === evaluation.classId)
+    .filter((s) => s.classId === evaluation.classId)
     .map(({ id: studentId, name }) => ({ id: studentId, name }));
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <Link
-          href="/app/evaluations"
-          className="inline-flex items-center gap-1 text-sm text-ink-soft hover:text-ink"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Évaluations
-        </Link>
-        <div className="mt-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            {evaluation.name}
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {formatDate(evaluation.date)} ·{" "}
-            {dataset.classes.find((c) => c.id === evaluation.classId)?.name}
-          </p>
-        </div>
+        <Breadcrumbs
+          items={[
+            { label: "Accueil", href: "/app" },
+            {
+              label: classInfo?.name ?? "Classe",
+              href: `/app/classes/${evaluation.classId}`,
+            },
+            { label: "Évaluation" },
+          ]}
+        />
+        <PageHeader
+          title={evaluation.name}
+          description={`${formatDate(evaluation.date)} · ${classInfo?.name ?? "Classe"} · ${classInfo?.subject ?? ""}`}
+          actions={<ExportPdfButton target={{ kind: "evaluation", id }} />}
+        />
       </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        {editableEvaluationIds.includes(id) && (
-          <Button asChild>
-            <Link href={`/app/evaluations/${id}/modifier`}>
-              Compléter ou corriger les résultats
-            </Link>
-          </Button>
-        )}
-        <ExportPdfButton target={{ kind: "evaluation", id: id }} />
-        {editableEvaluationIds.includes(id) && (
-          <DeleteEvaluationButton
-            evaluationId={id}
-            evaluationName={evaluation.name}
-            resultCount={analysis.recordedCount}
-          />
-        )}
-      </div>
-      <p className="text-sm text-ink-soft">
-        {analysis.recordedCount} élèves renseignés · {analysis.unrecordedCount}{" "}
-        non renseignés. Les cases vides ne comptent ni comme zéro ni comme
-        absence.
-      </p>
-
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <p className="text-sm text-ink-soft">Moyenne de classe</p>
-          <p className="mt-2 text-[28px] font-semibold text-ink">
-            {analysis.average !== null
-              ? `${formatScore(analysis.average)} / 20`
-              : "—"}
-          </p>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
+      <AssessmentEvidenceWorkspace
+        assessmentId={id}
+        students={classStudents}
+        initialStudentId={initialStudentId}
+      />
+      <details
+        id="resultats"
+        className="insights-disclosure scroll-mt-6 rounded-[var(--radius-lg)] border border-border bg-surface p-5"
+      >
+        <summary className="cursor-pointer font-semibold">
+          Notes et compétences saisies{" "}
+          <span className="ml-2 text-sm font-normal text-ink-soft">
+            {analysis.recordedCount} / {classStudents.length} élèves renseignés
+          </span>
+        </summary>
+        <div className="mt-5 space-y-6">
           <p className="text-sm text-ink-soft">
-            Résultats renseignés hors absences
+            Les notes et les niveaux ci-dessous ont été saisis par les
+            enseignants. Les cases vides restent non renseignées ; les
+            hypothèses sur les copies se décident séparément ci-dessus.
           </p>
-          <p className="mt-2 text-[28px] font-semibold text-ink">
-            {analysis.presentCount}
-          </p>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <p className="text-sm text-ink-soft">Compétences testées</p>
-          <p className="mt-2 text-[15px] font-medium text-ink">
-            {evaluation.skillIds
-              .map(
-                (sid) =>
-                  analysis.skillBreakdown.find((s) => s.skillId === sid)?.name,
-              )
-              .join(" · ") || "Aucune compétence renseignée"}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <h2 className="text-[15px] font-semibold text-ink">
-            Distribution des notes
-          </h2>
-          <div className="mt-4">
-            <DistributionChart distribution={analysis.distribution} />
-          </div>
-        </section>
-
-        <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-          <h2 className="text-[15px] font-semibold text-ink">
-            Niveaux fragiles par compétence
-          </h2>
-          <p className="mt-1 text-sm text-ink-soft">
-            Part des élèves encore fragiles ou non maîtrisés, parmi ceux évalués
-            sur cette compétence.
-          </p>
-          <div className="mt-4 space-y-3">
-            {analysis.skillBreakdown.map((skill) => (
-              <div
-                key={skill.skillId}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="text-ink">{skill.name}</span>
-                {skill.weakPercent !== null ? (
-                  <span className="font-medium text-ink-soft">
-                    {skill.weakPercent}% en difficulté
-                    <span className="ml-1 text-xs text-muted">
-                      ({skill.sampleSize} évalués)
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted">
-                    Données insuffisantes
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-        <h2 className="text-[15px] font-semibold text-ink">
-          Résultats à regarder de plus près
-        </h2>
-        <p className="mt-1 text-sm text-ink-soft">
-          Comparés uniquement à leurs évaluations antérieures dans cette classe,
-          ou aux compétences explicitement renseignées.
-        </p>
-        {analysis.strugglingStudents.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft">
-            Aucun signal particulier sur cette évaluation.
-          </p>
-        ) : (
-          <ul className="mt-4 divide-y divide-border">
-            {analysis.strugglingStudents.map((s) => (
-              <li
-                key={s.studentId}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm"
-              >
-                <div className="min-w-0">
-                  <Link
-                    href={`/app/eleves/${s.studentId}`}
-                    className="font-medium text-ink hover:text-brand"
+          {editableEvaluationIds.includes(id) && (
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" asChild>
+                <Link href={`/app/evaluations/${id}/modifier`}>
+                  Compléter ou corriger les résultats
+                </Link>
+              </Button>
+              <DeleteEvaluationButton
+                evaluationId={id}
+                evaluationName={evaluation.name}
+                resultCount={analysis.recordedCount}
+              />
+            </div>
+          )}
+          <dl className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-sm text-ink-soft">Moyenne renseignée</dt>
+              <dd className="mt-1 text-xl font-semibold">
+                {analysis.average === null
+                  ? "Aucune note"
+                  : `${formatScore(analysis.average)} / 20`}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-ink-soft">Résultats hors absences</dt>
+              <dd className="mt-1 text-xl font-semibold">
+                {analysis.presentCount}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-ink-soft">Compétences renseignées</dt>
+              <dd className="mt-1 text-sm">
+                {evaluation.skillIds
+                  .map((sid) => dataset.skills.find((s) => s.id === sid)?.name)
+                  .filter(Boolean)
+                  .join(" · ") || "Aucune compétence renseignée"}
+              </dd>
+            </div>
+          </dl>
+          {analysis.average !== null && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <section>
+                <h2 className="mb-4 text-base font-semibold">
+                  Distribution des notes
+                </h2>
+                <DistributionChart distribution={analysis.distribution} />
+              </section>
+              <section>
+                <h2 className="text-base font-semibold">
+                  Niveaux fragiles par compétence
+                </h2>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Niveaux fragiles ou non maîtrisés parmi les élèves évalués sur
+                  cette compétence.
+                </p>
+                <ul className="mt-3 divide-y divide-border">
+                  {analysis.skillBreakdown.map((skill) => (
+                    <li
+                      key={skill.skillId}
+                      className="flex flex-wrap justify-between gap-2 py-3 text-sm"
+                    >
+                      <span>{skill.name}</span>
+                      <span className="text-ink-soft">
+                        {skill.weakPercent === null
+                          ? "Données insuffisantes"
+                          : `${skill.weakPercent}% · ${skill.sampleSize} élèves documentés`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+          )}
+          {analysis.strugglingStudents.length > 0 && (
+            <section>
+              <h2 className="text-base font-semibold">
+                Résultats à regarder de plus près
+              </h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Indices issus des notes et des compétences saisies, à
+                contextualiser avec les copies.
+              </p>
+              <ul className="mt-3 divide-y divide-border">
+                {analysis.strugglingStudents.map((s) => (
+                  <li
+                    key={s.studentId}
+                    className="flex items-start justify-between gap-3 py-3 text-sm"
                   >
-                    {s.name}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
-                </div>
-                <span className="shrink-0 tabular-nums text-ink-soft">
-                  {formatScore(s.score)} / 20
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {analysis.absentStudents.length > 0 && (
-          <div className="mt-4 flex items-start gap-2 rounded-[var(--radius-sm)] bg-watch-soft p-3 text-sm text-watch">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Absent(e)s :{" "}
-              {analysis.absentStudents.map((s) => s.name).join(", ")}
-              {evaluation.important &&
-                " — séquence charnière, un rattrapage est recommandé."}
+                    <div className="min-w-0">
+                      <Link
+                        href={`/app/eleves/${s.studentId}`}
+                        className="font-medium text-brand"
+                      >
+                        {s.name}
+                      </Link>
+                      <p className="mt-1 text-xs text-ink-soft">{s.reason}</p>
+                    </div>
+                    <span className="shrink-0 text-ink-soft">
+                      {formatScore(s.score)} / 20
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {analysis.absentStudents.length > 0 && (
+            <p className="text-sm text-ink-soft">
+              Absences renseignées :{" "}
+              {analysis.absentStudents.map((s) => s.name).join(", ")}. Aucun
+              défaut de maîtrise n’est déduit de cette absence.
             </p>
-          </div>
-        )}
-      </section>
-
-      <AssessmentEvidenceWorkspace assessmentId={id} students={classStudents} initialStudentId={initialStudentId} />
+          )}
+        </div>
+      </details>
     </div>
   );
 }
