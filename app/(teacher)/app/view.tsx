@@ -9,14 +9,13 @@ import {
   Users,
   ChevronDown,
 } from "lucide-react";
-import { analyzeClass, getAttentionFeed } from "@/lib/analysis";
+import { analyzeClass, CONFIDENCE_LABEL, getAttentionFeed } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
 import { useTeacher } from "@/components/layout/teacher-context";
 import { AttentionCard } from "@/components/dashboard/attention-card";
 import { WorkQueue } from "@/components/dashboard/work-queue";
 import { classWorkItems } from "@/lib/pedagogy/work-queue";
 import type { loadTeacherWorkQueue } from "./pedagogy-actions";
-import { MasteryBar } from "@/components/ui/mastery-bar";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage({ workQueue }: { workQueue: Awaited<ReturnType<typeof loadTeacherWorkQueue>> }) {
@@ -26,10 +25,11 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
   const activeClass = dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
   if (!loaded || storageError) return <DataLoadState />;
   if (!activeClass) return <p className="text-ink-soft">Aucune classe disponible dans cet espace.</p>;
-  const { classInfo, counts, weakestSkills } = analyzeClass(
+  const { classInfo, counts, skillSignals } = analyzeClass(
     activeClass.id,
     dataset,
   );
+  const signals = skillSignals.filter((signal) => signal.fragileNow > 0).slice(0, 3);
   const feed = getAttentionFeed(activeClass.id, 4, dataset);
   const workItems = workQueue.ok ? classWorkItems(workQueue.queue, activeClass.id, dataset) : null;
   const classEvaluations = dataset.evaluations.filter((e) => e.classId === activeClass.id);
@@ -174,22 +174,26 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
               <h3 className="mb-3 text-sm font-semibold">
                 Compétences à explorer ensemble
               </h3>
-              <div className="space-y-5 rounded-xl border border-border bg-white p-5">
-                {weakestSkills.map((s) => (
-                  <div key={s.skillId}>
-                    <div className="mb-2 flex justify-between gap-4 text-sm">
-                      <span>{s.name}</span>
-                      <span>{s.percent}%</span>
+              <div className="space-y-4 rounded-xl border border-border bg-white p-5">
+                {signals.map((signal) => (
+                  <div key={signal.skillId} className="text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="font-medium">{signal.name}</span>
+                      <span className="text-xs text-ink-soft">{CONFIDENCE_LABEL[signal.confidence]}</span>
                     </div>
-                    <MasteryBar percent={s.percent} />
                     <p className="mt-1 text-xs text-ink-soft">
-                      À partir des observations de {s.sampleSize} élèves
+                      {signal.fragileNow} sur {signal.documented} élève{signal.documented > 1 ? "s" : ""} documenté{signal.documented > 1 ? "s" : ""} au dernier niveau fragile ou non maîtrisé
+                      {signal.persistent ? `, dont ${signal.persistent} sur deux observations consécutives` : ""}.
                     </p>
                   </div>
                 ))}
-                {!weakestSkills.length && (
+                {signals.length ? (
+                  <Link href={`/app/classes/${classInfo.id}`} className="inline-block text-sm font-medium text-brand">
+                    Voir les élèves concernés dans la classe →
+                  </Link>
+                ) : (
                   <p className="text-sm text-ink-soft">
-                    Les compétences renseignées apparaîtront ici.
+                    Les compétences renseignées fragiles ou non maîtrisées apparaîtront ici.
                   </p>
                 )}
               </div>

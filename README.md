@@ -10,8 +10,8 @@ Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGEN
 - **Données** : classes, élèves, évaluations, résultats, sujets, copies et décisions sont lus et écrits dans Supabase, sous RLS, avec la session du professeur. L’application n’affiche aucun jeu fictif en secours et n’utilise pas le stockage du navigateur.
 - **Parcours** : tableau de bord « À traiter » → évaluation (créée avant toute note) → sujet, questions, corrigé, barème et notions visées → copies (réponse exacte, points, annotation) → analyse de toutes les copies de la classe en une action, copie par copie (mathématiques) → hypothèses de l’évaluation que le professeur confirme ou écarte sur place, avec note → dossier élève longitudinal et export PDF.
 - **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Hypothèses, notes et décisions ne sont lisibles que par les professeurs de la classe **et de la matière** et l’administrateur de l’établissement — jamais par l’élève ni par les professeurs d’autres matières. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
-- **Base live** : les migrations jusqu’à `20260927100000` sont appliquées sur le projet Supabase ; son schéma est identique, objet pour objet, à celui que construisent ces migrations (empreinte relevée le 2 octobre 2026, `tests/schema-live.test.ts`). La migration `20261002120000` (durcissement des accès) est **dans le dépôt, pas encore sur le projet**.
-- **Pas encore validé en conditions réelles** : l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
+- **Base live** : les migrations jusqu’à `20260927100000` sont appliquées sur le projet Supabase ; son schéma est identique, objet pour objet, à celui que construisent ces migrations (empreinte relevée le 2 octobre 2026, `tests/schema-live.test.ts` ; procédure du 27 septembre dans [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md)). La migration `20261002120000` (durcissement des accès) est **dans le dépôt, pas encore sur le projet**.
+- **Pas encore validé en conditions réelles** : aucune connexion réelle de professeur n’a encore été faite sur le projet ; l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
 
 ## Développement
 
@@ -92,6 +92,20 @@ node --import tsx scripts/admin-invite-teacher.ts --project-ref <ref> --email pr
 ```
 
 `--project-ref` doit correspondre à l’URL (garde-fou contre une erreur de projet). Sans `--commit`, rien n’est envoyé.
+
+### « Connexion impossible » : diagnostic
+
+Ce message reprend la réponse de Supabase Auth (`invalid_credentials`) : l’adresse n’a pas de compte dans le projet, ou le mot de passe est différent. Les anciens identifiants de démonstration (`prof@focus.fr`) n’existent pas dans Supabase Auth et ne fonctionneront jamais. Depuis une machine qui atteint Supabase :
+
+```bash
+FOCUS_CHECK_SUPABASE_URL=https://<ref>.supabase.co FOCUS_CHECK_SUPABASE_KEY=<clé publiable> \
+FOCUS_CHECK_EMAIL=<adresse du professeur> FOCUS_CHECK_PASSWORD=<mot de passe> \
+npm run check:login -- --project-ref <ref>
+```
+
+Avec `FOCUS_CHECK_APP_URL=<déploiement>` (et `VERCEL_AUTOMATION_BYPASS_SECRET` si la Preview est protégée), le même contrôle passe aussi par le vrai formulaire du déploiement : cookie HttpOnly, rechargement, pages classe/élèves/évaluations, déconnexion. État et étapes restantes : [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md).
+
+Une ligne PASS/FAIL par étape du parcours de l’application : connexion, session vérifiée, `app_metadata.role`, profil, établissement, affectations, lectures sous RLS, version du schéma, renouvellement, déconnexion, refus anonyme. Aucun mot de passe, jeton ni contenu n’est affiché ; une clé secrète est refusée.
 
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 

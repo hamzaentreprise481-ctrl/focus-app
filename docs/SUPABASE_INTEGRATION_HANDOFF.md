@@ -10,6 +10,8 @@
 Projet : FOCUS (`wznqeofsvbutbvbyxfab`). Tout autre projet Supabase du compte
 est hors périmètre.
 
+> **Mise à jour du 27 septembre 2026 :** les neuf migrations `20260926120000` … `20260927100000` sont appliquées sur le projet live, avec l’accord du propriétaire ; détails et vérifications dans [GO_LIVE_LOGIN.md](./GO_LIVE_LOGIN.md). La section ci-dessous décrit l’état d’avant.
+
 ## État du projet live (lecture seule, 26 septembre)
 
 - Migrations appliquées jusqu’à `20260925214642_supersede_edited_analysis_runs`.

@@ -47,7 +47,7 @@ function Group({
       <ul aria-labelledby={id} className="divide-y divide-border">
         {children}
       </ul>
-      {total > LIMIT && <p className="border-t border-border px-5 py-2.5 text-xs text-ink-soft">et {total - LIMIT} autre(s)</p>}
+      {total > LIMIT && <p className="border-t border-border px-5 py-2.5 text-xs text-ink-soft">et {total - LIMIT} autre{total - LIMIT > 1 ? "s" : ""}</p>}
     </div>
   );
 }
@@ -157,7 +157,7 @@ export function WorkQueue({ items, aiConfigured, error }: { items: ClassWorkItem
                     key={item.evaluationId}
                     href={`/app/evaluations/${item.evaluationId}?eleve=${item.firstMissingStudentId}#copies`}
                     title={item.evaluationName}
-                    detail={`${item.entered} copie(s) saisie(s) sur ${item.expected}`}
+                    detail={`${item.entered} copie${item.entered > 1 ? "s" : ""} saisie${item.entered > 1 ? "s" : ""} sur ${item.expected}`}
                   />
                 ),
               )}

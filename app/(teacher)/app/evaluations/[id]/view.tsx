@@ -11,6 +11,7 @@ import { useSchoolData } from "@/lib/school-data-context";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { formatDate, formatScore } from "@/lib/utils";
 import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment-evidence-workspace";
+import { DeleteEvaluationButton } from "@/components/evaluations/delete-evaluation-button";
 
 export default function EvaluationDetailPage({ initialStudentId }: { initialStudentId?: string }) {
   const { id } = useParams<{ id: string }>();
@@ -61,14 +62,23 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
         </div>
       </div>
 
-      <ExportPdfButton target={{ kind: "evaluation", id: id }} />
-      {editableEvaluationIds.includes(id) && (
-        <Button asChild>
-          <Link href={`/app/evaluations/${id}/modifier`}>
-            Compléter ou corriger les résultats
-          </Link>
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {editableEvaluationIds.includes(id) && (
+          <Button asChild>
+            <Link href={`/app/evaluations/${id}/modifier`}>
+              Compléter ou corriger les résultats
+            </Link>
+          </Button>
+        )}
+        <ExportPdfButton target={{ kind: "evaluation", id: id }} />
+        {editableEvaluationIds.includes(id) && (
+          <DeleteEvaluationButton
+            evaluationId={id}
+            evaluationName={evaluation.name}
+            resultCount={analysis.recordedCount}
+          />
+        )}
+      </div>
       <p className="text-sm text-ink-soft">
         {analysis.recordedCount} élèves renseignés · {analysis.unrecordedCount}{" "}
         non renseignés. Les cases vides ne comptent ni comme zéro ni comme
@@ -118,7 +128,7 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
 
         <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
           <h2 className="text-[15px] font-semibold text-ink">
-            Difficultés fréquentes par compétence
+            Niveaux fragiles par compétence
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
             Part des élèves encore fragiles ou non maîtrisés, parmi ceux évalués
@@ -151,7 +161,7 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
 
       <section className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
         <h2 className="text-[15px] font-semibold text-ink">
-          Élèves en difficulté sur cette évaluation
+          Résultats à regarder de plus près
         </h2>
         <p className="mt-1 text-sm text-ink-soft">
           Comparés uniquement à leurs évaluations antérieures dans cette classe,
@@ -177,7 +187,7 @@ export default function EvaluationDetailPage({ initialStudentId }: { initialStud
                   </Link>
                   <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
                 </div>
-                <span className="shrink-0 tabular-nums text-attention">
+                <span className="shrink-0 tabular-nums text-ink-soft">
                   {formatScore(s.score)} / 20
                 </span>
               </li>

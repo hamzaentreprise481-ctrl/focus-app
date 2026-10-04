@@ -188,7 +188,7 @@ test("another teacher cannot open that assessment, and signed-out visitors are s
   await page.context().close();
 });
 
-test("a teacher of another subject in the same class sees the assessment, not its analysis", async () => {
+test("a teacher of another subject in the same class sees neither the assessment nor its analysis", async () => {
   assert.ok(assessmentUrl, "the first test created and analysed the assessment");
   // The other teacher also teaches physics in Claire's class.
   const physics = fixtureUuid("subject:physics");
@@ -199,11 +199,14 @@ test("a teacher of another subject in the same class sees the assessment, not it
   try {
     const { page, errors } = await newPage();
     await signIn(page, OTHER_TEACHER);
+    // The workspace holds only the teacher's own (class, subject) pairs.
     await page.goto(assessmentUrl);
-    await page.getByRole("heading", { name: "Contrôle — Développements (E2E)" }).waitFor();
-    await page.getByText("L’analyse des copies et ses hypothèses sont réservées aux professeurs de cette matière dans la classe.").waitFor();
+    await page.getByRole("heading", { name: "Évaluation introuvable dans votre espace" }).waitFor();
     assert.equal(await page.locator("#hypotheses").count(), 0);
+    assert.equal(await page.getByText("2x + 3").count(), 0);
     assert.equal(await page.getByRole("button", { name: /Analyser/ }).count(), 0);
+    await page.goto(`${origin}/app/evaluations`);
+    assert.equal(await page.getByText("Contrôle — Développements (E2E)").count(), 0);
     await shot(page, "4-other-subject");
     assert.deepEqual(errors, []);
     await page.context().close();

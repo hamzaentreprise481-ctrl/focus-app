@@ -19,7 +19,7 @@ export default function ElevesPage() {
           Élèves
         </h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Les élèves de vos {dataset.classes.length} classe(s), avec leur suivi pédagogique.
+          Les élèves de {dataset.classes.length > 1 ? `vos ${dataset.classes.length} classes` : "votre classe"}, avec leur suivi pédagogique.
         </p>
       </div>
       <StudentRoster analyses={studentAnalyses} skills={dataset.skills} />

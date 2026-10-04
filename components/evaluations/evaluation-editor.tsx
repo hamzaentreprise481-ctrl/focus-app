@@ -36,9 +36,20 @@ export function EvaluationEditor({
 }) {
   const { dataset, saveEvaluation, loaded, storageError } = useSchoolData();
 
-  const { classes, skills } = dataset;
+  const { classes } = dataset;
   const [selectedClassId, setSelectedClassId] = useState(initialEvaluation?.classId ?? initialClassId ?? "");
-  const classId = classes.find((c) => c.id === selectedClassId)?.id ?? classes[0]?.id;
+  const activeClass = classes.find((c) => c.id === selectedClassId) ?? classes[0];
+  const classId = activeClass?.id;
+  // Only the competencies of the class's subjects (a competency of another
+  // subject would be refused on save), plus any already on the evaluation.
+  const classSubjects = activeClass?.subjectIds ?? (activeClass?.subjectId ? [activeClass.subjectId] : []);
+  const skills = dataset.skills.filter(
+    (skill) =>
+      !skill.subjectId ||
+      !classSubjects.length ||
+      classSubjects.includes(skill.subjectId) ||
+      initialEvaluation?.skillIds.includes(skill.id),
+  );
   const evaluationId = useRef(initialEvaluation?.id ?? "");
   const saveLock = useRef(false);
   const [saving, setSaving] = useState(false);
@@ -296,7 +307,11 @@ export function EvaluationEditor({
           <Label htmlFor="eval-class">Classe</Label>
           <select id="eval-class" value={classId ?? ""}
             disabled={!!initialEvaluation || Object.keys(rows).length > 0 || saving}
-            onChange={(event) => setSelectedClassId(event.target.value)}
+            onChange={(event) => {
+              setSelectedClassId(event.target.value);
+              // Competencies belong to a subject: start again for another class.
+              setSelectedSkills([]);
+            }}
             className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm">
             {!classes.length && <option value="">Aucune classe disponible</option>}
             {classes.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.subject}</option>)}
@@ -312,6 +327,13 @@ export function EvaluationEditor({
             Renseignez une note, des compétences, ou les deux. Une note ne
             détermine jamais un niveau de compétence.
           </p>
+          {!skills.length && (
+            <p className="text-sm text-ink-soft">
+              Aucune compétence n’est encore définie pour cette matière. Le
+              référentiel de compétences est géré par l’établissement ; vous
+              pouvez enregistrer les notes dès maintenant.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {skills.map((skill) => {
               const active = selectedSkills.includes(skill.id);

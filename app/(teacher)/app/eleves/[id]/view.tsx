@@ -9,7 +9,7 @@ import { useSchoolData } from "@/lib/school-data-context";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
-import { CreateAccompagnementDialog } from "@/components/students/create-accompagnement-dialog";
+import { StudentSynthesis } from "@/components/students/student-synthesis";
 import { EvidenceTimeline } from "@/components/students/evidence-timeline";
 import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { formatScore } from "@/lib/utils";
@@ -37,7 +37,6 @@ export default function StudentProfilePage() {
       g.studentId === id &&
       analysis.timeline.some((t) => t.evaluation.id === g.evaluationId),
   );
-  const nextAction = analysis.recommendedActions[0];
 
   return (
     <div className="space-y-8">
@@ -56,7 +55,7 @@ export default function StudentProfilePage() {
               {student.name}
             </h1>
             <p className="mt-1 text-sm text-ink-soft">
-              {classInfo?.subject} · {observed.length} évaluations renseignées
+              {classInfo?.name} · {classInfo?.subject} · {observed.length} évaluation{observed.length > 1 ? "s" : ""} renseignée{observed.length > 1 ? "s" : ""}
             </p>
           </div>
           {analysis.pattern === "donnees_insuffisantes" ? (
@@ -69,36 +68,7 @@ export default function StudentProfilePage() {
 
       <ExportPdfButton target={{ kind: "student", id: id }} />
 
-      <PedagogicalAiPanel studentId={id} />
-      <section
-        aria-labelledby="next-step"
-        className="rounded-xl border border-border bg-surface p-5 sm:p-6"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wide text-brand">
-          Piste à examiner ensemble
-        </p>
-        <h2 id="next-step" className="mt-3 text-xl font-medium">
-          {nextAction?.label ??
-            (analysis.pattern === "donnees_insuffisantes"
-              ? "Compléter les observations avant de conclure"
-              : "Poursuivre les observations")}
-        </h2>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-soft">
-          {analysis.summary}
-        </p>
-        <p className="mt-3 text-xs text-ink-soft">
-          Suggestion issue de règles explicites. À confirmer avec votre
-          connaissance de l’élève.
-        </p>
-        {nextAction && (
-          <div className="mt-4">
-            <CreateAccompagnementDialog
-              studentFirstName={student.name.split(" ")[0]}
-              actions={analysis.recommendedActions}
-            />
-          </div>
-        )}
-      </section>
+      <StudentSynthesis analysis={analysis} firstName={student.name.split(" ")[0]} />
 
       <section aria-labelledby="observations">
         <h2 id="observations" className="text-lg font-semibold">
@@ -126,13 +96,15 @@ export default function StudentProfilePage() {
             <p className="mt-2 text-sm text-ink-soft">
               {fragile.length
                 ? fragile
-                    .map((s) => `${s.name} (${s.testedCount} observations)`)
+                    .map((s) => `${s.name} (${s.testedCount} observation${s.testedCount > 1 ? "s" : ""})`)
                     .join(" · ")
                 : "Aucun niveau fragile ou non maîtrisé dans les dernières observations renseignées."}
             </p>
           </div>
         </div>
       </section>
+
+      <PedagogicalAiPanel studentId={id} />
 
       <section
         className="rounded-xl border border-border bg-surface p-5"
@@ -152,7 +124,7 @@ export default function StudentProfilePage() {
 
       <details className="insights-disclosure border-t border-border pt-4">
         <summary className="cursor-pointer rounded-lg py-3 text-lg font-semibold">
-          Explorer les notes et l’interprétation
+          Explorer les notes
         </summary>
         <div className="mt-4 space-y-6">
           <div className="flex flex-wrap gap-x-12 gap-y-5 text-sm">
@@ -182,16 +154,6 @@ export default function StudentProfilePage() {
           {analysis.average !== null && (
             <GradeChart timeline={analysis.timeline} />
           )}
-          <div className="rounded-lg bg-paper p-4 text-sm">
-            <h3 className="font-medium">Interprétation FOCUS</h3>
-            <p className="mt-2 leading-relaxed text-ink-soft">
-              {analysis.narrative}
-            </p>
-            <p className="mt-3 text-xs text-ink-soft">
-              Cette interprétation ne constitue pas un fait supplémentaire sur
-              l’élève.
-            </p>
-          </div>
         </div>
       </details>
     </div>
