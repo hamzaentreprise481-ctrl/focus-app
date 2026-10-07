@@ -25,7 +25,7 @@ begin
     'focus-scan-imports',
     'focus-scan-imports',
     false,
-    52428800,
+    50000000,
     array['application/pdf']::text[]
   )
   on conflict (id) do update set
