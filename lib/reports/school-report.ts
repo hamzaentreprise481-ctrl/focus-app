@@ -4,7 +4,7 @@ import type { PedagogicalConfidence, PedagogicalSnapshot } from "@/lib/pedagogy/
 import type { EvaluationDataset } from "@/lib/types";
 import { formatDate, formatScore } from "@/lib/utils";
 
-export type ReportTarget = { kind: "class" | "student" | "evaluation"; id: string };
+export type ReportTarget = { kind: "class" | "student" | "evaluation"; id: string; /** For a student: the class to report on. */ classId?: string };
 export interface SchoolReport {
   title: string;
   subtitle: string;
@@ -74,7 +74,7 @@ export function buildSchoolReport(dataset: EvaluationDataset, target: ReportTarg
     };
   }
   if (target.kind === "student") {
-    const a = analyzeStudent(target.id, dataset);
+    const a = analyzeStudent(target.id, dataset, target.classId);
     const c = dataset.classes.find((item) => item.id === a.classId);
     return {
       title: `Dossier élève - ${a.name}`, subtitle: `${c?.name ?? ""} · ${c?.subject ?? ""}`,

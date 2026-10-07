@@ -9,10 +9,12 @@ import { SectionNav } from "@/components/ui/page-header";
 /** Subject and correction (shared), then each student's copy, then the hypotheses to decide. */
 export function AssessmentEvidenceWorkspace({
   assessmentId,
+  classId,
   students,
   initialStudentId,
 }: {
   assessmentId: string;
+  classId?: string;
   students: { id: string; name: string }[];
   initialStudentId?: string;
 }) {
@@ -54,6 +56,7 @@ export function AssessmentEvidenceWorkspace({
       {analysisAvailable && (
         <AssessmentReviewPanel
           assessmentId={assessmentId}
+          classId={classId}
           students={students}
           version={version + reviewVersion}
           onDecided={() => setDecisionVersion((value) => value + 1)}

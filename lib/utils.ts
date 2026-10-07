@@ -5,6 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** A student's record, in the class it is opened from (a pupil can be
+ *  enrolled in several of the teacher's classes). */
+export function studentPath(studentId: string, classId?: string, hash = ""): string {
+  return `/app/eleves/${studentId}${classId ? `?classe=${encodeURIComponent(classId)}` : ""}${hash}`;
+}
+
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("fr-FR", {

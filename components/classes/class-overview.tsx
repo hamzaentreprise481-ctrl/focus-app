@@ -9,7 +9,7 @@ import {
   type StudentAnalysis,
 } from "@/lib/analysis";
 import type { EvaluationDataset } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, studentPath } from "@/lib/utils";
 
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n > 1 ? many : one}`;
@@ -70,7 +70,7 @@ function StudentLine({
   return (
     <li>
       <Link
-        href={`/app/eleves/${analysis.studentId}`}
+        href={studentPath(analysis.studentId, analysis.classId)}
         className="block rounded-md px-2 py-1.5 hover:bg-paper focus-visible:bg-paper"
       >
         <span className="font-medium text-ink">{analysis.name}</span>

@@ -1,7 +1,7 @@
 "use client";
 import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
-import { notFound, useParams } from "next/navigation";
+import { notFound, useParams, useSearchParams } from "next/navigation";
 import { analyzeStudent } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
 import { Breadcrumbs, SectionNav } from "@/components/ui/page-header";
@@ -15,11 +15,16 @@ import { PedagogicalAiPanel } from "@/components/students/pedagogical-ai-panel";
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const requestedClass = useSearchParams().get("classe");
   const { dataset, loaded, storageError } = useSchoolData();
   if (!loaded || storageError) return <DataLoadState />;
-  const student = dataset.students.find((s) => s.id === id);
+  // A pupil enrolled in several of the teacher's classes: the class the
+  // record was opened from, else the first enrollment.
+  const student =
+    dataset.students.find((s) => s.id === id && s.classId === requestedClass) ??
+    dataset.students.find((s) => s.id === id);
   if (!student) notFound();
-  const analysis = analyzeStudent(id, dataset);
+  const analysis = analyzeStudent(id, dataset, student.classId);
   const classInfo = dataset.classes.find((c) => c.id === student.classId);
   const documented = analysis.skillMasteries.filter((s) => s.testedCount > 0);
   const strengths = documented.filter(
@@ -61,7 +66,7 @@ export default function StudentProfilePage() {
               {observed.length > 1 ? "s" : ""}
             </p>
           </div>
-          <ExportPdfButton target={{ kind: "student", id }} />
+          <ExportPdfButton target={{ kind: "student", id, classId: student.classId }} />
         </div>
       </header>
 

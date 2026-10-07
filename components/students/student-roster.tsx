@@ -16,7 +16,7 @@ import {
   type SkillLevelFilter,
 } from "@/lib/student-evidence";
 import { Input } from "@/components/ui/input";
-import { cn, formatScore, initials } from "@/lib/utils";
+import { cn, formatScore, initials, studentPath } from "@/lib/utils";
 
 const FILTERS: { value: StatusLevel | "all"; label: string }[] = [
   { value: "all", label: "Tous" },
@@ -190,7 +190,7 @@ export function StudentRoster({
       <ul className="mt-4 divide-y divide-border border-y border-border md:hidden">
         {filtered.map((a) => (
           <li key={a.studentId}>
-            <Link href={`/app/eleves/${a.studentId}`} className="block py-4">
+            <Link href={studentPath(a.studentId, a.classId)} className="block py-4">
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{a.name}</span>
                 <EvolutionCell evolution={a.evolution} />
@@ -263,7 +263,7 @@ export function StudentRoster({
                 >
                   <th scope="row" className="px-5 py-2.5 text-left font-normal">
                     <Link
-                      href={`/app/eleves/${a.studentId}`}
+                      href={studentPath(a.studentId, a.classId)}
                       className="flex items-center gap-3"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-xs font-semibold text-ink-soft">
