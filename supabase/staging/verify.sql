@@ -3,7 +3,7 @@
 -- one DO block that raises at the first failed check. Success prints
 -- "FOCUS staging verification: OK".
 --
--- Checks: schema version (20261004090000); the 44 curriculum UUIDs captured from live on
+-- Checks: schema version (20261007090000); the 44 curriculum UUIDs captured from live on
 -- 2026-09-26 are unchanged; the Seconde graph (99 active nodes, 330
 -- relationships) and its catalogue (272 objectives, 99 typical errors,
 -- 99 remediations); RLS on every public table; nothing granted to anon;
@@ -24,8 +24,8 @@ begin
   -- 1. Schema version (Supabase records each migration it applied).
   if to_regclass('supabase_migrations.schema_migrations') is not null then
     select max(version) into v_version from supabase_migrations.schema_migrations;
-    if v_version is distinct from '20261004090000' then
-      raise exception 'schema version is %, expected 20261004090000', v_version;
+    if v_version is distinct from '20261007090000' then
+      raise exception 'schema version is %, expected 20261007090000', v_version;
     end if;
   end if;
 
