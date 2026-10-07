@@ -151,36 +151,40 @@ export async function requestPedagogicalAnalysisWithUsage(
     },
   });
 
-  let response: Response | undefined;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) fail("OPENAI_TIMEOUT");
-    try {
-      response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
-        method: "POST",
-        // All attempts share one deadline; retries can never extend the teacher request indefinitely.
-        signal: AbortSignal.timeout(remainingMs),
-        headers: {
-          Authorization: `Bearer ${options.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body,
-      });
-    } catch (error) {
-      const name = error instanceof Error ? error.name : "";
-      fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+  const fetchWithRetries = async (): Promise<Response> => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return fail("OPENAI_TIMEOUT");
+
+      let current: Response;
+      try {
+        current = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
+          method: "POST",
+          // All attempts share one deadline; retries can never extend the teacher request indefinitely.
+          signal: AbortSignal.timeout(remainingMs),
+          headers: {
+            Authorization: `Bearer ${options.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body,
+        });
+      } catch (error) {
+        const name = error instanceof Error ? error.name : "";
+        return fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+      }
+
+      if (current.ok) return current;
+      if (!retryableStatus(current.status) || attempt === maxAttempts)
+        return fail(`OPENAI_REQUEST_FAILED:${current.status}`);
+
+      const delayMs = Math.min(retryDelayMs(current, attempt), Math.max(0, deadline - Date.now() - 1));
+      if (delayMs <= 0) return fail("OPENAI_TIMEOUT");
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    if (!response) fail("OPENAI_NETWORK_ERROR");
+    return fail("OPENAI_REQUEST_FAILED:0");
+  };
 
-    if (response.ok) break;
-    if (!retryableStatus(response.status) || attempt === maxAttempts) fail(`OPENAI_REQUEST_FAILED:${response.status}`);
-
-    const delayMs = Math.min(retryDelayMs(response, attempt), Math.max(0, deadline - Date.now() - 1));
-    if (delayMs <= 0) fail("OPENAI_TIMEOUT");
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
-  if (!response) fail("OPENAI_NETWORK_ERROR");
-  if (!response.ok) fail(`OPENAI_REQUEST_FAILED:${response.status}`);
+  const response = await fetchWithRetries();
 
   let payload: unknown;
   try {
