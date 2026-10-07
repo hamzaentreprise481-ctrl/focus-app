@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { PDFDocument } from "pdf-lib";
 import { revalidatePath } from "next/cache";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
 import { assessmentAccess, evidenceRows, ensureOk } from "@/lib/pedagogy/server";
@@ -185,7 +186,17 @@ export async function processScanImportAction(
     if (signature !== "%PDF-")
       return { ok: false, error: "Le fichier envoyé n’est pas un PDF valide." };
 
+    let actualPageCount: number;
+    try {
+      actualPageCount = (await PDFDocument.load(bytes)).getPageCount();
+    } catch {
+      return { ok: false, error: "Le PDF est corrompu, chiffré ou illisible." };
+    }
+    if (actualPageCount < 1)
+      return { ok: false, error: "Le PDF ne contient aucune page." };
+
     const extraction = await extractScanStack(bytes, roster, questions);
+    const pageCountMismatch = extraction.pageCount !== actualPageCount;
     const rosterIds = new Set(roster.map((student) => student.id));
     const seenStudents = new Set<string>();
     const pageOwners = new Map<number, number[]>();
@@ -195,7 +206,7 @@ export async function processScanImportAction(
         Number.isInteger(copy.endPage) &&
         copy.startPage >= 1 &&
         copy.endPage >= copy.startPage &&
-        copy.endPage <= extraction.pageCount
+        copy.endPage <= actualPageCount
       ) {
         for (let page = copy.startPage; page <= copy.endPage; page += 1) {
           const owners = pageOwners.get(page) ?? [];
@@ -213,7 +224,9 @@ export async function processScanImportAction(
 
     for (const [index, copy] of extraction.copies.entries()) {
       let issue = scanCopyIssue(copy, rosterIds, questions);
-      if (copy.endPage > extraction.pageCount)
+      if (pageCountMismatch)
+        issue = "Le nombre de pages détecté par l’IA ne correspond pas au PDF.";
+      if (copy.endPage > actualPageCount)
         issue = "La plage de pages détectée dépasse le PDF.";
       if (overlappingCopies.has(index))
         issue = "Des pages ont été attribuées à plusieurs copies.";
@@ -222,7 +235,11 @@ export async function processScanImportAction(
       if (copy.studentId) seenStudents.add(copy.studentId);
 
       if (issue) {
-        review.push({ ...copy, autoImportReason: issue });
+        review.push({
+          ...copy,
+          responses: normalizedResponses(copy, questions),
+          autoImportReason: issue,
+        });
         continue;
       }
       try {
@@ -231,11 +248,28 @@ export async function processScanImportAction(
       } catch {
         review.push({
           ...copy,
+          responses: normalizedResponses(copy, questions),
           autoImportReason:
             "FOCUS a reconnu cette copie mais n’a pas pu l’enregistrer automatiquement.",
         });
       }
     }
+
+    const computedUnassignedPages = Array.from(
+      { length: actualPageCount },
+      (_, index) => index + 1,
+    ).filter((page) => !(pageOwners.get(page)?.length));
+    const unassignedPages = [
+      ...new Set([...computedUnassignedPages, ...extraction.unassignedPages]),
+    ]
+      .filter((page) => page >= 1 && page <= actualPageCount)
+      .sort((a, b) => a - b);
+    const warnings = [
+      ...(pageCountMismatch
+        ? ["Le modèle n’a pas compté le même nombre de pages que le PDF : aucune copie concernée n’est auto-validée."]
+        : []),
+      ...extraction.warnings,
+    ];
 
     revalidatePath(`/app/evaluations/${assessmentId}`);
     revalidatePath("/app", "layout");
@@ -243,8 +277,8 @@ export async function processScanImportAction(
       ok: true,
       imported,
       review,
-      unassignedPages: extraction.unassignedPages,
-      warnings: extraction.warnings,
+      unassignedPages,
+      warnings,
     };
   } catch (error) {
     console.error("FOCUS scan import failed", error instanceof Error ? error.message : error);
