@@ -62,7 +62,7 @@ export function modelInput(testCase: BenchmarkCase, context: BenchmarkContext) {
   const assessmentId = benchmarkUuid(testCase.id);
   const ids = questionIdsOf(testCase);
   return {
-    assessment: { id: assessmentId, title: testCase.title, contextText: testCase.context ?? null, instructionsText: null },
+    assessment: { id: assessmentId, contextText: testCase.context ?? null, instructionsText: null },
     questions: testCase.questions.map((question) => ({
       assessmentId,
       questionId: ids.get(question.key)!,
