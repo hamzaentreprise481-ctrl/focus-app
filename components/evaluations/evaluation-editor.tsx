@@ -44,11 +44,18 @@ export function EvaluationEditor({
   const activeClass =
     classes.find((c) => c.id === selectedClassId) ?? classes[0];
   const classId = activeClass?.id;
+  // A teacher with several subjects in the class chooses the assessment's
+  // subject (the server cannot guess it without competencies).
+  const subjectChoices = activeClass?.subjects ?? [];
+  const [selectedSubjectId, setSelectedSubjectId] = useState(initialEvaluation?.subjectId ?? "");
+  const needsSubject = !initialEvaluation && subjectChoices.length > 1;
+  const subjectId =
+    initialEvaluation?.subjectId ?? (needsSubject ? selectedSubjectId : subjectChoices[0]?.id ?? activeClass?.subjectId ?? "");
   // Preserve the canonical subject scope: the server rejects competencies
   // from other subjects. Already selected competencies remain editable.
-  const classSubjects =
-    activeClass?.subjectIds ??
-    (activeClass?.subjectId ? [activeClass.subjectId] : []);
+  const classSubjects = subjectId
+    ? [subjectId]
+    : activeClass?.subjectIds ?? (activeClass?.subjectId ? [activeClass.subjectId] : []);
   const skills = dataset.skills.filter(
     (skill) =>
       !skill.subjectId ||
@@ -171,6 +178,7 @@ export function EvaluationEditor({
   const canSave =
     loaded &&
     !!classId &&
+    (!needsSubject || !!selectedSubjectId) &&
     !storageError &&
     !saving &&
     readyToGrade &&
@@ -188,6 +196,7 @@ export function EvaluationEditor({
         name: name.trim(),
         date,
         classId: classId!,
+        ...(subjectId ? { subjectId } : {}),
         skillIds: selectedSkills,
         important,
       };
@@ -355,6 +364,7 @@ export function EvaluationEditor({
             }
             onChange={(event) => {
               setSelectedClassId(event.target.value);
+              setSelectedSubjectId("");
               setSelectedSkills([]);
             }}
             className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm"
@@ -374,6 +384,29 @@ export function EvaluationEditor({
             </p>
           )}
         </div>
+        {needsSubject && (
+          <div>
+            <Label htmlFor="eval-subject">Matière</Label>
+            <select
+              id="eval-subject"
+              required
+              value={selectedSubjectId}
+              disabled={saving}
+              onChange={(event) => {
+                setSelectedSubjectId(event.target.value);
+                setSelectedSkills([]);
+              }}
+              className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm"
+            >
+              <option value="">Choisir la matière</option>
+              {subjectChoices.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <p className="mb-2 text-sm font-medium">
             Compétences évaluées{" "}
