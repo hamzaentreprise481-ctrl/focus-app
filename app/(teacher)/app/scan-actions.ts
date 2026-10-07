@@ -181,14 +181,42 @@ export async function processScanImportAction(
       return { ok: false, error: "Le PDF est vide ou dépasse 50 Mo." };
 
     const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+    const signature = new TextDecoder().decode(bytes.slice(0, 5));
+    if (signature !== "%PDF-")
+      return { ok: false, error: "Le fichier envoyé n’est pas un PDF valide." };
+
     const extraction = await extractScanStack(bytes, roster, questions);
     const rosterIds = new Set(roster.map((student) => student.id));
     const seenStudents = new Set<string>();
+    const pageOwners = new Map<number, number[]>();
+    extraction.copies.forEach((copy, index) => {
+      if (
+        Number.isInteger(copy.startPage) &&
+        Number.isInteger(copy.endPage) &&
+        copy.startPage >= 1 &&
+        copy.endPage >= copy.startPage &&
+        copy.endPage <= extraction.pageCount
+      ) {
+        for (let page = copy.startPage; page <= copy.endPage; page += 1) {
+          const owners = pageOwners.get(page) ?? [];
+          owners.push(index);
+          pageOwners.set(page, owners);
+        }
+      }
+    });
+    const overlappingCopies = new Set<number>();
+    for (const owners of pageOwners.values())
+      if (owners.length > 1) owners.forEach((index) => overlappingCopies.add(index));
+
     const review: ScanReviewCopy[] = [];
     let imported = 0;
 
-    for (const copy of extraction.copies) {
+    for (const [index, copy] of extraction.copies.entries()) {
       let issue = scanCopyIssue(copy, rosterIds, questions);
+      if (copy.endPage > extraction.pageCount)
+        issue = "La plage de pages détectée dépasse le PDF.";
+      if (overlappingCopies.has(index))
+        issue = "Des pages ont été attribuées à plusieurs copies.";
       if (copy.studentId && seenStudents.has(copy.studentId))
         issue = "Plusieurs blocs du PDF semblent appartenir au même élève.";
       if (copy.studentId) seenStudents.add(copy.studentId);
