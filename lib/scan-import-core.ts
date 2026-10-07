@@ -54,6 +54,8 @@ export function scanCopyIssue(
   rosterIds: Set<string>,
   questions: ScanQuestion[],
 ): string | null {
+  if (!Number.isInteger(copy.startPage) || !Number.isInteger(copy.endPage) || copy.startPage < 1 || copy.endPage < copy.startPage)
+    return "Séparation des pages à confirmer.";
   if (!copy.studentId || !rosterIds.has(copy.studentId))
     return "Élève non identifié avec certitude.";
   if (copy.identificationConfidence < CONFIDENCE.identification)
