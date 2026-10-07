@@ -13,7 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Feedback } from "@/components/ui/feedback";
 import { Input, Label } from "@/components/ui/input";
 
-type ReviewState = ScanReviewCopy & { saving?: boolean; saved?: boolean; error?: string | null };
+type ReviewState = ScanReviewCopy & {
+  saving?: boolean;
+  saved?: boolean;
+  error?: string | null;
+  overwriteRequired?: boolean;
+};
 
 function uploadClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -139,7 +144,7 @@ export function ScanStackImport({
     );
   }
 
-  async function confirm(index: number) {
+  async function confirm(index: number, overwrite = false) {
     const copy = review[index];
     if (!copy || copy.saved || copy.saving) return;
     if (!copy.studentId) {
@@ -147,12 +152,21 @@ export function ScanStackImport({
       return;
     }
     patchReview(index, { saving: true, error: null });
-    const result = await confirmScanCopyAction(assessmentId, copy);
+    const result = await confirmScanCopyAction(assessmentId, copy, overwrite);
     if (!result.ok) {
-      patchReview(index, { saving: false, error: result.error });
+      patchReview(index, {
+        saving: false,
+        error: result.error,
+        overwriteRequired: result.needsOverwrite === true,
+      });
       return;
     }
-    patchReview(index, { saving: false, saved: true, error: null });
+    patchReview(index, {
+      saving: false,
+      saved: true,
+      error: null,
+      overwriteRequired: false,
+    });
     setImported((value) => (value ?? 0) + 1);
     onImported?.();
     if (review.filter((item, i) => i !== index && !item.saved).length === 0)
@@ -287,6 +301,7 @@ export function ScanStackImport({
                           patchReview(index, {
                             studentId: event.target.value || null,
                             error: null,
+                            overwriteRequired: false,
                           })
                         }
                       >
@@ -384,9 +399,15 @@ export function ScanStackImport({
                   <div className="mt-4">
                     <Button
                       disabled={copy.saving}
-                      onClick={() => void confirm(index)}
+                      onClick={() =>
+                        void confirm(index, copy.overwriteRequired === true)
+                      }
                     >
-                      {copy.saving ? "Enregistrement…" : "Confirmer et importer"}
+                      {copy.saving
+                        ? "Enregistrement…"
+                        : copy.overwriteRequired
+                          ? "Remplacer la copie existante"
+                          : "Confirmer et importer"}
                     </Button>
                   </div>
                 </>
