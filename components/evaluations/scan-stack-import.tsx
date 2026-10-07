@@ -119,6 +119,26 @@ export function ScanStackImport({
     );
   }
 
+  function patchResponse(
+    copyIndex: number,
+    responseIndex: number,
+    patch: Partial<ReviewState["responses"][number]>,
+  ) {
+    setReview((current) =>
+      current.map((copy, index) =>
+        index !== copyIndex
+          ? copy
+          : {
+              ...copy,
+              error: null,
+              responses: copy.responses.map((response, i) =>
+                i === responseIndex ? { ...response, ...patch } : response,
+              ),
+            },
+      ),
+    );
+  }
+
   async function confirm(index: number) {
     const copy = review[index];
     if (!copy || copy.saved || copy.saving) return;
@@ -298,25 +318,59 @@ export function ScanStackImport({
 
                   <details className="mt-4 rounded-lg bg-paper p-3">
                     <summary className="cursor-pointer text-sm font-medium">
-                      Vérifier la transcription ({copy.responses.length} question
+                      Vérifier ou corriger la transcription ({copy.responses.length} question
                       {copy.responses.length > 1 ? "s" : ""})
                     </summary>
-                    <div className="mt-3 space-y-3">
-                      {copy.responses.map((response) => (
-                        <div key={response.questionId} className="text-sm">
-                          <p className="font-medium text-ink">
-                            Réponse reconnue
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap text-ink-soft">
-                            {response.responseText || "—"}
-                          </p>
-                          {(response.awardedPoints || response.teacherAnnotation) && (
-                            <p className="mt-1 text-xs text-muted">
-                              Points : {response.awardedPoints || "—"} · Annotation :
-                              {" "}
-                              {response.teacherAnnotation || "—"}
-                            </p>
-                          )}
+                    <div className="mt-4 space-y-5">
+                      {copy.responses.map((response, responseIndex) => (
+                        <div
+                          key={response.questionId}
+                          className="rounded-[var(--radius-sm)] border border-border bg-surface p-3"
+                        >
+                          <Label htmlFor={`scan-response-${index}-${responseIndex}`}>
+                            Réponse de l’élève
+                          </Label>
+                          <textarea
+                            id={`scan-response-${index}-${responseIndex}`}
+                            className="min-h-24 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
+                            value={response.responseText}
+                            onChange={(event) =>
+                              patchResponse(index, responseIndex, {
+                                responseText: event.target.value,
+                              })
+                            }
+                          />
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <Label htmlFor={`scan-points-${index}-${responseIndex}`}>
+                                Points attribués
+                              </Label>
+                              <Input
+                                id={`scan-points-${index}-${responseIndex}`}
+                                inputMode="decimal"
+                                value={response.awardedPoints}
+                                onChange={(event) =>
+                                  patchResponse(index, responseIndex, {
+                                    awardedPoints: event.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`scan-annotation-${index}-${responseIndex}`}>
+                                Annotation du professeur
+                              </Label>
+                              <Input
+                                id={`scan-annotation-${index}-${responseIndex}`}
+                                value={response.teacherAnnotation}
+                                onChange={(event) =>
+                                  patchResponse(index, responseIndex, {
+                                    teacherAnnotation: event.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
