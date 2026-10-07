@@ -69,9 +69,34 @@ test("scan import refuses impossible awarded points", () => {
         awardedPoints: "5",
         teacherAnnotation: "",
       },
+      {
+        questionId: questions[1].id,
+        responseText: "suite",
+        awardedPoints: "2",
+        teacherAnnotation: "",
+      },
     ],
   });
-  assert.equal(scanCopyIssue(candidate, ids, questions), "Points attribués à confirmer.");
+  assert.equal(
+    scanCopyIssue(candidate, ids, questions),
+    "Points attribués à confirmer.",
+  );
+});
+
+test("scan import sends missing scores and incomplete grouping to review", () => {
+  const ids = new Set(["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]);
+  assert.equal(
+    scanCopyIssue(copy({ score: null }), ids, questions),
+    "Note non détectée : à confirmer.",
+  );
+  assert.equal(
+    scanCopyIssue(copy({ startPage: 4, endPage: 2 }), ids, questions),
+    "Séparation des pages à confirmer.",
+  );
+  assert.equal(
+    scanCopyIssue(copy({ responses: copy().responses.slice(0, 1) }), ids, questions),
+    "Toutes les questions n’ont pas été reconnues.",
+  );
 });
 
 test("scan import normalizes every assessment question and decimal commas", () => {
