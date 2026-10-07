@@ -107,17 +107,8 @@ async function persistCopy(
   supabase: NonNullable<Awaited<ReturnType<typeof createAuthClient>>>,
 ) {
   if (!copy.studentId) throw new Error("MISSING_STUDENT");
-  const validStudent = await supabase
-    .from("student_enrollments")
-    .select("student_id")
-    .eq("student_id", copy.studentId)
-    .limit(1)
-    .maybeSingle();
-  ensureOk(validStudent.error, "Inscription élève");
-  if (!validStudent.data) throw new Error("STUDENT_NOT_ENROLLED");
-
   const responses = normalizedResponses(copy, questions);
-  const saved = await supabase.rpc("focus_save_student_responses", {
+  const saved = await supabase.rpc("focus_import_scanned_copy", {
     p_assessment_id: assessmentId,
     p_student_id: copy.studentId,
     p_responses: responses.map((response) => ({
@@ -126,33 +117,18 @@ async function persistCopy(
       awardedPoints: response.awardedPoints,
       teacherAnnotation: response.teacherAnnotation,
     })),
+    p_score: copy.score,
   });
   if (saved.error) {
-    console.error("FOCUS scan response persistence failed", {
+    console.error("FOCUS scanned copy persistence failed", {
       code: saved.error.code,
       message: saved.error.message,
     });
-    throw new Error("SCAN_RESPONSE_SAVE_FAILED");
-  }
-
-  if (copy.score !== null) {
-    const grade = await supabase.from("assessment_results").upsert(
-      {
-        assessment_id: assessmentId,
-        student_id: copy.studentId,
-        score: copy.score,
-        absent: false,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "assessment_id,student_id" },
+    throw new Error(
+      /point|score/i.test(saved.error.message)
+        ? "SCAN_RESPONSE_SAVE_FAILED"
+        : "SCAN_COPY_SAVE_FAILED",
     );
-    if (grade.error) {
-      console.error("FOCUS scan grade persistence failed", {
-        code: grade.error.code,
-        message: grade.error.message,
-      });
-      throw new Error("SCAN_GRADE_SAVE_FAILED");
-    }
   }
 }
 
