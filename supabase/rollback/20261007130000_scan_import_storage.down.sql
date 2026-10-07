@@ -1,4 +1,4 @@
-drop function if exists public.focus_import_scanned_copy(uuid, uuid, jsonb, numeric);
+drop function if exists public.focus_import_scanned_copy(uuid, uuid, jsonb, numeric, boolean);
 
 do $storage$
 begin
