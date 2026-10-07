@@ -9,12 +9,13 @@ commit `e09ed78`.
 | | |
 | --- | --- |
 | Base `main` | `6a88301` — V0 (données fictives, `localStorage`, aucun Supabase). Rien n’y a été fusionné. |
-| PR #7 | `claude/finish-focus-v1` @ `13884fe` → `main` (138 commits : Supabase, Auth, IA pédagogique, programme). |
-| **Branche canonique** | **`ccr-38fbcf41-7sndhr` (PR #8)**, empilée sur #7. Contient #7, la ligne `work/fix-professor-login → claude/zealous-bell-rmg2r0` (fusionnée ici le 4 octobre, commit `30af47b`), le travail technique de Claude et l’UI de GPT Work (PR #9 `work/ui-pilot-v1`, fusionnée par le propriétaire le 7 octobre, `4a48c19`). |
+| **Branche canonique** | **`claude/finish-focus-v1` (PR #7 → `main`)**, tête `7109600` : le propriétaire y a fusionné PR #8 le 7 octobre (`4a48c19`), qui contenait la ligne `work/fix-professor-login → claude/zealous-bell-rmg2r0` (`30af47b`), le travail technique de Claude et l’UI de GPT Work (PR #9). |
+| Suite en cours | `ccr-38fbcf41-7sndhr` → `claude/finish-focus-v1` (nouvelle PR, brouillon) : les deux commits poussés après la fusion de #8 (filtre de la raison « preuves insuffisantes », ce statut). |
 | Branches obsolètes (toutes contenues dans la branche canonique) | `codex/connect-supabase-v1`, `codex/effectuer-un-audit-visuel-de-focus`, `codex/focus-v1-supabase-20260925`, `codex/focus-live-supabase-20260925`, `codex/pedagogical-ai-math-v1`, `codex/connect-login-test-professor` (PR #4), `claude/curriculum-importer` (PR #6), `work/fix-professor-login`, `claude/zealous-bell-rmg2r0`. |
 
-Ordre de fusion proposé (décision du propriétaire) : #8 contient #7 ; fusionner
-#7 puis #8, ou recibler #8 sur `main` et fermer #7 comme remplacée.
+Ordre de fusion proposé (décision du propriétaire) : la PR de suite dans
+`claude/finish-focus-v1`, puis #7 dans `main` une fois staging, migrations et
+modèle réel vérifiés sur une Preview.
 
 ## Ce que cette session a changé (côté technique)
 
