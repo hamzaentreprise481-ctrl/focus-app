@@ -21,6 +21,8 @@ export interface ClassInfo {
   subjectId?: string;
   /** Every subject the teacher teaches in this class. */
   subjectIds?: string[];
+  /** The same subjects with their names, to choose one for an assessment. */
+  subjects?: { id: string; name: string }[];
   schoolId?: string;
   teacher: string;
   studentIds: string[];
@@ -37,6 +39,11 @@ export interface Evaluation {
   name: string;
   date: string;
   classId: string;
+  /**
+   * The assessment's subject. Read from the database; chosen explicitly when
+   * the teacher teaches several subjects in the class.
+   */
+  subjectId?: string;
   skillIds: string[];
   /** Séquence jugée charnière dans la progression. */
   important: boolean;

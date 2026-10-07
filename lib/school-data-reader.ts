@@ -220,6 +220,9 @@ export async function readSchoolData(
         subject: subjectNames.sort((a, b) => collator.compare(a, b)).join(" · "),
         subjectId: assignment.subject_id,
         subjectIds: [...new Set(classAssignments.map((a) => a.subject_id))],
+        subjects: [...new Set(classAssignments.map((a) => a.subject_id))]
+          .map((id) => ({ id, name: subjectById.get(id)?.name ?? "Matière" }))
+          .sort((a, b) => collator.compare(a.name, b.name)),
         schoolId: assignment.school_id,
         teacher: teacherName ?? "",
         studentIds: enrollmentByClass.get(row.id) ?? [],
@@ -258,6 +261,7 @@ export async function readSchoolData(
     name: row.title,
     date: row.date,
     classId: row.class_id,
+    subjectId: row.subject_id,
     skillIds: skillIdsByAssessment.get(row.id) ?? [],
     important: row.important === true,
   }));
