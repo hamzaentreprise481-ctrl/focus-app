@@ -310,7 +310,7 @@ export async function processScanImportAction(
     if (cleanup) {
       const removed = await cleanup.supabase.storage.from(SCAN_BUCKET).remove([cleanup.path]);
       if (removed.error)
-        console.error("FOCUS temporary scan cleanup failed", { path: cleanup.path, code: removed.error.code });
+        console.error("FOCUS temporary scan cleanup failed", { path: cleanup.path, message: removed.error.message });
     }
   }
 }
