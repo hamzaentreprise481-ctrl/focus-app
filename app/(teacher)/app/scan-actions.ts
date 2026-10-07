@@ -66,7 +66,18 @@ async function context(assessmentId: string) {
     name: profileById.get(id) ?? "Élève",
   }));
 
-  const { questions } = await evidenceRows(supabase, [assessmentId]);
+  const { questions, responses } = await evidenceRows(supabase, [assessmentId]);
+  const results = await supabase
+    .from("assessment_results")
+    .select("student_id")
+    .eq("assessment_id", assessmentId);
+  ensureOk(results.error, "Résultats de l’évaluation");
+  const existingStudentIds = new Set<string>([
+    ...responses.map((response) => response.student_id),
+    ...((results.data ?? []) as Array<{ student_id: string }>).map(
+      (row) => row.student_id,
+    ),
+  ]);
   const scanQuestions: ScanQuestion[] = questions
     .sort((a, b) => a.position - b.position)
     .map((question) => ({
@@ -79,7 +90,14 @@ async function context(assessmentId: string) {
           : Number(question.max_points),
     }));
 
-  return { teacher, supabase, access, roster, questions: scanQuestions };
+  return {
+    teacher,
+    supabase,
+    access,
+    roster,
+    questions: scanQuestions,
+    existingStudentIds,
+  };
 }
 
 function friendlyError(error: unknown): string {
@@ -165,7 +183,8 @@ export async function processScanImportAction(
     | { supabase: NonNullable<Awaited<ReturnType<typeof createAuthClient>>>; path: string }
     | null = null;
   try {
-    const { teacher, supabase, roster, questions } = await context(assessmentId);
+    const { teacher, supabase, roster, questions, existingStudentIds } =
+      await context(assessmentId);
     const prefix = `${teacher.id}/${assessmentId}/`;
     if (
       typeof path !== "string" ||
@@ -232,6 +251,8 @@ export async function processScanImportAction(
         issue = "Des pages ont été attribuées à plusieurs copies.";
       if (copy.studentId && seenStudents.has(copy.studentId))
         issue = "Plusieurs blocs du PDF semblent appartenir au même élève.";
+      if (copy.studentId && existingStudentIds.has(copy.studentId))
+        issue = "Une copie ou une note existe déjà pour cet élève : remplacement à confirmer.";
       if (copy.studentId) seenStudents.add(copy.studentId);
 
       if (issue) {
@@ -295,9 +316,14 @@ export async function processScanImportAction(
 export async function confirmScanCopyAction(
   assessmentId: string,
   candidate: ScanCopyCandidate,
-): Promise<{ ok: true } | Failure> {
+  overwrite = false,
+): Promise<
+  | { ok: true }
+  | (Failure & { needsOverwrite?: boolean })
+> {
   try {
-    const { supabase, roster, questions } = await context(assessmentId);
+    const { supabase, roster, questions, existingStudentIds } =
+      await context(assessmentId);
     if (!candidate || typeof candidate !== "object")
       return { ok: false, error: "Copie invalide." };
     const rosterIds = new Set(roster.map((student) => student.id));
@@ -308,6 +334,13 @@ export async function confirmScanCopyAction(
       (!Number.isFinite(candidate.score) || candidate.score < 0 || candidate.score > 20)
     )
       return { ok: false, error: "La note doit être comprise entre 0 et 20." };
+    if (existingStudentIds.has(candidate.studentId) && !overwrite)
+      return {
+        ok: false,
+        needsOverwrite: true,
+        error:
+          "Une copie ou une note existe déjà pour cet élève. Confirmez explicitement son remplacement.",
+      };
 
     await persistCopy(assessmentId, candidate, questions, supabase);
     revalidatePath(`/app/evaluations/${assessmentId}`);
