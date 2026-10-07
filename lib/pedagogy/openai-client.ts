@@ -105,54 +105,84 @@ export async function requestPedagogicalAnalysisWithUsage(
     baseUrl?: string;
     timeoutMs?: number;
     reasoningEffort?: ReasoningEffort;
+    /** Internal/test override. Production uses three attempts within one 90 s budget. */
+    maxAttempts?: number;
   },
 ): Promise<{ analysis: ModelPedagogicalAnalysis; usage: ModelUsage; latencyMs: number }> {
   const started = Date.now();
+  const timeoutMs = options.timeoutMs ?? MODEL_TIMEOUT_MS;
+  const deadline = started + timeoutMs;
+  const maxAttempts = Math.max(1, Math.min(options.maxAttempts ?? 3, 3));
   const fail = (code: string): never => {
     throw new ModelCallError(code, Date.now() - started);
   };
-  let response: Response | undefined;
-  try {
-    response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
-      method: "POST",
-      // A stuck provider must not hold the teacher's request indefinitely.
-      signal: AbortSignal.timeout(options.timeoutMs ?? MODEL_TIMEOUT_MS),
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        "Content-Type": "application/json",
+  const retryableStatus = (status: number) => status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  const retryDelayMs = (response: Response, attempt: number) => {
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter) {
+      const seconds = Number(retryAfter);
+      if (Number.isFinite(seconds) && seconds >= 0) return Math.min(Math.round(seconds * 1000), 15_000);
+      const date = Date.parse(retryAfter);
+      if (Number.isFinite(date)) return Math.min(Math.max(0, date - Date.now()), 15_000);
+    }
+    return Math.min(2_000 * attempt, 6_000);
+  };
+
+  const body = JSON.stringify({
+    model: options.model,
+    reasoning: { effort: options.reasoningEffort ?? "low" },
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: PEDAGOGICAL_SYSTEM_PROMPT }],
       },
-      body: JSON.stringify({
-        model: options.model,
-        reasoning: { effort: options.reasoningEffort ?? "low" },
-        input: [
-          {
-            role: "system",
-            content: [{ type: "input_text", text: PEDAGOGICAL_SYSTEM_PROMPT }],
-          },
-          {
-            role: "user",
-            content: [{ type: "input_text", text: JSON.stringify(input) }],
-          },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "focus_pedagogical_analysis",
-            strict: true,
-            schema: PEDAGOGICAL_OUTPUT_SCHEMA,
-          },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: JSON.stringify(input) }],
+      },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "focus_pedagogical_analysis",
+        strict: true,
+        schema: PEDAGOGICAL_OUTPUT_SCHEMA,
+      },
+    },
+  });
+
+  let response: Response | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) fail("OPENAI_TIMEOUT");
+    try {
+      response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
+        method: "POST",
+        // All attempts share one deadline; retries can never extend the teacher request indefinitely.
+        signal: AbortSignal.timeout(remainingMs),
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          "Content-Type": "application/json",
         },
-      }),
-    });
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+        body,
+      });
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+    }
+
+    if (response.ok) break;
+    if (!retryableStatus(response.status) || attempt === maxAttempts) fail(`OPENAI_REQUEST_FAILED:${response.status}`);
+
+    const delayMs = Math.min(retryDelayMs(response, attempt), Math.max(0, deadline - Date.now() - 1));
+    if (delayMs <= 0) fail("OPENAI_TIMEOUT");
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  if (!response!.ok) fail(`OPENAI_REQUEST_FAILED:${response!.status}`);
+  if (!response?.ok) fail(`OPENAI_REQUEST_FAILED:${response?.status ?? 0}`);
 
   let payload: unknown;
   try {
-    payload = await response!.json();
+    payload = await response.json();
   } catch {
     fail("OPENAI_INVALID_OUTPUT");
   }
