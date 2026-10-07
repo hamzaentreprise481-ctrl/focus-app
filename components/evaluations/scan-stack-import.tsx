@@ -192,7 +192,7 @@ export function ScanStackImport({
 
       {imported !== null && (
         <div className="mt-4">
-          <Feedback tone={pending ? "info" : "ok"}>
+          <Feedback tone={pending ? "info" : "success"}>
             {imported} copie{imported > 1 ? "s" : ""} importée
             {imported > 1 ? "s" : ""} automatiquement
             {pending
