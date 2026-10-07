@@ -124,6 +124,7 @@ async function persistCopy(
   copy: ScanCopyCandidate,
   questions: ScanQuestion[],
   supabase: NonNullable<Awaited<ReturnType<typeof createAuthClient>>>,
+  clearScore = false,
 ) {
   if (!copy.studentId) throw new Error("MISSING_STUDENT");
   const responses = normalizedResponses(copy, questions);
@@ -137,6 +138,7 @@ async function persistCopy(
       teacherAnnotation: response.teacherAnnotation,
     })),
     p_score: copy.score,
+    p_clear_score: clearScore,
   });
   if (saved.error) {
     console.error("FOCUS scanned copy persistence failed", {
@@ -342,7 +344,13 @@ export async function confirmScanCopyAction(
           "Une copie ou une note existe déjà pour cet élève. Confirmez explicitement son remplacement.",
       };
 
-    await persistCopy(assessmentId, candidate, questions, supabase);
+    await persistCopy(
+      assessmentId,
+      candidate,
+      questions,
+      supabase,
+      overwrite && candidate.score === null,
+    );
     revalidatePath(`/app/evaluations/${assessmentId}`);
     revalidatePath("/app", "layout");
     return { ok: true };
