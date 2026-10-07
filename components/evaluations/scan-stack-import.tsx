@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   confirmScanCopyAction,
   prepareScanUploadAction,
@@ -37,6 +38,7 @@ export function ScanStackImport({
   onImported?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const client = useMemo(uploadClient, []);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -101,6 +103,7 @@ export function ScanStackImport({
       setWarnings(result.warnings);
       setUnassignedPages(result.unassignedPages);
       if (result.imported > 0) onImported?.();
+      if (result.imported > 0 && result.review.length === 0) router.refresh();
     } catch {
       setError("L’import du PDF a échoué. Réessayez.");
     } finally {
@@ -132,6 +135,8 @@ export function ScanStackImport({
     patchReview(index, { saving: false, saved: true, error: null });
     setImported((value) => (value ?? 0) + 1);
     onImported?.();
+    if (review.filter((item, i) => i !== index && !item.saved).length === 0)
+      router.refresh();
   }
 
   const pending = review.filter((copy) => !copy.saved).length;
