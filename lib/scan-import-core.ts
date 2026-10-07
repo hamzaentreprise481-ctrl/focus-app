@@ -64,11 +64,11 @@ export function scanCopyIssue(
     return "Séparation des pages à confirmer.";
   if (copy.transcriptionConfidence < CONFIDENCE.transcription)
     return "Écriture manuscrite à vérifier.";
+  if (copy.score === null) return "Note non détectée : à confirmer.";
   if (
-    copy.score !== null &&
-    (copy.score < 0 ||
-      copy.score > 20 ||
-      copy.scoreConfidence < CONFIDENCE.score)
+    copy.score < 0 ||
+    copy.score > 20 ||
+    copy.scoreConfidence < CONFIDENCE.score
   )
     return "Note à confirmer.";
   if (copy.warnings.length) return copy.warnings[0];
@@ -76,6 +76,8 @@ export function scanCopyIssue(
   const validQuestions = new Map(
     questions.map((question) => [question.id, question]),
   );
+  if (copy.responses.length !== questions.length)
+    return "Toutes les questions n’ont pas été reconnues.";
   const seen = new Set<string>();
   for (const response of copy.responses) {
     const question = validQuestions.get(response.questionId);
@@ -93,6 +95,8 @@ export function scanCopyIssue(
         return "Points attribués à confirmer.";
     }
   }
+  if (seen.size !== questions.length)
+    return "Toutes les questions n’ont pas été reconnues.";
   return null;
 }
 
