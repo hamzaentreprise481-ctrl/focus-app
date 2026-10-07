@@ -168,6 +168,7 @@ interface DatasetIndex {
   studentCount: number;
   grades: Map<string, RawGrade>;
   studentById: Map<string, Student>;
+  enrollment: Map<string, Student>;
 }
 const indexes = new WeakMap<EvaluationDataset, DatasetIndex>();
 
@@ -188,8 +189,14 @@ function indexOf(dataset: EvaluationDataset): DatasetIndex {
     if (!grades.has(key)) grades.set(key, grade);
   }
   const studentById = new Map<string, Student>();
-  for (const student of dataset.students)
+  // A pupil enrolled in two of the teacher's classes appears once per
+  // enrollment: each class reads its own.
+  const enrollment = new Map<string, Student>();
+  for (const student of dataset.students) {
     if (!studentById.has(student.id)) studentById.set(student.id, student);
+    const key = `${student.id}|${student.classId}`;
+    if (!enrollment.has(key)) enrollment.set(key, student);
+  }
   const index = {
     rawGrades: dataset.rawGrades,
     gradeCount: dataset.rawGrades.length,
@@ -197,6 +204,7 @@ function indexOf(dataset: EvaluationDataset): DatasetIndex {
     studentCount: dataset.students.length,
     grades,
     studentById,
+    enrollment,
   };
   indexes.set(dataset, index);
   return index;
@@ -210,8 +218,12 @@ function gradeFor(
   return indexOf(dataset).grades.get(`${studentId}|${evaluationId}`);
 }
 
-function studentOf(studentId: string, dataset: EvaluationDataset) {
-  return indexOf(dataset).studentById.get(studentId);
+/** The student's enrollment in `classId`, or their first one without it. */
+function studentOf(studentId: string, dataset: EvaluationDataset, classId?: string) {
+  const index = indexOf(dataset);
+  return classId
+    ? index.enrollment.get(`${studentId}|${classId}`)
+    : index.studentById.get(studentId);
 }
 
 /**
@@ -234,8 +246,10 @@ function skillLevelForGrade(
 export function computeSkillMasteries(
   studentId: string,
   dataset: EvaluationDataset,
+  /** The class whose evaluations to read (default: the first enrollment). */
+  inClassId?: string,
 ): SkillMastery[] {
-  const classId = studentOf(studentId, dataset)?.classId;
+  const classId = studentOf(studentId, dataset, inClassId)?.classId;
   const evalsChrono = sortedEvaluations(dataset).filter(
     (e) => e.classId === classId,
   );
@@ -455,8 +469,10 @@ function buildNarrative(params: {
 export function analyzeStudent(
   studentId: string,
   dataset: EvaluationDataset,
+  /** The class to read for a pupil enrolled in several (default: the first). */
+  classId?: string,
 ): StudentAnalysis {
-  const student = studentOf(studentId, dataset);
+  const student = studentOf(studentId, dataset, classId);
   if (!student) throw new Error(`Élève introuvable : ${studentId}`);
 
   const evalsChrono = sortedEvaluations(dataset).filter(
@@ -478,7 +494,7 @@ export function analyzeStudent(
   const n = present.length;
   const average = n ? mean(present.map((p) => p.score)) : null;
 
-  const skillMasteries = computeSkillMasteries(studentId, dataset);
+  const skillMasteries = computeSkillMasteries(studentId, dataset, student.classId);
   const testedSkills = skillMasteries.filter(
     (s): s is SkillMastery & { percent: number } =>
       s.testedCount > 0 && s.percent !== null,
@@ -799,7 +815,7 @@ export function analyzeClass(
   if (!classInfo) throw new Error(`Classe introuvable : ${classId}`);
 
   const studentAnalyses = classInfo.studentIds.map((id) =>
-    analyzeStudent(id, dataset),
+    analyzeStudent(id, dataset, classId),
   );
   const counts = {
     total: studentAnalyses.length,
@@ -993,7 +1009,7 @@ export function analyzeEvaluation(
   const gradesForEval = dataset.rawGrades.filter(
     (g) =>
       g.evaluationId === evaluationId &&
-      studentOf(g.studentId, dataset)?.classId === evaluation.classId,
+      !!studentOf(g.studentId, dataset, evaluation.classId),
   );
   const priorIds = new Set(
     dataset.evaluations
@@ -1018,7 +1034,7 @@ export function analyzeEvaluation(
     .filter((g) => g.absent)
     .map((g) => ({
       studentId: g.studentId,
-      name: studentOf(g.studentId, dataset)?.name ?? g.studentId,
+      name: studentOf(g.studentId, dataset, evaluation.classId)?.name ?? g.studentId,
     }));
 
   // Élèves en difficulté SUR CETTE évaluation : comparés à leur propre
@@ -1056,7 +1072,7 @@ export function analyzeEvaluation(
       if (!reason) return null;
       return {
         studentId: g.studentId,
-        name: studentOf(g.studentId, dataset)?.name ?? g.studentId,
+        name: studentOf(g.studentId, dataset, evaluation.classId)?.name ?? g.studentId,
         score: g.score,
         reason,
       } satisfies StrugglingStudent;

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { StudentAnalysis } from "@/lib/analysis";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { initials } from "@/lib/utils";
+import { initials, studentPath } from "@/lib/utils";
 
 const PATTERN_ICON: Record<StudentAnalysis["pattern"], typeof TrendingDown> = {
   absence_sequence_importante: CalendarX,
@@ -29,7 +29,7 @@ export function AttentionCard({ analysis }: { analysis: StudentAnalysis }) {
 
   return (
     <Link
-      href={`/app/eleves/${analysis.studentId}`}
+      href={studentPath(analysis.studentId, analysis.classId)}
       className="group flex items-center gap-4 rounded-[var(--radius-md)] border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-paper"
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-paper text-[13px] font-semibold text-ink-soft">

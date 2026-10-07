@@ -12,7 +12,7 @@ import { AssessmentEvidenceWorkspace } from "@/components/evaluations/assessment
 import { DeleteEvaluationButton } from "@/components/evaluations/delete-evaluation-button";
 import { DistributionChart } from "@/components/evaluations/distribution-chart";
 import { ExportPdfButton } from "@/components/reports/export-pdf-button";
-import { formatDate, formatScore } from "@/lib/utils";
+import { formatDate, formatScore, studentPath } from "@/lib/utils";
 
 export default function EvaluationDetailPage({
   initialStudentId,
@@ -63,6 +63,7 @@ export default function EvaluationDetailPage({
       </div>
       <AssessmentEvidenceWorkspace
         assessmentId={id}
+        classId={evaluation.classId}
         students={classStudents}
         initialStudentId={initialStudentId}
       />
@@ -167,7 +168,7 @@ export default function EvaluationDetailPage({
                   >
                     <div className="min-w-0">
                       <Link
-                        href={`/app/eleves/${s.studentId}`}
+                        href={studentPath(s.studentId, evaluation.classId)}
                         className="font-medium text-brand"
                       >
                         {s.name}

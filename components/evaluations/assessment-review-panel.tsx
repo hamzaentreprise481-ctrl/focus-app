@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { studentPath } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadAssessmentReview,
@@ -22,11 +23,14 @@ type Item = {
  */
 export function AssessmentReviewPanel({
   assessmentId,
+  classId,
   students,
   version,
   onDecided,
 }: {
   assessmentId: string;
+  /** The assessment's class, for links to the students' records. */
+  classId?: string;
   students: { id: string; name: string }[];
   /** Changes after an analysis, to reload the list. */
   version: number;
@@ -248,7 +252,7 @@ export function AssessmentReviewPanel({
               <h3 className="flex flex-wrap items-baseline justify-between gap-2 text-[15px] font-semibold text-ink">
                 {nameOf.get(studentId) ?? "Élève"}
                 <Link
-                  href={`/app/eleves/${studentId}#suivi-pedagogique`}
+                  href={studentPath(studentId, classId, "#suivi-pedagogique")}
                   className="text-xs font-medium text-brand underline"
                 >
                   Suivi de l’élève

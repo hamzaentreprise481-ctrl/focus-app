@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultDataset } from "./fixtures/demo-dataset";
-import { analyzeClass, analyzeStudent } from "../lib/analysis";
+import { analyzeClass, analyzeEvaluation, analyzeStudent } from "../lib/analysis";
 import type { EvaluationDataset, SkillLevel } from "../lib/types";
 
 // Measured before the evidence and reliability layer was added; the layer
@@ -144,4 +144,39 @@ test("analysis stays fast on a school year of results", () => {
   const started = performance.now();
   for (const c of classes) analyzeClass(c.id, data);
   assert.ok(performance.now() - started < 3000, `${Math.round(performance.now() - started)} ms`);
+});
+
+test("a pupil enrolled in two of the teacher's classes is read in each class separately", () => {
+  const data: EvaluationDataset = {
+    classes: [
+      { id: "a", name: "Seconde 1", level: "Seconde", subject: "Mathématiques", teacher: "", studentIds: ["s"] },
+      { id: "b", name: "Groupe soutien", level: "Seconde", subject: "Mathématiques", teacher: "", studentIds: ["s"] },
+    ],
+    students: [
+      { id: "s", name: "Alex Martin", classId: "a" },
+      { id: "s", name: "Alex Martin", classId: "b" },
+    ],
+    skills: [{ id: "k", name: "Fractions" }],
+    evaluations: [
+      ...[16, 14, 12].map((_, i) => ({ id: `a${i}`, name: `A${i}`, date: `2026-10-0${i + 1}`, classId: "a", skillIds: [], important: false })),
+      ...[9, 9].map((_, i) => ({ id: `b${i}`, name: `B${i}`, date: `2026-10-1${i + 1}`, classId: "b", skillIds: ["k"], important: false })),
+    ],
+    rawGrades: [
+      ...[16, 14, 12].map((score, i) => ({ studentId: "s", evaluationId: `a${i}`, score, absent: false })),
+      ...[9, 9].map((score, i) => ({ studentId: "s", evaluationId: `b${i}`, score, absent: false, skillLevels: { k: "fragile" as const } })),
+    ],
+  };
+  const inA = analyzeClass("a", data).studentAnalyses[0];
+  const inB = analyzeClass("b", data).studentAnalyses[0];
+  assert.deepEqual(inA.timeline.map((t) => t.evaluation.id), ["a0", "a1", "a2"]);
+  assert.deepEqual(inB.timeline.map((t) => t.evaluation.id), ["b0", "b1"]);
+  assert.equal(inB.classId, "b");
+  assert.equal(inB.skillMasteries.find((m) => m.skillId === "k")!.testedCount, 2);
+  assert.equal(inA.skillMasteries.find((m) => m.skillId === "k")!.testedCount, 0);
+  // The second class's evaluation counts the pupil's result.
+  const evaluation = analyzeEvaluation("b0", data);
+  assert.equal(evaluation.recordedCount, 1);
+  assert.equal(evaluation.average, 9);
+  // Without a class, the first enrollment (unchanged behaviour).
+  assert.equal(analyzeStudent("s", data).classId, "a");
 });

@@ -32,6 +32,7 @@ async function fingerprint(db: PGlite) {
 for (const [previous, migration] of [
   ["20260927100000_ai_usage_events", "20261002120000_access_integrity_hardening"],
   ["20261002120000_access_integrity_hardening", "20261004090000_engine_signed_analyses"],
+  ["20261004090000_engine_signed_analyses", "20261007090000_active_teacher_membership"],
 ] as const) {
   test(`${migration} can be rolled back to the exact schema of ${previous.slice(0, 14)}`, async () => {
     const db = await createMigratedDatabase({ upTo: `${previous}.sql` });
