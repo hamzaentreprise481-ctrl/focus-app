@@ -1,0 +1,20 @@
+name: FOCUS release benchmark evidence
+
+on:
+  push:
+    branches: [work/use-gpt-6-astra]
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch benchmark metrics from isolated Preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://focus-app-nhkt-prb8gprrg-hamzaentreprise481-8876s-projects.vercel.app/release-benchmark.json"
+          curl --fail --silent --show-error --location "$url" -o benchmark.json
+          jq . benchmark.json
