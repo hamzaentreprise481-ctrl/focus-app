@@ -7,7 +7,7 @@ import {
   prepareScanUploadAction,
   processScanImportAction,
 } from "@/app/(teacher)/app/scan-actions";
-import type { ScanReviewCopy } from "@/lib/scan-import";
+import type { ScanReviewCopy } from "@/lib/scan-import-core";
 import { Button } from "@/components/ui/button";
 import { Feedback } from "@/components/ui/feedback";
 import { Input, Label } from "@/components/ui/input";
