@@ -1,4 +1,4 @@
-name: FOCUS Astra medium evidence
+name: FOCUS Astra high evidence
 on:
   push:
     branches: [work/use-gpt-6-astra]
@@ -8,10 +8,10 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch Astra medium benchmark
+      - name: Fetch Astra high benchmark
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location \
-            "https://focus-app-nhkt-98pwf3svl-hamzaentreprise481-8876s-projects.vercel.app/release-benchmark.json" \
+            "https://focus-app-nhkt-ntl161yqd-hamzaentreprise481-8876s-projects.vercel.app/release-benchmark.json" \
             -o benchmark.json
-          jq '{generatedAt,gitSha,mode,model,reasoningEffort,caseCount,metrics}' benchmark.json
+          jq '{generatedAt,gitSha,mode,model,reasoningEffort,caseCount,metrics,problemCases:[.cases[]|select(.failure != null or .statusCorrect == false)|{caseId,category,expectedStatus,actualStatus,statusCorrect,failure,expectedErrors,matchedErrors,falsePositives}]}' benchmark.json
