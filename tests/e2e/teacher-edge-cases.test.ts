@@ -199,8 +199,10 @@ test("a refresh during the class analysis keeps what is done and offers the rest
   await page.getByText(/^Analyse 2 \/ 3 : /).waitFor({ timeout: 30_000 });
   await page.reload();
   await page.getByRole("list", { name: "Élèves de la classe" }).waitFor();
-  // The first copy is analysed; whatever is left is offered again, nothing is lost.
-  const remaining = page.getByRole("button", { name: /^Analyser les [12] copies? non analysées?$/ });
+  // The first copy is analysed; whatever is left is offered again, nothing is
+  // lost. The copy in flight at the reload may already be recorded when the
+  // page renders (one copy left, singular label) or not (two copies left).
+  const remaining = page.getByRole("button", { name: /^Analyser (les 2 copies non analysées|la copie non analysée)$/ });
   await remaining.waitFor();
   await remaining.click();
   await page.getByText("Toutes les copies enregistrées ont une analyse à jour.").waitFor({ timeout: 30_000 });
