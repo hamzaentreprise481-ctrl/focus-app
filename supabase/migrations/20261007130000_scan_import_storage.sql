@@ -7,31 +7,17 @@
 --    score. If either side fails, the transaction rolls back: no partial scan
 --    import can be presented as pending while silently changing evidence.
 
--- Local PGlite test schemas do not include Supabase Storage. Production and
--- Supabase staging do. Keep the application migration testable without
--- fabricating a fake storage schema.
+-- The bucket itself is provisioned through the Storage API by
+-- scripts/setup-scan-storage.ts. Supabase treats storage metadata as internal;
+-- this migration only owns the access policies and the application RPC.
+-- Local PGlite test schemas do not include Supabase Storage, so skip policies
+-- there without inventing storage tables.
 do $storage$
 begin
-  if to_regclass('storage.buckets') is null
-     or to_regclass('storage.objects') is null then
-    raise notice 'FOCUS Scan: storage schema absent; bucket policies skipped';
+  if to_regclass('storage.objects') is null then
+    raise notice 'FOCUS Scan: storage schema absent; object policies skipped';
     return;
   end if;
-
-  insert into storage.buckets (
-    id, name, public, file_size_limit, allowed_mime_types
-  )
-  values (
-    'focus-scan-imports',
-    'focus-scan-imports',
-    false,
-    50000000,
-    array['application/pdf']::text[]
-  )
-  on conflict (id) do update set
-    public = false,
-    file_size_limit = excluded.file_size_limit,
-    allowed_mime_types = excluded.allowed_mime_types;
 
   execute 'drop policy if exists focus_scan_imports_insert on storage.objects';
   execute $policy$
