@@ -204,6 +204,7 @@ export function ScanStackImport({
           className="sr-only"
           type="file"
           accept="application/pdf,.pdf"
+          aria-label="PDF des copies scannées"
           disabled={busy}
           onChange={(event) => {
             const file = event.target.files?.[0];
