@@ -78,7 +78,7 @@ test("scanned copy RPC saves evidence and score in one transaction", async () =>
   const [{ result }] = await asTeacher<{
     result: { scoreSaved: boolean; responses: { changed: boolean } };
   }>(
-    "select public.focus_import_scanned_copy($1, $2, $3::jsonb, $4) as result",
+    "select public.focus_import_scanned_copy($1, $2, $3::jsonb, $4, false) as result",
     [
       assessmentId,
       studentId,
@@ -122,7 +122,7 @@ test("invalid scanned evidence rolls back the score write too", async () => {
   const studentId = a.students[0];
   await assert.rejects(
     asTeacher(
-      "select public.focus_import_scanned_copy($1, $2, $3::jsonb, $4)",
+      "select public.focus_import_scanned_copy($1, $2, $3::jsonb, $4, false)",
       [
         assessmentId,
         studentId,
@@ -150,4 +150,31 @@ test("invalid scanned evidence rolls back the score write too", async () => {
   );
   assert.equal(responses.rows.length, 0);
   assert.equal(grades.rows.length, 0);
+});
+
+
+test("explicit replacement can clear an existing scanned score", async () => {
+  const { assessmentId, questionId } = await fixture();
+  const studentId = a.students[0];
+  const payload = JSON.stringify([
+    {
+      questionId,
+      responseText: "x = 2",
+      awardedPoints: "4",
+      teacherAnnotation: "",
+    },
+  ]);
+  await asTeacher(
+    "select public.focus_import_scanned_copy($1, $2, $3::jsonb, 17, false)",
+    [assessmentId, studentId, payload],
+  );
+  await asTeacher(
+    "select public.focus_import_scanned_copy($1, $2, $3::jsonb, null, true)",
+    [assessmentId, studentId, payload],
+  );
+  const grade = await db.query<{ score: string | null; absent: boolean }>(
+    "select score::text, absent from public.assessment_results where assessment_id = $1 and student_id = $2",
+    [assessmentId, studentId],
+  );
+  assert.deepEqual(grade.rows[0], { score: null, absent: false });
 });
