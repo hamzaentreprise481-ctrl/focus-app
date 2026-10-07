@@ -44,7 +44,7 @@ export function ScanStackImport({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const client = useMemo(uploadClient, []);
+  const client = useMemo(() => uploadClient(), []);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
