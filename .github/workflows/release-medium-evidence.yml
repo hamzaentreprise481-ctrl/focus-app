@@ -1,0 +1,17 @@
+name: FOCUS Astra medium evidence
+on:
+  push:
+    branches: [work/use-gpt-6-astra]
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Astra medium benchmark
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            "https://focus-app-nhkt-98pwf3svl-hamzaentreprise481-8876s-projects.vercel.app/release-benchmark.json" \
+            -o benchmark.json
+          jq '{generatedAt,gitSha,mode,model,reasoningEffort,caseCount,metrics}' benchmark.json
