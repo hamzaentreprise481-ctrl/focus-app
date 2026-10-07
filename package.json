@@ -15,7 +15,8 @@
     "test:ai-live": "node --import tsx scripts/run-pedagogy-benchmark.ts",
     "curriculum": "node --import tsx scripts/curriculum.ts",
     "curriculum:check": "node --import tsx scripts/curriculum.ts validate curriculum/packages/math/seconde-gt-2026-2027",
-    "check:login": "node --import tsx scripts/check-teacher-login.ts"
+    "check:login": "node --import tsx scripts/check-teacher-login.ts",
+    "setup:scan-storage": "node --import tsx scripts/setup-scan-storage.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",
