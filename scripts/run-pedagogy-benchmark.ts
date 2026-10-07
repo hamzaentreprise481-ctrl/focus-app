@@ -30,7 +30,7 @@ async function main() {
     console.error("BLOCKED: OPENAI_API_KEY is not available in this environment. Nothing was sent; no result is claimed.");
     process.exit(2);
   }
-  const model = reference ? "reference-ideal" : option("model") || process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
+  const model = reference ? "reference-ideal" : option("model") || process.env.FOCUS_AI_MODEL || "gpt-6-astra";
   const effort: ReasoningEffort = pedagogicalReasoningEffort(option("effort") ?? process.env.FOCUS_AI_REASONING_EFFORT);
   const only = option("cases")?.split(",");
   const cases = only ? PEDAGOGY_BENCHMARK.filter((item) => only.includes(item.id)) : PEDAGOGY_BENCHMARK;
