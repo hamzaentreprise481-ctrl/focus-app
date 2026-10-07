@@ -18,13 +18,35 @@ const run = (email: string, password: string, extra: { key?: string; projectRef?
   diagnoseTeacherLogin({ url: stack.supabase.url, key: extra.key ?? stack.supabase.publishableKey, email, password, projectRef: extra.projectRef });
 const failed = (steps: Awaited<ReturnType<typeof run>>) => steps.filter((step) => !step.ok).map((step) => step.step);
 
-test("a provisioned teacher passes every step: login, session, role, profile, RLS, refresh, logout", async () => {
+test("a provisioned teacher passes every step: login, session, membership role, profile, RLS, refresh, logout", async () => {
   const steps = await run(LOCAL_TEACHER.email, LOCAL_TEACHER.password);
   assert.deepEqual(failed(steps), [], JSON.stringify(steps, null, 2));
   assert.deepEqual(
     steps.map((step) => step.step),
     ["configuration", "auth_reachable", "password_login", "session_verified", "teacher_role", "profile", "school_membership", "teacher_assignment", "rls_classes", "rls_enrollments", "schema_version", "session_refresh", "logout", "anonymous_denied"],
   );
+});
+
+test("teacher access comes from an active school membership, not app_metadata", async () => {
+  await stack.db.query("update auth.users set raw_app_meta_data = '{}'::jsonb where id = $1", [LOCAL_TEACHER.id]);
+  try {
+    const steps = await run(LOCAL_TEACHER.email, LOCAL_TEACHER.password);
+    assert.deepEqual(failed(steps), [], JSON.stringify(steps, null, 2));
+    assert.match(steps.find((step) => step.step === "teacher_role")!.detail, /school_memberships/);
+  } finally {
+    await stack.db.query("update auth.users set raw_app_meta_data = '{\"role\":\"teacher\"}'::jsonb where id = $1", [LOCAL_TEACHER.id]);
+  }
+});
+
+test("an inactive teacher membership is refused even if auth metadata says teacher", async () => {
+  await stack.db.query("update public.school_memberships set status = 'disabled' where user_id = $1", [LOCAL_TEACHER.id]);
+  try {
+    const steps = await run(LOCAL_TEACHER.email, LOCAL_TEACHER.password);
+    assert.deepEqual(failed(steps), ["teacher_role"]);
+    assert.match(steps.at(-1)!.detail, /Aucune appartenance active/);
+  } finally {
+    await stack.db.query("update public.school_memberships set status = 'active' where user_id = $1", [LOCAL_TEACHER.id]);
+  }
 });
 
 test("the former hard-coded credentials stop at the Supabase password step", async () => {
@@ -38,7 +60,7 @@ test("a wrong password for a real teacher is reported the same way", async () =>
   assert.deepEqual(failed(await run(LOCAL_TEACHER.email, "wrong-password")), ["password_login"]);
 });
 
-test("a real account without app_metadata.role = teacher stops at the role step", async () => {
+test("a real account without an active teacher membership stops at the role step", async () => {
   const steps = await run(NON_TEACHER.email, NON_TEACHER.password);
   assert.deepEqual(failed(steps), ["teacher_role"]);
   assert.match(steps.at(-1)!.detail, /app_metadata\.role/);
