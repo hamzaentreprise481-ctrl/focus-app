@@ -1,1 +1,2 @@
 @AGENTS.md
+@FOCUS_PRODUCT.md
