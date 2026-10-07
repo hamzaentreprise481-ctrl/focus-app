@@ -6,7 +6,7 @@ import { authConfig } from "@/lib/auth/config";
 import { engineSigningKey } from "@/lib/pedagogy/engine-signature";
 
 /** The last migration this code needs; tests pin it to the newest file. */
-export const REQUIRED_SCHEMA_VERSION = "20261007090000";
+export const REQUIRED_SCHEMA_VERSION = "20261007130000";
 
 export interface DeploymentHealth {
   service: "focus-teacher";

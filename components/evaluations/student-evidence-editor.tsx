@@ -288,9 +288,10 @@ export function StudentEvidenceEditor({
         Copies des élèves
       </h2>
       <p className="mt-1 max-w-3xl text-sm leading-relaxed text-ink-soft">
-        Recopiez la réponse exacte de l’élève (calculs compris), les points
-        attribués et, si besoin, votre annotation. Une copie vide n’est jamais
-        interprétée comme une erreur.
+        Les copies importées par PDF apparaissent ici automatiquement. Vous
+        pouvez aussi saisir ou corriger manuellement la réponse exacte de
+        l’élève, les points attribués et votre annotation. Une copie vide n’est
+        jamais interprétée comme une erreur.
       </p>
 
       {overviewError && (
