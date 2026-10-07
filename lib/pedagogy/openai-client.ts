@@ -178,8 +178,8 @@ export async function requestPedagogicalAnalysisWithUsage(
         return fail(`OPENAI_REQUEST_FAILED:${current.status}`);
 
       const delayMs = Math.min(retryDelayMs(current, attempt), Math.max(0, deadline - Date.now() - 1));
-      if (delayMs <= 0) return fail("OPENAI_TIMEOUT");
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (delayMs < 0) return fail("OPENAI_TIMEOUT");
+      if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     return fail("OPENAI_REQUEST_FAILED:0");
   };
