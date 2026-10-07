@@ -107,7 +107,12 @@ function extractionSchema(studentKeys: string[], questionKeys: string[]) {
             "warnings",
           ],
           properties: {
-            studentKey: { enum: [null, ...studentKeys] },
+            studentKey: {
+              anyOf: [
+                { type: "string", enum: studentKeys },
+                { type: "null" },
+              ],
+            },
             studentNameRead: { type: "string" },
             identificationConfidence: confidenceSchema,
             groupingConfidence: confidenceSchema,
