@@ -1,5 +1,5 @@
 export const SCAN_BUCKET = "focus-scan-imports";
-export const MAX_SCAN_BYTES = 50 * 1024 * 1024;
+export const MAX_SCAN_BYTES = 50_000_000;
 
 export type ScanQuestion = {
   id: string;
