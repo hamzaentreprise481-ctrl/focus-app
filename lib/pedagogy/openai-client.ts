@@ -170,6 +170,7 @@ export async function requestPedagogicalAnalysisWithUsage(
       const name = error instanceof Error ? error.name : "";
       fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
     }
+    if (!response) fail("OPENAI_NETWORK_ERROR");
 
     if (response.ok) break;
     if (!retryableStatus(response.status) || attempt === maxAttempts) fail(`OPENAI_REQUEST_FAILED:${response.status}`);
@@ -178,7 +179,8 @@ export async function requestPedagogicalAnalysisWithUsage(
     if (delayMs <= 0) fail("OPENAI_TIMEOUT");
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  if (!response?.ok) fail(`OPENAI_REQUEST_FAILED:${response?.status ?? 0}`);
+  if (!response) fail("OPENAI_NETWORK_ERROR");
+  if (!response.ok) fail(`OPENAI_REQUEST_FAILED:${response.status}`);
 
   let payload: unknown;
   try {
