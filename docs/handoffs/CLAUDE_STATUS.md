@@ -1,7 +1,8 @@
 # CLAUDE_STATUS — FOCUS Teacher V1 (technique)
 
 Fichier tenu par Claude (CTO / lead engineer technique). Ne pas modifier
-`docs/handoffs/WORK_STATUS.md` (GPT Work). Dernière mise à jour : 4 octobre 2026.
+`docs/handoffs/WORK_STATUS.md` (GPT Work). Dernière mise à jour : 7 octobre 2026,
+commit `e09ed78`.
 
 ## Branche canonique
 
@@ -9,7 +10,7 @@ Fichier tenu par Claude (CTO / lead engineer technique). Ne pas modifier
 | --- | --- |
 | Base `main` | `6a88301` — V0 (données fictives, `localStorage`, aucun Supabase). Rien n’y a été fusionné. |
 | PR #7 | `claude/finish-focus-v1` @ `13884fe` → `main` (138 commits : Supabase, Auth, IA pédagogique, programme). |
-| **Branche canonique** | **`ccr-38fbcf41-7sndhr` (PR #8)**, empilée sur #7. Contient #7, la ligne `work/fix-professor-login → claude/zealous-bell-rmg2r0` (fusionnée ici le 4 octobre, commit `30af47b`) et le travail de cette session. |
+| **Branche canonique** | **`ccr-38fbcf41-7sndhr` (PR #8)**, empilée sur #7. Contient #7, la ligne `work/fix-professor-login → claude/zealous-bell-rmg2r0` (fusionnée ici le 4 octobre, commit `30af47b`), le travail technique de Claude et l’UI de GPT Work (PR #9 `work/ui-pilot-v1`, fusionnée par le propriétaire le 7 octobre, `4a48c19`). |
 | Branches obsolètes (toutes contenues dans la branche canonique) | `codex/connect-supabase-v1`, `codex/effectuer-un-audit-visuel-de-focus`, `codex/focus-v1-supabase-20260925`, `codex/focus-live-supabase-20260925`, `codex/pedagogical-ai-math-v1`, `codex/connect-login-test-professor` (PR #4), `claude/curriculum-importer` (PR #6), `work/fix-professor-login`, `claude/zealous-bell-rmg2r0`. |
 
 Ordre de fusion proposé (décision du propriétaire) : #8 contient #7 ; fusionner
@@ -37,7 +38,10 @@ Ordre de fusion proposé (décision du propriétaire) : #8 contient #7 ; fusionn
      l’API (trigger).
 3. **Durée des fonctions** : `vercel.json` (`fluid: true`), `maxDuration = 120`
    sur `/app/evaluations/[id]` et `/app/eleves/[id]` (délai modèle 90 s).
-4. Tests, sonde RLS automatisée, retours arrière testés, documentation.
+4. Raison « preuves insuffisantes » rédigée par le modèle soumise aux mêmes
+   filtres de formulation que les constats (`lib/pedagogy/analysis.ts`) : une
+   copie ne peut plus faire écrire « l’élève est dyslexique » à l’écran.
+5. Tests, sonde RLS automatisée, retours arrière testés, documentation.
 
 ## Migrations ajoutées (non appliquées sur le projet live)
 
@@ -65,8 +69,13 @@ d’analyse »).
 
 ## Points pour GPT Work (UI, sans urgence technique)
 
-- Connexion : après un mot de passe refusé, les deux champs sont vidés (il faut
-  retaper l’e-mail).
+- ~~Connexion : e-mail vidé après un mot de passe refusé~~ — corrigé par GPT Work
+  (PR #9).
+- À trancher par le propriétaire (pas par Claude) : sans
+  `FOCUS_DEMO_REQUEST_URL`, la page publique ouvre désormais un e-mail vers
+  l’adresse Gmail personnelle du propriétaire, alors que `FOCUS_PRODUCT.md`
+  demande d’indiquer que les demandes ne sont pas ouvertes ; adresse
+  personnelle publiée sur une page publique.
 - Évaluation analysée : le bouton « Supprimer l’évaluation » reste affiché ; la
   suppression est refusée avec une explication (comportement correct, affichage
   à revoir éventuellement).
@@ -81,9 +90,37 @@ d’analyse »).
   `components/classes/class-overview.tsx`, `components/students/student-synthesis.tsx`
   (ligne fusionnée), pages `app/(teacher)/app/**/page.tsx` (`maxDuration`).
 
-## Tests (commandes exécutées)
+## Tests (commandes exécutées le 7 octobre sur `e09ed78`, local)
 
-Voir la section « Preuves » de la PR #8 pour les chiffres du dernier commit.
+| Commande | Résultat |
+| --- | --- |
+| `npm run typecheck`, `npm run lint` | 0 erreur, 0 avertissement |
+| `npm test` (unitaires + base PGlite, dont RLS, provenance, retours arrière, sonde) | 277/277 |
+| `npm run build` | OK |
+| `npm run test:routes` (dont parcours navigateur de la ligne fusionnée) | 31/31 |
+| `npm run test:e2e` (Chromium : 9 Claude + 7 GPT Work) | 16/16 |
+| CI GitHub `FOCUS checks / verify` sur `4c5f941` | vert |
+| Preview Vercel `focus-app-nhkt` sur `4c5f941` et `5722513` | « Ready » (build accepté avec `vercel.json` et `maxDuration`) |
+
+Vérifications hors suite :
+
+- **Concurrence, PostgreSQL 16 réel, deux sessions** (`scratchpad`, non commité) :
+  édition en cours pendant l’enregistrement → enregistrement en attente du
+  verrou (3,06 s) puis refusé, 0 analyse ; enregistrement en cours pendant
+  l’édition → édition en attente (3,07 s) puis analyse remplacée, 0 courante ;
+  édition validée avant → refus. **Témoin sans verrou** : l’analyse reste
+  « courante » sur un texte qui n’existe plus — le verrou est nécessaire.
+- **Parcours professeur réel dans Chromium** (pile locale, modèle scripté) :
+  16 étapes de la connexion refusée à la déconnexion, PDF élève lu avec
+  `pdftotext` (seules les observations confirmées, avec preuve, confiance et
+  note ; hypothèse écartée absente ; PDF d’évaluation sans hypothèse IA),
+  0 erreur console, 0 réponse 5xx.
+- **Live, lecture seule** : 24 migrations (tête `20260927100000`) ; advisors :
+  `focus_persist_*` encore exécutables par `authenticated` (fermé par
+  `20261004090000`), protection des mots de passe divulgués désactivée.
+- Les deux agents de revue (correctness, sécurité) lancés le 4 octobre se sont
+  arrêtés sur une limite d’usage sans rendre de résultat ; les passes 1 et 2 ont
+  été faites par Claude directement (constat corrigé : point 4 ci-dessus).
 
 ## Bloquants / non prouvé
 
