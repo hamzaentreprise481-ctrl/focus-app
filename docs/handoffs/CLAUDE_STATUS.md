@@ -1,0 +1,98 @@
+# CLAUDE_STATUS — FOCUS Teacher V1 (technique)
+
+Fichier tenu par Claude (CTO / lead engineer technique). Ne pas modifier
+`docs/handoffs/WORK_STATUS.md` (GPT Work). Dernière mise à jour : 4 octobre 2026.
+
+## Branche canonique
+
+| | |
+| --- | --- |
+| Base `main` | `6a88301` — V0 (données fictives, `localStorage`, aucun Supabase). Rien n’y a été fusionné. |
+| PR #7 | `claude/finish-focus-v1` @ `13884fe` → `main` (138 commits : Supabase, Auth, IA pédagogique, programme). |
+| **Branche canonique** | **`ccr-38fbcf41-7sndhr` (PR #8)**, empilée sur #7. Contient #7, la ligne `work/fix-professor-login → claude/zealous-bell-rmg2r0` (fusionnée ici le 4 octobre, commit `30af47b`) et le travail de cette session. |
+| Branches obsolètes (toutes contenues dans la branche canonique) | `codex/connect-supabase-v1`, `codex/effectuer-un-audit-visuel-de-focus`, `codex/focus-v1-supabase-20260925`, `codex/focus-live-supabase-20260925`, `codex/pedagogical-ai-math-v1`, `codex/connect-login-test-professor` (PR #4), `claude/curriculum-importer` (PR #6), `work/fix-professor-login`, `claude/zealous-bell-rmg2r0`. |
+
+Ordre de fusion proposé (décision du propriétaire) : #8 contient #7 ; fusionner
+#7 puis #8, ou recibler #8 sur `main` et fermer #7 comme remplacée.
+
+## Ce que cette session a changé (côté technique)
+
+1. **Une seule ligne V1** : fusion de `claude/zealous-bell-rmg2r0` (portée de
+   l’espace par (classe, matière), diagnostic de connexion, suppression
+   d’évaluation, preuves et fiabilité dans `lib/analysis.ts` sans changement
+   de seuil, aperçu de classe).
+2. **Provenance des analyses IA** — migration
+   `20261004090000_engine_signed_analyses` :
+   - `focus_persist_pedagogical_analysis` et `focus_persist_no_evidence` ne sont
+     plus appelables par `authenticated` ;
+   - seule entrée : `focus_record_engine_analysis(p_envelope text,
+     p_signature text)`, enveloppe signée HMAC-SHA256 par le serveur
+     (`FOCUS_ANALYSIS_SIGNING_KEY` ↔ `focus_private.engine_keys`), liée au
+     professeur connecté, valable 10 min ;
+   - version des preuves (`focus_analysis_evidence_versions`) lue **avant** la
+     copie et signée ; refus (40001) si copie, sujet, corrigé, barème, notions
+     ou consignes ont changé pendant l’analyse ; verrou par évaluation partagé
+     avec la supersession ;
+   - une évaluation dont des copies ont été analysées ne se supprime plus par
+     l’API (trigger).
+3. **Durée des fonctions** : `vercel.json` (`fluid: true`), `maxDuration = 120`
+   sur `/app/evaluations/[id]` et `/app/eleves/[id]` (délai modèle 90 s).
+4. Tests, sonde RLS automatisée, retours arrière testés, documentation.
+
+## Migrations ajoutées (non appliquées sur le projet live)
+
+| Version | Retour arrière |
+| --- | --- |
+| `20261002120000_access_integrity_hardening` | `supabase/rollback/20261002120000_access_integrity_hardening.down.sql` |
+| `20261004090000_engine_signed_analyses` | `supabase/rollback/20261004090000_engine_signed_analyses.down.sql` |
+
+Live (lecture seule, 4 octobre) : 24 migrations, tête `20260927100000`.
+Avant de déployer ce code : appliquer les deux migrations (staging d’abord),
+installer la clé moteur en base **et** dans Vercel (README, « Clé du moteur
+d’analyse »).
+
+## Contrats modifiés (à connaître pour l’UI)
+
+- `generatePedagogicalAnalysis` (server action) : nouveaux messages d’échec
+  possibles — copie modifiée pendant l’analyse ; clé de signature absente ou
+  différente de la base (code `ai_not_configured`, arrête l’analyse de classe) ;
+  enveloppe expirée. Formes inchangées (`{ ok: false, error, code? }`).
+- `pedagogicalAiConfigured()` exige maintenant `OPENAI_API_KEY` **et**
+  `FOCUS_ANALYSIS_SIGNING_KEY` : sans la seconde, l’UI n’offre plus l’analyse.
+- `/api/health` : `ai.signingKeyConfigured` (booléen) ; `ready` en dépend.
+- `deleteEvaluationAction` : le refus en base (évaluation analysée) donne le
+  même message que la vérification préalable.
+
+## Points pour GPT Work (UI, sans urgence technique)
+
+- Connexion : après un mot de passe refusé, les deux champs sont vidés (il faut
+  retaper l’e-mail).
+- Évaluation analysée : le bouton « Supprimer l’évaluation » reste affiché ; la
+  suppression est refusée avec une explication (comportement correct, affichage
+  à revoir éventuellement).
+- Modification d’interface faite par Claude, nécessaire à la frontière IA :
+  `components/students/pedagogical-ai-panel.tsx`, frise des notions du dossier
+  élève : « erreur à examiner » → « hypothèse à examiner » (une hypothèse IA non
+  décidée n’est jamais présentée comme une erreur établie). Un mot, aucun style.
+- Fichiers d’interface touchés par la branche canonique depuis #7 (logique,
+  pas de refonte visuelle) : `components/evaluations/class-analysis-panel.tsx`
+  (double clic), `assessment-review-panel.tsx` (hypothèse remplacée),
+  `student-evidence-editor.tsx`, `delete-evaluation-button.tsx`,
+  `components/classes/class-overview.tsx`, `components/students/student-synthesis.tsx`
+  (ligne fusionnée), pages `app/(teacher)/app/**/page.tsx` (`maxDuration`).
+
+## Tests (commandes exécutées)
+
+Voir la section « Preuves » de la PR #8 pour les chiffres du dernier commit.
+
+## Bloquants / non prouvé
+
+- **NON PROUVÉ SUR MODÈLE RÉEL** : aucune clé OpenAI dans cet environnement ;
+  toutes les analyses testées viennent du modèle scripté.
+- Migrations non appliquées sur un vrai projet Supabase (staging à créer :
+  décision du propriétaire).
+- Preview Vercel : déploiement « Ready », mais `/api/health` inaccessible
+  (Vercel Authentication, secret `VERCEL_AUTOMATION_BYPASS_SECRET` absent) ;
+  connecteur Vercel sans accès à l’équipe.
+- Protection contre les mots de passe divulgués désactivée sur le projet live
+  (advisor Supabase, 4 octobre).

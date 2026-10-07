@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
+import { installEngineKey } from "./helpers/engine";
 import { BEFORE_WORK_IMPORT, createMigratedDatabase, migrationFiles } from "./helpers/pg";
 import { LIVE, useLiveIdentifiers as applyLiveIdentifiers } from "./helpers/work-curriculum";
 
@@ -19,6 +20,7 @@ async function stagingReplica() {
     await db.exec(readFileSync(file, "utf8"));
     await db.query("insert into supabase_migrations.schema_migrations(version) values ($1)", [path.basename(file).slice(0, 14)]);
   }
+  await installEngineKey(db);
   return db;
 }
 const verify = (db: PGlite) => db.exec(VERIFY);
@@ -42,7 +44,16 @@ test("staging verification fails on a changed UUID, a missing migration or an an
   try {
     const cases: Array<[string, string, RegExp]> = [
       ["update public.curriculum_nodes set active = false where code = 'MATH.ALG.DISTRIBUTIVITE'", "", /live curriculum identifiers changed or inactive: MATH\.ALG\.DISTRIBUTIVITE/],
-      ["delete from supabase_migrations.schema_migrations where version = '20260927100000'", "", /schema version is 20260927090000/],
+      ["delete from supabase_migrations.schema_migrations where version = '20261004090000'", "", /schema version is 20261002120000/],
+      ["grant execute on function public.focus_persist_no_evidence(uuid, uuid, uuid, text, text, text) to authenticated", "", /API roles may record AI output directly: focus_persist_no_evidence/],
+      ["grant usage on schema focus_private to service_role", "", /an API role can read the engine key schema/],
+      ["delete from focus_private.engine_keys", "", /engine signing key not installed/],
+      ["grant truncate on public.assessments to authenticated", "", /authenticated may truncate: assessments/],
+      [
+        "alter policy error_observations_select on public.error_observations using (student_id = (select auth.uid()))",
+        "",
+        /AI output readable beyond the class and subject teachers: error_observations_select/,
+      ],
       ["grant select on public.profiles to anon", "", /anon has privileges on: profiles/],
       ["update public.curriculum_typical_errors set active = false where code = (select min(code) from public.curriculum_typical_errors)", "", /expected 99 typical errors, found 98/],
     ];

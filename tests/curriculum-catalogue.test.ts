@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { convertWorkCatalogue } from "../lib/curriculum/work-catalogue";
+import { installEngineKey, RECORD_SQL, signedEnvelope } from "./helpers/engine";
 import { createMigratedDatabase, seedSchoolFixture } from "./helpers/pg";
 import { workDocument } from "./helpers/work-curriculum";
 
@@ -138,15 +139,20 @@ test("an analysis can cite a typical error of the diagnosed notion only", async 
   await teacher("select public.focus_save_student_responses($1, $2, $3::jsonb)", [assessmentId, school.students[0], JSON.stringify([{ questionId, responseText: "3(x+2)=3x+2" }])]);
   const [{ id: responseId }] = await teacher("select id from public.student_responses where question_id = $1", [questionId]);
   const [{ id: nodeId }] = (await db.query<{ id: string }>("select id from public.curriculum_nodes where code = 'MATH.ALG.DISTRIBUTIVITE'")).rows;
-  const persist = (catalogueErrorCode: string) =>
-    teacher("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, $5::jsonb, $6::jsonb)", [
-      school.school,
-      school.students[0],
+  await installEngineKey(db);
+  const persist = async (catalogueErrorCode: string) => {
+    const signed = await signedEnvelope(db, {
+      kind: "analysis",
+      teacherId: school.teacher,
+      schoolId: school.school,
+      studentId: school.students[0],
       assessmentId,
-      createHash("sha256").update(randomUUID()).digest("hex"),
-      JSON.stringify([{ questionId, responseId, nodeId, errorType: "calcul", evidenceExcerpt: "3x+2", explanation: "e", catalogueErrorCode }]),
-      JSON.stringify([{ nodeId, difficulty: "d", explanation: "e", recommendedAction: "a" }]),
-    ]);
+      inputHash: createHash("sha256").update(randomUUID()).digest("hex"),
+      errors: [{ questionId, responseId, nodeId, errorType: "calcul", evidenceExcerpt: "3x+2", explanation: "e", catalogueErrorCode }],
+      recommendations: [{ nodeId, difficulty: "d", explanation: "e", recommendedAction: "a" }],
+    });
+    return teacher(RECORD_SQL, [signed.p_envelope, signed.p_signature]);
+  };
   await assert.rejects(persist("MATH.NUM.ARITHMETIQUE.ERR.01"), /catalogue error does not belong to the notion/);
   await persist("MATH.ALG.DISTRIBUTIVITE.ERR.01");
   const [row] = await teacher(

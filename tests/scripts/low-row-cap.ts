@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
 import { evidenceRows, studentMathContext, studentPedagogy } from "../../lib/pedagogy/server";
+import { installEngineKey, signedEnvelope } from "../helpers/engine";
 import { createMigratedDatabase } from "../helpers/pg";
 import { LOCAL_TEACHER, seedLocalSchool } from "../helpers/local-stack";
 import { startLocalSupabase } from "../helpers/local-supabase";
@@ -13,6 +14,7 @@ import { startLocalSupabase } from "../helpers/local-supabase";
 async function main() {
   const db = await createMigratedDatabase();
   const ids = await seedLocalSchool(db);
+  await installEngineKey(db);
   const server = await startLocalSupabase(db, {
     port: 54410,
     accounts: [{ email: LOCAL_TEACHER.email, password: LOCAL_TEACHER.password, userId: LOCAL_TEACHER.id }],
@@ -56,15 +58,21 @@ async function main() {
       });
       assert.ok(!responses.error, responses.error?.message);
       const responseId = (await db.query<{ id: string }>("select id from public.student_responses where question_id = $1", [questionIds[0]])).rows[0].id;
-      const run = await supabase.rpc("focus_persist_pedagogical_analysis", {
-        p_school_id: ids.school,
-        p_student_id: student,
-        p_assessment_id: id,
-        p_model: "fixture",
-        p_input_hash: String(index).repeat(64).slice(0, 64),
-        p_errors: [{ questionId: questionIds[0], responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: "2x+1", explanation: "Le facteur n’est appliqué qu’au premier terme.", confidence: "limitee", catalogueErrorCode: "" }],
-        p_recommendations: [{ nodeId: node, difficulty: "Distribuer", explanation: "Explication", recommendedAction: "Action", confidence: "limitee", evidence: [] }],
-      });
+      // Through PostgREST, signed as the FOCUS server does.
+      const run = await supabase.rpc(
+        "focus_record_engine_analysis",
+        await signedEnvelope(db, {
+          kind: "analysis",
+          teacherId: LOCAL_TEACHER.id,
+          schoolId: ids.school,
+          studentId: student,
+          assessmentId: id,
+          model: "fixture",
+          inputHash: String(index).repeat(64).slice(0, 64),
+          errors: [{ questionId: questionIds[0], responseId, nodeId: node, errorType: "calcul", evidenceExcerpt: "2x+1", explanation: "Le facteur n’est appliqué qu’au premier terme.", confidence: "limitee", catalogueErrorCode: "" }],
+          recommendations: [{ nodeId: node, difficulty: "Distribuer", explanation: "Explication", recommendedAction: "Action", confidence: "limitee", evidence: [] }],
+        }),
+      );
       assert.ok(!run.error, run.error?.message);
       assessments.push(id);
     }

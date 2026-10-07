@@ -1,5 +1,14 @@
 # Staging — rehearse the migrations on a real Supabase database
 
+> **2 October 2026.** The nine migrations below are now applied on the live
+> project (schema identical to the repository, `tests/schema-live.test.ts`).
+> The same procedure applies to the next pending migrations,
+> `20261002120000_access_integrity_hardening` and
+> `20261004090000_engine_signed_analyses`: dump live, restore, mark every
+> version up to `20260927100000` as applied, `supabase db push`, install the
+> engine key (section 2), then run `supabase/staging/verify.sql` (it now
+> expects `20261004090000`) and `supabase/staging/rls-probe.sql`.
+
 The nine migrations after the live head (`20260926120000` → `20260927100000`)
 have only run on PostgreSQL in PGlite. Before the live project, they must run
 on a **real Supabase database that holds a copy of the live data**, because the
@@ -53,6 +62,14 @@ supabase db push
 supabase migration list        # now ends at 20260927100000
 ```
 
+Then install the engine signing key once in staging (SQL editor), with the
+same value as the Preview's `FOCUS_ANALYSIS_SIGNING_KEY` (`openssl rand -hex 32`):
+
+```sql
+insert into focus_private.engine_keys (id, secret) values (1, decode('<hex>', 'hex'))
+on conflict (id) do update set secret = excluded.secret, rotated_at = now();
+```
+
 ## 3. Verify
 
 1. **Schema, curriculum, catalogue, grants:** run
@@ -89,14 +106,37 @@ supabase migration list        # now ends at 20260927100000
    Every line must be `PASS` (anon refused, each teacher sees only their
    class, B cannot write A's copies or record an analysis, AI tables not
    writable directly). The script was validated against the local stack.
-5. **Preview on staging:** point a Preview's `NEXT_PUBLIC_SUPABASE_URL` and
+5. **Access probe in the database itself:** `psql "$STAGING_DB_URL" -f
+   supabase/staging/rls-probe.sql`. It creates fictitious rows (a physics
+   teacher in the same class, a second school, an analysed copy with a
+   private note), acts as each role through `set local role authenticated`
+   and the JWT claims PostgREST would send, prints `FOCUS_RLS_PROBE {…}` and
+   then raises, so the whole transaction rolls back: nothing remains. After
+   `20261002120000`, every `reads_*` of the student and of the other-subject
+   teacher is `0` and every write attempt is `refused`. On the live project
+   (before the migration, 2 October 2026) the same probe showed the student
+   and the physics teacher reading the hypotheses, observations and the
+   teacher's note, the student inserting a `learning_paths` row, and the
+   maths teacher grading a student of another school and lowering a maximum
+   below awarded points.
+6. **Preview on staging:** point a Preview's `NEXT_PUBLIC_SUPABASE_URL` and
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` at staging, redeploy, and check the
    "FOCUS Preview verified" status (schema up to date), then walk the teacher
    flow with `teacher-a@example.test`.
 
 ## 4. Recovery
 
-The migrations have no down scripts. Before the live project:
+`20261002120000_access_integrity_hardening` has a tested down script:
+`psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -f
+supabase/rollback/20261002120000_access_integrity_hardening.down.sql`, then
+`supabase migration repair --status reverted 20261002120000`. It restores the
+previous schema object for object (functions with their grants, policies,
+triggers, table grants and default privileges; `tests/migration-rollback.test.ts`,
+and on a PostgreSQL 16 replica of live: identical fingerprint after the
+rollback, and the migration re-applies). It re-opens the accesses the
+migration closes: it undoes a faulty deployment, it is never a fix.
+
+The earlier migrations have no down scripts. Before the live project:
 
 - take a backup (Dashboard → Database → Backups, or `supabase db dump` of
   schema, data and auth as in step 1) and keep it until the new version is

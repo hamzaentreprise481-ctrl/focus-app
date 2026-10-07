@@ -12,11 +12,14 @@ import {
 } from "@/lib/pedagogy/openai";
 import { ModelCallError, pedagogicalAiHourlyLimit, pedagogicalReasoningEffort, type ModelUsage } from "@/lib/pedagogy/openai-client";
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
+import { engineSigningKey, signEngineEnvelope, type EngineEnvelope } from "@/lib/pedagogy/engine-signature";
 import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
 import { pickNextEvidenceSet } from "@/lib/pedagogy/queue";
+import type { AnalysisFailureCode } from "@/lib/pedagogy/batch";
 import {
   AccessError,
   assessmentAccess,
+  assessmentReview,
   catalogueErrorsByCode,
   currentRuns,
   curriculumGraph,
@@ -35,6 +38,7 @@ import {
 import type {
   AssessmentDefinitionDraft,
   AssessmentDefinitionView,
+  PedagogicalRecommendationView,
   PedagogicalSnapshot,
   ResponseOverviewRow,
   StudentEvidenceView,
@@ -376,26 +380,37 @@ export async function saveStudentEvidence(
 
 export async function loadResponseOverview(
   assessmentId: string,
-): Promise<{ ok: true; rows: ResponseOverviewRow[]; questionCount: number } | Failure> {
+): Promise<
+  | { ok: true; rows: ResponseOverviewRow[]; questionCount: number; analysisAvailable: boolean; analysisUnavailableReason: string | null }
+  | Failure
+> {
   try {
     const { teacher, supabase } = await session();
-    await assessmentAccess(supabase, teacher.id, assessmentId);
+    const access = await assessmentAccess(supabase, teacher.id, assessmentId);
+    // The pedagogical AI V1 analyses mathematics copies only, and its output
+    // belongs to the teachers of the subject (also enforced by RLS).
+    const analysisAvailable = access.isMath && access.teachesSubject;
+    const none = Promise.resolve({ data: [] as unknown[], error: null });
     const [{ questions, responses }, runs, pending] = await Promise.all([
       evidenceRows(supabase, [assessmentId]),
-      currentRuns(supabase, [assessmentId]),
-      supabase
-        .from("pedagogical_recommendations")
-        .select("student_id,analysis_run_id")
-        .eq("assessment_id", assessmentId)
-        .is("superseded_at", null)
-        .is("teacher_decision", null),
+      analysisAvailable ? currentRuns(supabase, [assessmentId]) : Promise.resolve([]),
+      analysisAvailable
+        ? supabase
+            .from("pedagogical_recommendations")
+            .select("student_id,analysis_run_id")
+            .eq("assessment_id", assessmentId)
+            .is("superseded_at", null)
+            .is("teacher_decision", null)
+        : none,
     ]);
     ensureOk(pending.error, "Recommandations");
-    const allActive = await supabase
-      .from("pedagogical_recommendations")
-      .select("analysis_run_id")
-      .eq("assessment_id", assessmentId)
-      .is("superseded_at", null);
+    const allActive = analysisAvailable
+      ? await supabase
+          .from("pedagogical_recommendations")
+          .select("analysis_run_id")
+          .eq("assessment_id", assessmentId)
+          .is("superseded_at", null)
+      : await none;
     ensureOk(allActive.error, "Recommandations");
     const activeByRun = new Map<string, number>();
     for (const row of (allActive.data ?? []) as Array<{ analysis_run_id: string }>)
@@ -415,10 +430,36 @@ export async function loadResponseOverview(
       row(run.student_id).analysisStatus = runStatus(run, activeByRun.get(run.id) ?? 0);
     }
     for (const item of (pending.data ?? []) as Array<{ student_id: string }>) row(item.student_id).pendingRecommendations++;
-    for (const value of students.values()) value.needsAnalysis = value.answeredCount > 0 && !seenRun.has(value.studentId);
-    return { ok: true, rows: [...students.values()], questionCount: questions.length };
+    for (const value of students.values())
+      value.needsAnalysis = analysisAvailable && value.answeredCount > 0 && !seenRun.has(value.studentId);
+    return {
+      ok: true,
+      rows: [...students.values()],
+      questionCount: questions.length,
+      analysisAvailable,
+      analysisUnavailableReason: analysisAvailable
+        ? null
+        : !access.isMath
+          ? "L’analyse pédagogique automatique porte pour l’instant sur les copies de mathématiques : ces copies restent enregistrées pour votre suivi."
+          : "L’analyse des copies et ses hypothèses sont réservées aux professeurs de cette matière dans la classe.",
+    };
   } catch (error) {
     return failure(error, "Impossible de charger l’état des copies.");
+  }
+}
+
+/** The current hypotheses and decisions of one assessment, every student. */
+export async function loadAssessmentReview(
+  assessmentId: string,
+): Promise<{ ok: true; items: Array<{ studentId: string; recommendation: PedagogicalRecommendationView }> } | Failure> {
+  try {
+    const { teacher, supabase } = await session();
+    const access = await assessmentAccess(supabase, teacher.id, assessmentId);
+    // AI output belongs to the teachers of the subject (also enforced by RLS).
+    if (!access.isMath || !access.teachesSubject) return { ok: true, items: [] };
+    return { ok: true, items: await assessmentReview(supabase, access) };
+  } catch (error) {
+    return failure(error, "Impossible de charger les hypothèses de cette évaluation.");
   }
 }
 
@@ -450,7 +491,7 @@ type AnalysisOutcome =
       insufficientReason: string;
       rejectedCandidates: number;
     }
-  | Failure;
+  | (Failure & { code?: AnalysisFailureCode });
 
 export async function generatePedagogicalAnalysis(studentId: string, assessmentId?: string): Promise<AnalysisOutcome> {
   let teacherId: string;
@@ -462,13 +503,28 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     supabase = current.supabase;
     context = await studentMathContext(supabase, teacherId, studentId);
   } catch (error) {
-    return failure(error, "Analyse impossible.");
+    // Not this teacher's student, or no mathematics: no other copy will do better.
+    return error instanceof AccessError ? { ...failure(error), code: "not_available" } : failure(error, "Analyse impossible.");
   }
   if (assessmentId !== undefined && !context.assessments.some((assessment) => assessment.id === assessmentId))
-    return { ok: false, error: "Cette évaluation n’est pas une évaluation de mathématiques de la classe de l’élève." };
+    return {
+      ok: false,
+      code: "not_available",
+      error: "Cette évaluation n’est pas une évaluation de mathématiques de la classe de l’élève.",
+    };
 
   try {
     const candidates = assessmentId ? context.assessments.filter((assessment) => assessment.id === assessmentId) : context.assessments;
+    // Read BEFORE the evidence: if the copy, the subject or the notions change
+    // after this point, the database refuses to record the analysis.
+    const versions = await supabase.rpc("focus_analysis_evidence_versions", {
+      p_student_id: studentId,
+      p_assessment_ids: candidates.map((a) => a.id),
+    });
+    ensureOk(versions.error, "Version des preuves");
+    const evidenceVersionOf = new Map(
+      ((versions.data ?? []) as Array<{ assessment_id: string; evidence_version: string }>).map((row) => [row.assessment_id, row.evidence_version]),
+    );
     const { materials, questions, responses, tags } = await evidenceRows(supabase, candidates.map((a) => a.id), studentId);
     const graph = await curriculumGraph(supabase, context.classLevel);
     const catalogue = await catalogueErrorsByCode(supabase, graph);
@@ -562,17 +618,35 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       };
     }
 
+    // Everything recorded from here on is signed by this server for the
+    // evidence version read above (see lib/pedagogy/engine-signature.ts).
+    const signingKey = engineSigningKey();
+    if (!signingKey)
+      return {
+        ok: false,
+        code: "ai_not_configured",
+        error: "Le moteur d’analyse n’est pas configuré sur ce serveur (clé de signature absente). Aucune analyse n’a été enregistrée.",
+      };
+    const evidenceVersion = evidenceVersionOf.get(assessment.id);
+    if (!evidenceVersion) throw new AccessError("Cette copie n’est pas analysable depuis ce compte.");
+    const envelopeBase = {
+      teacherId,
+      schoolId: context.schoolId,
+      studentId,
+      assessmentId: assessment.id,
+      inputHash,
+      evidenceVersion,
+    };
+    const record = async (envelope: EngineEnvelope) => {
+      const { data, error } = await supabase.rpc("focus_record_engine_analysis", signEngineEnvelope(envelope, signingKey));
+      if (!error) return { ok: true as const, runId: typeof data === "string" ? data : null };
+      console.error("FOCUS analysis not recorded", { code: error.code, message: error.message });
+      return { ok: false as const, failure: recordFailure(error) };
+    };
     const persistNoEvidence = async (reason: string, usedModel: string) => {
-      const { data, error } = await supabase.rpc("focus_persist_no_evidence", {
-        p_school_id: context.schoolId,
-        p_student_id: studentId,
-        p_assessment_id: assessment.id,
-        p_model: usedModel,
-        p_input_hash: inputHash,
-        p_reason: reason,
-      });
-      ensureOk(error, "Trace d’analyse insuffisante");
-      return typeof data === "string" ? data : null;
+      const recorded = await record({ ...envelopeBase, kind: "no_evidence", model: usedModel, reason });
+      if (!recorded.ok) throw new RecordRefused(recorded.failure);
+      return recorded.runId;
     };
 
     if (!aiInput.questions.some((question) => question.responseText.trim())) {
@@ -605,6 +679,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     if ((recent.count ?? 0) >= limit)
       return {
         ok: false,
+        code: "rate_limited",
         error: `Limite de ${limit} analyses par heure atteinte. Vos copies sont enregistrées ; relancez l’analyse un peu plus tard.`,
       };
 
@@ -614,7 +689,11 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       if (message === "OPENAI_API_KEY_MISSING")
-        return { ok: false, error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée." };
+        return {
+          ok: false,
+          code: "ai_not_configured",
+          error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée.",
+        };
       console.error("FOCUS pedagogical AI request failed", message);
       await recordUsage(supabase, {
         assessmentId: assessment.id,
@@ -671,23 +750,20 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       responseIdByQuestion: new Map(responses.map((response) => [response.question_id, response.id])),
       priorErrors: [],
     });
-    const { data: runId, error } = await supabase.rpc("focus_persist_pedagogical_analysis", {
-      p_school_id: context.schoolId,
-      p_student_id: studentId,
-      p_assessment_id: assessment.id,
-      p_model: modelResult.model,
-      p_input_hash: inputHash,
-      p_errors: payload.errors,
-      p_recommendations: payload.recommendations,
+    const recorded = await record({
+      ...envelopeBase,
+      kind: "analysis",
+      model: modelResult.model,
+      errors: payload.errors,
+      recommendations: payload.recommendations,
     });
-    if (error) {
-      console.error("FOCUS pedagogical analysis persistence failed", { code: error.code, message: error.message });
+    if (!recorded.ok) {
       await recordUsage(supabase, { assessmentId: assessment.id, runId: null, outcome: "persistence_error", ...called });
-      return { ok: false, error: "L’analyse a été produite mais n’a pas pu être enregistrée de façon sûre. Aucune recommandation n’a été conservée." };
+      return recorded.failure;
     }
     await recordUsage(supabase, {
       assessmentId: assessment.id,
-      runId: typeof runId === "string" ? runId : null,
+      runId: recorded.runId,
       outcome: payload.recommendations.length > 0 ? "errors_found" : "no_error_observed",
       ...called,
     });
@@ -704,8 +780,44 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       rejectedCandidates: validated.rejected.length,
     };
   } catch (error) {
+    if (error instanceof RecordRefused) return error.failure;
     return failure(error, "L’analyse n’a pas pu être préparée. Aucune recommandation n’a été enregistrée.");
   }
+}
+
+class RecordRefused extends Error {
+  constructor(readonly failure: { ok: false; error: string; code?: AnalysisFailureCode }) {
+    super("analysis not recorded");
+  }
+}
+
+/** Why public.focus_record_engine_analysis refused, in the teacher's terms. */
+function recordFailure(error: { code?: string; message?: string }): { ok: false; error: string; code?: AnalysisFailureCode } {
+  const message = error.message ?? "";
+  if (error.code === "40001")
+    return {
+      ok: false,
+      error: "La copie, le sujet ou le corrigé a changé pendant l’analyse : rien n’a été enregistré. Relancez l’analyse de cette copie.",
+    };
+  if (error.code === "55000" && /engine key/.test(message))
+    return {
+      ok: false,
+      code: "ai_not_configured",
+      error: "Le moteur d’analyse n’est pas configuré dans la base (clé de signature absente). Aucune analyse n’a été enregistrée.",
+    };
+  if (error.code === "42501" && /not signed/.test(message))
+    return {
+      ok: false,
+      code: "ai_not_configured",
+      error: "La clé de signature de ce serveur ne correspond pas à celle de la base. Aucune analyse n’a été enregistrée.",
+    };
+  if (error.code === "42501" && /expired/.test(message))
+    return {
+      ok: false,
+      error: "L’analyse a dépassé son délai d’enregistrement (ou l’horloge du serveur est décalée) : rien n’a été enregistré. Relancez l’analyse.",
+    };
+  if (isSchemaOutdated(error)) return { ok: false, error: SCHEMA_OUTDATED_MESSAGE };
+  return { ok: false, error: "L’analyse a été produite mais n’a pas pu être enregistrée de façon sûre. Aucune recommandation n’a été conservée." };
 }
 
 // ---------------------------------------------------------------------------

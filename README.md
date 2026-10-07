@@ -8,9 +8,10 @@ Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGEN
 
 - **Connexion** : comptes professeurs Supabase Auth, rôle `app_metadata.role = "teacher"` attribué par l’administrateur. Aucun identifiant de démonstration, aucune session simulée.
 - **Données** : classes, élèves, évaluations, résultats, sujets, copies et décisions sont lus et écrits dans Supabase, sous RLS, avec la session du professeur. L’application n’affiche aucun jeu fictif en secours et n’utilise pas le stockage du navigateur.
-- **Parcours** : tableau de bord « À traiter » → évaluation → sujet, questions, corrigé, barème et notions visées → copies (réponse exacte, points, annotation) → analyse (mathématiques) → hypothèses que le professeur confirme ou écarte, avec note → dossier élève longitudinal et export PDF.
-- **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
-- **Pas encore validé en conditions réelles** : les migrations de cette branche ne sont pas appliquées sur le projet Supabase, l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
+- **Parcours** : tableau de bord « À traiter » → évaluation (créée avant toute note) → sujet, questions, corrigé, barème et notions visées → copies (réponse exacte, points, annotation) → analyse de toutes les copies de la classe en une action, copie par copie (mathématiques) → hypothèses de l’évaluation que le professeur confirme ou écarte sur place, avec note → dossier élève longitudinal et export PDF.
+- **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Hypothèses, notes et décisions ne sont lisibles que par les professeurs de la classe **et de la matière** et l’administrateur de l’établissement — jamais par l’élève ni par les professeurs d’autres matières. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
+- **Base live** : les migrations jusqu’à `20260927100000` sont appliquées sur le projet Supabase ; son schéma est identique, objet pour objet, à celui que construisent ces migrations (empreinte relevée le 2 octobre 2026, `tests/schema-live.test.ts` ; procédure du 27 septembre dans [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md)). La migration `20261002120000` (durcissement des accès) est **dans le dépôt, pas encore sur le projet**.
+- **Pas encore validé en conditions réelles** : aucune connexion réelle de professeur n’a encore été faite sur le projet ; l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
 
 ## Développement
 
@@ -46,7 +47,7 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 
 ## Base de données
 
-`supabase/migrations/` reproduit exactement le schéma du projet live jusqu’à `20260925214642` (empreinte vérifiée par `tests/schema-live.test.ts`, mêmes versions que `supabase_migrations.schema_migrations`). Les migrations suivantes sont **dans le dépôt, pas encore sur le projet** :
+`supabase/migrations/` reproduit exactement le schéma du projet live jusqu’à `20260927100000` (empreinte relevée le 2 octobre 2026 et vérifiée par `tests/schema-live.test.ts`, mêmes versions que `supabase_migrations.schema_migrations`). Les migrations postérieures au 25 septembre :
 
 | Migration | Contenu |
 | --- | --- |
@@ -59,8 +60,12 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 | `20260926190000_security_performance_hardening` | Recommandations des advisors Supabase : anon sans accès aux tables, `(select auth.uid())` dans les policies, index des clés étrangères |
 | `20260927090000_schema_version` | `focus_schema_version()` : version du schéma lue par `/api/health` (seule fonction SECURITY DEFINER ouverte à anon, ne renvoie qu’une version) |
 | `20260927100000_ai_usage_events` | Usage IA par requête (modèle, latence, jetons, issue, réutilisation), sans contenu ni identifiant d’élève ; voir [docs/AI_USAGE.md](./docs/AI_USAGE.md) |
+| `20261002120000_access_integrity_hardening` | **Pas encore appliquée sur le projet.** Hypothèses IA, notes et décisions lisibles par les professeurs de la classe et de la matière et l’administrateur, plus par l’élève ni par les autres matières ; décision par un professeur actuellement affecté ; écritures directes soumises aux règles des fonctions `focus_*` (école et classe de l’évaluation, élèves inscrits, maximum ≥ points attribués, notions actives) ; aucune constatation IA enregistrable sur une réponse notée au maximum ou identique au corrigé (comme dans l’application) ; plus de TRUNCATE/TRIGGER/REFERENCES pour `authenticated` ; tables V0 inutilisées en lecture seule. Retour arrière testé : `supabase/rollback/20261002120000_access_integrity_hardening.down.sql` |
+| `20261004090000_engine_signed_analyses` | **Pas encore appliquée sur le projet.** Une analyse IA ne s’enregistre plus que par `focus_record_engine_analysis`, avec une enveloppe signée par le serveur FOCUS (HMAC-SHA256, clé dans `FOCUS_ANALYSIS_SIGNING_KEY` et dans `focus_private.engine_keys`, illisible par les rôles de l’API), liée au professeur connecté, valable dix minutes et à la version des preuves lue **avant** la copie : copie, sujet, corrigé, barème, notions ou consignes modifiés pendant l’analyse ⇒ refus, rien n’est enregistré. Les fonctions de persistance ne sont plus appelables par `authenticated`. Une évaluation dont des copies ont été analysées ne se supprime plus par l’API. Retour arrière testé : `supabase/rollback/20261004090000_engine_signed_analyses.down.sql` |
 
-Le code de cette branche a besoin de ces migrations. Sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. Les appliquer **dans l’ordre**, d’abord sur une branche Supabase ou une copie, puis relancer les advisors et le parcours professeur. Ne rien appliquer en production sans l’accord du propriétaire.
+Le code de cette branche a besoin de **toutes** les migrations, jusqu’à `20261004090000` (il enregistre les analyses par l’entrée signée) et de la clé du moteur installée en base (voir ci-dessous) ; sans elles, l’application l’indique explicitement (« La base de données n’est pas à jour… ») au lieu d’échouer silencieusement. `20261002120000` ne change aucun appel de l’application : elle ferme des accès directs à PostgREST (tout compte Supabase Auth, y compris les comptes élèves fictifs qui ont un mot de passe, peut interroger l’API avec la clé publiable). `/api/health` réclame la dernière migration (`NOT READY` tant qu’elle manque).
+
+**Clé du moteur d’analyse.** Générer 32 octets aléatoires (`openssl rand -hex 32`), les enregistrer dans la variable serveur `FOCUS_ANALYSIS_SIGNING_KEY` (Vercel, Production et Preview) et, une seule fois par base, dans l’éditeur SQL Supabase : `insert into focus_private.engine_keys (id, secret) values (1, decode('<la même valeur hex>', 'hex')) on conflict (id) do update set secret = excluded.secret, rotated_at = now();`. La même valeur des deux côtés ; sans elle aucune analyse n’est enregistrée et l’application l’explique. Changer de clé = mettre à jour les deux puis redéployer. L’appliquer d’abord sur une branche Supabase ou une copie, relancer les advisors, `supabase/staging/verify.sql` et `supabase/staging/rls-probe.sql` (sonde en lecture seule : tout est annulé à la fin ; elle rejoue en base réelle les accès élève, autre matière, autre établissement, anon et écritures directes), puis le parcours professeur. Le retour arrière (`supabase/rollback/…down.sql`, puis `supabase migration repair --status reverted 20261002120000`) rend le schéma identique, objet pour objet, à celui d’avant (`tests/migration-rollback.test.ts`) ; il rouvre les accès que la migration ferme, il ne sert qu’à annuler un déploiement défectueux. Ne rien appliquer en production sans l’accord du propriétaire.
 
 ## Configuration Supabase Auth
 
@@ -91,6 +96,20 @@ node --import tsx scripts/admin-invite-teacher.ts --project-ref <ref> --email pr
 
 `--project-ref` doit correspondre à l’URL (garde-fou contre une erreur de projet). Sans `--commit`, rien n’est envoyé.
 
+### « Connexion impossible » : diagnostic
+
+Ce message reprend la réponse de Supabase Auth (`invalid_credentials`) : l’adresse n’a pas de compte dans le projet, ou le mot de passe est différent. Les anciens identifiants de démonstration (`prof@focus.fr`) n’existent pas dans Supabase Auth et ne fonctionneront jamais. Depuis une machine qui atteint Supabase :
+
+```bash
+FOCUS_CHECK_SUPABASE_URL=https://<ref>.supabase.co FOCUS_CHECK_SUPABASE_KEY=<clé publiable> \
+FOCUS_CHECK_EMAIL=<adresse du professeur> FOCUS_CHECK_PASSWORD=<mot de passe> \
+npm run check:login -- --project-ref <ref>
+```
+
+Avec `FOCUS_CHECK_APP_URL=<déploiement>` (et `VERCEL_AUTOMATION_BYPASS_SECRET` si la Preview est protégée), le même contrôle passe aussi par le vrai formulaire du déploiement : cookie HttpOnly, rechargement, pages classe/élèves/évaluations, déconnexion. État et étapes restantes : [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md).
+
+Une ligne PASS/FAIL par étape du parcours de l’application : connexion, session vérifiée, `app_metadata.role`, profil, établissement, affectations, lectures sous RLS, version du schéma, renouvellement, déconnexion, refus anonyme. Aucun mot de passe, jeton ni contenu n’est affiché ; une clé secrète est refusée.
+
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 
 ## Variables d’environnement
@@ -99,6 +118,7 @@ Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté 
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production et Preview | Projet Supabase FOCUS ; clé publiable, jamais `service_role` |
 | `OPENAI_API_KEY` | Serveur uniquement | Analyse pédagogique ; jamais en `NEXT_PUBLIC_` |
+| `FOCUS_ANALYSIS_SIGNING_KEY` | Serveur uniquement | 32 à 64 octets en hexadécimal ; signe chaque analyse enregistrée (la même valeur que `focus_private.engine_keys`) ; jamais en `NEXT_PUBLIC_` |
 | `FOCUS_AI_MODEL` | Serveur | Modèle d’analyse (défaut `gpt-5.6-terra`) |
 | `FOCUS_AI_HOURLY_LIMIT` | Serveur | Appels au modèle par professeur et par heure (défaut 150) |
 | `FOCUS_AI_REASONING_EFFORT` | Serveur | `low` (défaut), `medium` ou `high` |
@@ -119,6 +139,7 @@ npm run lint
 npm run test            # unitaires, schéma réel (PGlite) avec RLS, parcours, programme, sécurité
 npm run build
 npm run test:routes     # après build ; vraies routes contre un double Supabase Auth
+npm run test:e2e        # après build ; parcours professeur complet dans Chromium (stack locale, modèle scripté)
 npm run curriculum:check
 npm run test:ai-live    # opt-in : 47 copies synthétiques, vrai modèle, nécessite OPENAI_API_KEY (--reference : auto-test hors ligne)
 npm run check:deployment -- https://votre-domaine-focus
@@ -130,7 +151,7 @@ Les tests de base de données exécutent toutes les migrations sur PostgreSQL (P
 
 Pour chaque déploiement Vercel, le workflow **FOCUS Preview verification** (`.github/workflows/preview-verify.yml`) lit `/api/health` sur l’URL de **ce** déploiement et publie un statut « FOCUS Preview verified (…) » sur le commit :
 
-- `VERIFIED` : le déploiement exécute exactement ce commit ; Supabase est configuré et joignable, le schéma est à jour (`focus_schema_version()` ≥ la version requise par le code), la clé OpenAI est présente et le modèle accessible ;
+- `VERIFIED` : le déploiement exécute exactement ce commit ; Supabase est configuré et joignable, le schéma est à jour (`focus_schema_version()` ≥ la version requise par le code), la clé OpenAI est présente, le modèle accessible et la clé de signature du moteur définie (que la base détienne la même n’est vérifiable qu’à la première analyse) ;
 - `NOT READY` : bon commit, mais l’un de ces éléments manque (le détail est dans le résumé du job) ;
 - `UNVERIFIED` : rien n’est prouvé (protection Vercel, autre commit, URL injoignable). Avec Vercel Authentication, créer un secret « Protection Bypass for Automation » et l’enregistrer comme secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`.
 
@@ -144,6 +165,9 @@ Ce statut prouve la configuration, pas le parcours : la connexion réelle et l�
 - L’analyse IA couvre les mathématiques de Seconde ; sa qualité n’est pas mesurée (revue en aveugle à faire).
 - Le catalogue (erreurs types, remédiations) est une proposition éditoriale FOCUS, validée par aucun enseignant ; 15 litiges du programme attendent leur auteur.
 - La mesure de l’effet des remédiations n’est pas implémentée.
+- Provenance des analyses : depuis `20261004090000`, seule une enveloppe signée par le serveur FOCUS s’enregistre. La signature prouve que le serveur l’a produite, pas que chaque mot vient du modèle : le serveur reste le point de confiance (qui détient la clé peut signer).
+- Supprimer une question du sujet (ou vider une réponse) efface les observations IA rattachées (`error_observations`, en cascade) ; les hypothèses et décisions du professeur (`pedagogical_recommendations`) restent dans l’historique.
+- Projet live : la protection contre les mots de passe divulgués est désactivée (Auth → Providers → Email, réglage du tableau de bord).
 - Aucune conformité RGPD n’est revendiquée : hébergement, durée de conservation, registre et analyse d’impact restent à établir avec l’établissement.
 
 Historique des audits : [AUDIT_2026-09-11.md](./docs/history/AUDIT_2026-09-11.md), [AUDIT_2026-09-13.md](./docs/history/AUDIT_2026-09-13.md), [DESIGN_AUDIT.md](./docs/history/DESIGN_AUDIT.md).

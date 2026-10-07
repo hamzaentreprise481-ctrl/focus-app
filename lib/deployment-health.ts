@@ -3,9 +3,10 @@
 // commit it was built from, and the database's schema version.
 
 import { authConfig } from "@/lib/auth/config";
+import { engineSigningKey } from "@/lib/pedagogy/engine-signature";
 
 /** The last migration this code needs; tests pin it to the newest file. */
-export const REQUIRED_SCHEMA_VERSION = "20260927100000";
+export const REQUIRED_SCHEMA_VERSION = "20261004090000";
 
 export interface DeploymentHealth {
   service: "focus-teacher";
@@ -25,6 +26,12 @@ export interface DeploymentHealth {
     model: string;
     apiStatus: number | null;
     error: string | null;
+    /**
+     * FOCUS_ANALYSIS_SIGNING_KEY is set (32–64 bytes, hex). Without it no
+     * analysis can be recorded. Whether the database holds the same key is
+     * only known at the first analysis (it is never readable by the API).
+     */
+    signingKeyConfigured: boolean;
   };
   /** Everything the teacher flow needs is configured and reachable. */
   ready: boolean;
@@ -64,11 +71,12 @@ async function supabaseState(fetchImpl: Fetch) {
 }
 
 export async function deploymentHealth(
-  probeAi: () => Promise<DeploymentHealth["ai"]>,
+  probeAi: () => Promise<Omit<DeploymentHealth["ai"], "signingKeyConfigured">>,
   env: Record<string, string | undefined> = process.env,
   fetchImpl: Fetch = fetch,
 ): Promise<DeploymentHealth> {
-  const [supabase, ai] = await Promise.all([supabaseState(fetchImpl), probeAi()]);
+  const [supabase, probed] = await Promise.all([supabaseState(fetchImpl), probeAi()]);
+  const ai = { ...probed, signingKeyConfigured: engineSigningKey(env) !== null };
   const schemaUpToDate = supabase.schemaVersion === null ? (supabase.configured ? false : null) : supabase.schemaVersion >= REQUIRED_SCHEMA_VERSION;
   const sha = env.VERCEL_GIT_COMMIT_SHA ?? "";
   return {
@@ -78,6 +86,7 @@ export async function deploymentHealth(
     gitRef: env.VERCEL_GIT_COMMIT_REF ? env.VERCEL_GIT_COMMIT_REF.slice(0, 200) : null,
     supabase: { ...supabase, schemaUpToDate, requiredSchemaVersion: REQUIRED_SCHEMA_VERSION },
     ai,
-    ready: supabase.configured && supabase.authReachable === true && schemaUpToDate === true && ai.configured && ai.ok,
+    ready:
+      supabase.configured && supabase.authReachable === true && schemaUpToDate === true && ai.configured && ai.ok && ai.signingKeyConfigured,
   };
 }

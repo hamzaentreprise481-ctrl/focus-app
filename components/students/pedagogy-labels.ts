@@ -10,13 +10,13 @@ export const ANALYSIS_STATUS_LABEL: Record<ModelAnalysisStatus, string> = {
 export const CONFIDENCE_LABEL: Record<PedagogicalConfidence, string> = {
   limitee: "Confiance limitée · une seule observation",
   moderee: "Confiance modérée · observation répétée",
-  forte: "Confiance forte · répétée et déjà confirmée par vous",
+  forte: "Confiance forte · répétée et déjà confirmée par un professeur",
 };
 
 export const RECOMMENDATION_STATUS_LABEL: Record<RecommendationStatus, string> = {
   pending: "Hypothèse IA à examiner",
-  validated: "Observation confirmée par vous",
-  dismissed: "Écartée par vous",
+  validated: "Observation confirmée par le professeur",
+  dismissed: "Écartée par le professeur",
   superseded: "Remplacée (les preuves ont changé)",
 };
 

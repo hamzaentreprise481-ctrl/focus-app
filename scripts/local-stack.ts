@@ -9,6 +9,7 @@
 // see how the app behaves against a database that is not up to date.
 // FOCUS_LOCAL_MAX_ROWS=<n> lowers the stand-in's response cap (PostgREST
 // max-rows, 1000 by default) to check that nothing is silently truncated.
+// FOCUS_LOCAL_MODEL_DELAY_MS=<ms> slows every scripted model response.
 
 import { spawn } from "node:child_process";
 import { LOCAL_TEACHER, startLocalStack } from "../tests/helpers/local-stack";
@@ -20,6 +21,7 @@ async function main() {
     modelPort: 54329,
     upTo: process.env.FOCUS_LOCAL_UP_TO || undefined,
     maxRows: process.env.FOCUS_LOCAL_MAX_ROWS ? Number(process.env.FOCUS_LOCAL_MAX_ROWS) : undefined,
+    modelDelayMs: process.env.FOCUS_LOCAL_MODEL_DELAY_MS ? Number(process.env.FOCUS_LOCAL_MODEL_DELAY_MS) : undefined,
   });
   const app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port), "-H", "127.0.0.1"], {
     env: { ...process.env, ...stack.env },

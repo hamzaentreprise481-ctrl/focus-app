@@ -24,6 +24,7 @@ import {
 import { validateCurriculumPackage } from "../lib/curriculum/package";
 import { relatedNotionCodes, validateModelAnalysis } from "../lib/pedagogy/analysis";
 import { buildAnalysisPersistence } from "../lib/pedagogy/pipeline";
+import { evidenceVersion, installEngineKey, RECORD_SQL, signedEnvelope } from "./helpers/engine";
 import { createMigratedDatabase, seedSchoolFixture } from "./helpers/pg";
 import {
   LIVE,
@@ -61,6 +62,7 @@ function work(code: string) {
 
 before(async () => {
   db = await createMigratedDatabase();
+  await installEngineKey(db);
   await useLiveIdentifiers(db);
   const { conversion, undisputed } = splitWorkEdges();
   const keep = new Set(undisputed.map((edge) => edge.index));
@@ -188,6 +190,8 @@ async function runAnalysis(
     return buildCurriculumIndex(parseCurriculumGraphPayload(graph.rows[0].graph));
   });
 
+  // As on the server: the evidence version is read before the evidence.
+  const version = await evidenceVersion(db, assessmentId, ids.student);
   const responses = await asTeacher(async () =>
     (
       await db.query<{ id: string; question_id: string; response_text: string }>(
@@ -224,17 +228,13 @@ async function runAnalysis(
     assessedCodes: question.assessedNotions,
   }));
 
-  const persistNoEvidence = (reason: string) =>
-    asTeacher(() =>
-      db.query("select public.focus_persist_no_evidence($1, $2, $3, $4, $5, $6)", [
-        ids.school,
-        ids.student,
-        assessmentId,
-        MODEL,
-        inputHash,
-        reason,
-      ]),
-    );
+  // Signed as the FOCUS server signs (lib/pedagogy/engine-signature.ts), for
+  // the evidence version of this copy.
+  const fields = { teacherId: ids.teacher, schoolId: ids.school, studentId: ids.student, assessmentId, model: MODEL, inputHash, evidenceVersion: version };
+  const persistNoEvidence = async (reason: string) => {
+    const signed = await signedEnvelope(db, { ...fields, kind: "no_evidence", reason });
+    return asTeacher(() => db.query(RECORD_SQL, [signed.p_envelope, signed.p_signature]));
+  };
 
   // 3. No answer: FOCUS does not call the model at all.
   if (!aiInput.questions.some((question) => question.responseText.trim())) {
@@ -283,18 +283,9 @@ async function runAnalysis(
     })),
   });
 
-  // 6. Atomic persistence through the production RPC (RLS as the teacher).
-  await asTeacher(() =>
-    db.query("select public.focus_persist_pedagogical_analysis($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)", [
-      ids.school,
-      ids.student,
-      assessmentId,
-      MODEL,
-      inputHash,
-      JSON.stringify(payload.errors),
-      JSON.stringify(payload.recommendations),
-    ]),
-  );
+  // 6. Atomic persistence through the production entry point (signed, RLS as the teacher).
+  const signed = await signedEnvelope(db, { ...fields, kind: "analysis", errors: payload.errors, recommendations: payload.recommendations });
+  await asTeacher(() => db.query(RECORD_SQL, [signed.p_envelope, signed.p_signature]));
   return { assessmentId, status: validated.status, reason: "", index, modelCalled: true, payload };
 }
 
@@ -630,16 +621,20 @@ test("the database refuses a non-notion or a fabricated excerpt even if client v
     await db.query<{ id: string }>("select id from public.student_responses where question_id = $1", [questionId])
   ).rows;
   const nodeId = (code: string) => LIVE.nodes.find((node) => node.code === code)!.id;
-  const attempt = (node: string, excerpt: string) =>
-    asTeacher(() =>
-      db.query("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'm', $4, $5::jsonb, '[]'::jsonb)", [
-        ids.school,
-        ids.student,
-        assessmentId,
-        createHash("sha256").update(randomUUID()).digest("hex"),
-        JSON.stringify([{ questionId, responseId, nodeId: nodeId(node), errorType: "calcul", evidenceExcerpt: excerpt, explanation: "x", confidence: "limitee" }]),
-      ]),
-    );
+  // Even an envelope the engine signed is checked again by the database.
+  const attempt = async (node: string, excerpt: string) => {
+    const signed = await signedEnvelope(db, {
+      kind: "analysis",
+      teacherId: ids.teacher,
+      schoolId: ids.school,
+      studentId: ids.student,
+      assessmentId,
+      model: "m",
+      inputHash: createHash("sha256").update(randomUUID()).digest("hex"),
+      errors: [{ questionId, responseId, nodeId: nodeId(node), errorType: "calcul", evidenceExcerpt: excerpt, explanation: "x", confidence: "limitee" }],
+    });
+    return asTeacher(() => db.query(RECORD_SQL, [signed.p_envelope, signed.p_signature]));
+  };
   await assert.rejects(attempt("MATH.COMP.CALCULER", "3x+2"), /invalid curriculum notion/);
   await assert.rejects(attempt("MATH.ALG.DISTRIBUTIVITE", "3x+6"), /invalid evidence reference/);
   const saved = await persisted(assessmentId);

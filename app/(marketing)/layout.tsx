@@ -17,7 +17,8 @@ export default function MarketingLayout({
           </Link>
           <nav aria-label="Navigation du site">
             <Link href="/#fonctionnement">Fonctionnement</Link>
-            <Link href="/#confiance">Notre approche</Link>
+            <Link href="/#confiance">Confiance</Link>
+            <Link href="/#pilote">Pilote</Link>
             <Link href="/#faq">Questions fréquentes</Link>
           </nav>
           <Link href="/connexion" className={styles.smallButton}>
@@ -31,7 +32,7 @@ export default function MarketingLayout({
           <Link href="/" className={styles.brand}>
             FOCUS
           </Link>
-          <p>Le suivi pédagogique, à votre rythme.</p>
+          <p>Des preuves visibles. Un professeur décisionnaire.</p>
           <span>© 2026 FOCUS</span>
         </div>
       </footer>

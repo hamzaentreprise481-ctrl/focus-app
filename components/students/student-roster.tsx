@@ -3,10 +3,18 @@
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
-import { CONFIDENCE_LABEL, SKILL_LEVEL_LABEL, type StudentAnalysis } from "@/lib/analysis";
+import {
+  CONFIDENCE_LABEL,
+  SKILL_LEVEL_LABEL,
+  type StudentAnalysis,
+} from "@/lib/analysis";
 import type { Skill, StatusLevel } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { filterStudentRoster, latestSkillLevel, type SkillLevelFilter } from "@/lib/student-evidence";
+import {
+  filterStudentRoster,
+  latestSkillLevel,
+  type SkillLevelFilter,
+} from "@/lib/student-evidence";
 import { Input } from "@/components/ui/input";
 import { cn, formatScore, initials } from "@/lib/utils";
 
@@ -27,7 +35,7 @@ function EvolutionCell({ evolution }: { evolution: number | null }) {
     );
   if (evolution < -0.3)
     return (
-      <span className="inline-flex items-center gap-1 text-attention">
+      <span className="inline-flex items-center gap-1 text-watch">
         <TrendingDown className="h-3.5 w-3.5" />
         {formatScore(evolution)}
       </span>
@@ -40,20 +48,38 @@ function EvolutionCell({ evolution }: { evolution: number | null }) {
   );
 }
 
-export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[]; skills: Skill[] }) {
+export function StudentRoster({
+  analyses,
+  skills,
+}: {
+  analyses: StudentAnalysis[];
+  skills: Skill[];
+}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusLevel | "all">("all");
 
   const selectId = useId();
   const [skillId, setSkillId] = useState("");
   const [level, setLevel] = useState<SkillLevelFilter>("all");
-  const filtered = useMemo(() => filterStudentRoster(analyses, {
-    query, status: filter, skillId, level,
-  }), [analyses, query, filter, skillId, level]);
+  const filtered = useMemo(
+    () =>
+      filterStudentRoster(analyses, {
+        query,
+        status: filter,
+        skillId,
+        level,
+      }),
+    [analyses, query, filter, skillId, level],
+  );
   const activeSkill = skills.find((skill) => skill.id === skillId);
 
   return (
     <div>
+      <p className="mb-4 text-xs text-ink-soft">
+        Les indices de cette liste proviennent des notes et des niveaux saisis.
+        Consultez la fiche pour distinguer les preuves, les hypothèses et les
+        observations confirmées.
+      </p>
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -90,32 +116,76 @@ export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="w-full sm:w-auto">
-          <label htmlFor={`${selectId}-skill`} className="mb-1 block text-sm font-medium">Compétence</label>
-          <select id={`${selectId}-skill`} value={skillId}
-            onChange={(event) => { setSkillId(event.target.value); setLevel("all"); }}
-            className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm">
+          <label
+            htmlFor={`${selectId}-skill`}
+            className="mb-1 block text-sm font-medium"
+          >
+            Compétence
+          </label>
+          <select
+            id={`${selectId}-skill`}
+            value={skillId}
+            onChange={(event) => {
+              setSkillId(event.target.value);
+              setLevel("all");
+            }}
+            className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm"
+          >
             <option value="">Vue d’ensemble</option>
-            {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+            {skills.map((skill) => (
+              <option key={skill.id} value={skill.id}>
+                {skill.name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="w-full sm:w-auto">
-          <label htmlFor={`${selectId}-level`} className="mb-1 block text-sm font-medium">Dernier niveau observé</label>
-          <select id={`${selectId}-level`} value={level} disabled={!skillId}
-            onChange={(event) => setLevel(event.target.value as SkillLevelFilter)}
-            className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm disabled:opacity-50">
+          <label
+            htmlFor={`${selectId}-level`}
+            className="mb-1 block text-sm font-medium"
+          >
+            Dernier niveau observé
+          </label>
+          <select
+            id={`${selectId}-level`}
+            value={level}
+            disabled={!skillId}
+            onChange={(event) =>
+              setLevel(event.target.value as SkillLevelFilter)
+            }
+            className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm disabled:opacity-50"
+          >
             <option value="all">Tous les niveaux</option>
-            {Object.entries(SKILL_LEVEL_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {Object.entries(SKILL_LEVEL_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
             <option value="missing">Non renseigné</option>
           </select>
         </div>
-        {(query || filter !== "all" || skillId) && <button type="button"
-          onClick={() => { setQuery(""); setFilter("all"); setSkillId(""); setLevel("all"); }}
-          className="h-10 px-2 text-sm text-brand underline underline-offset-4">Réinitialiser les filtres</button>}
+        {(query || filter !== "all" || skillId) && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFilter("all");
+              setSkillId("");
+              setLevel("all");
+            }}
+            className="h-10 px-2 text-sm text-brand underline underline-offset-4"
+          >
+            Réinitialiser les filtres
+          </button>
+        )}
       </div>
-      {activeSkill && <p className="mt-2 text-xs text-ink-soft">
-        Dernière observation renseignée pour {activeSkill.name}, indépendamment de la note.
-        « Non renseigné » signifie qu’aucun niveau n’a été saisi pour cette compétence.
-      </p>}
+      {activeSkill && (
+        <p className="mt-2 text-xs text-ink-soft">
+          Dernière observation renseignée pour {activeSkill.name},
+          indépendamment de la note. « Non renseigné » signifie qu’aucun niveau
+          n’a été saisi pour cette compétence.
+        </p>
+      )}
 
       <ul className="mt-4 divide-y divide-border border-y border-border md:hidden">
         {filtered.map((a) => (
@@ -126,8 +196,13 @@ export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[
                 <EvolutionCell evolution={a.evolution} />
               </span>
               <span className="mt-2 block text-sm text-ink-soft">
-                {activeSkill ? `${activeSkill.name} : ${latestSkillLevel(a, skillId)
-                  ? SKILL_LEVEL_LABEL[latestSkillLevel(a, skillId)!] : "Non renseigné"}` : a.summary}
+                {activeSkill
+                  ? `${activeSkill.name} : ${
+                      latestSkillLevel(a, skillId)
+                        ? SKILL_LEVEL_LABEL[latestSkillLevel(a, skillId)!]
+                        : "Non renseigné"
+                    }`
+                  : a.summary}
               </span>
               <span className="mt-2 block text-xs text-brand">
                 Ouvrir la fiche →
@@ -175,7 +250,9 @@ export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[
               const displayedSkill = activeSkill
                 ? a.skillMasteries.find((skill) => skill.skillId === skillId)
                 : a.weakestSkill;
-              const observedLevel = activeSkill ? latestSkillLevel(a, skillId) : null;
+              const observedLevel = activeSkill
+                ? latestSkillLevel(a, skillId)
+                : null;
               const last = [...a.timeline]
                 .reverse()
                 .find((t) => t.absent || t.score !== null);
@@ -202,10 +279,16 @@ export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[
                   </td>
                   <td className="px-4 py-2.5 text-ink-soft">
                     <span className="font-medium text-ink">
-                      {activeSkill ? (observedLevel ? SKILL_LEVEL_LABEL[observedLevel] : "Non renseigné") : displayedSkill?.name ?? "—"}
+                      {activeSkill
+                        ? observedLevel
+                          ? SKILL_LEVEL_LABEL[observedLevel]
+                          : "Non renseigné"
+                        : (displayedSkill?.name ?? "—")}
                     </span>
                     {!activeSkill && displayedSkill?.percent != null && (
-                      <span className="ml-1.5 text-xs text-muted">{displayedSkill.percent}%</span>
+                      <span className="ml-1.5 text-xs text-muted">
+                        {displayedSkill.percent}%
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-ink-soft">
@@ -213,10 +296,13 @@ export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[
                       <>
                         {CONFIDENCE_LABEL[displayedSkill.confidence]}
                         <span className="mt-1 block">
-                          Basé sur {displayedSkill.testedCount} évaluation{displayedSkill.testedCount > 1 ? "s" : ""}
+                          Basé sur {displayedSkill.testedCount} évaluation
+                          {displayedSkill.testedCount > 1 ? "s" : ""}
                         </span>
                       </>
-                    ) : "Données insuffisantes"}
+                    ) : (
+                      "Données insuffisantes"
+                    )}
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-ink-soft">
                     {last?.absent
@@ -253,4 +339,3 @@ export function StudentRoster({ analyses, skills }: { analyses: StudentAnalysis[
     </div>
   );
 }
-

@@ -2,14 +2,12 @@
 import { ExportPdfButton } from "@/components/reports/export-pdf-button";
 
 import { notFound, useParams } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { analyzeStudent } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { Breadcrumbs, SectionNav } from "@/components/ui/page-header";
 import { GradeChart } from "@/components/students/grade-chart";
 import { SkillMasteryList } from "@/components/students/skill-mastery-list";
-import { CreateAccompagnementDialog } from "@/components/students/create-accompagnement-dialog";
+import { StudentSynthesis } from "@/components/students/student-synthesis";
 import { EvidenceTimeline } from "@/components/students/evidence-timeline";
 import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { formatScore } from "@/lib/utils";
@@ -37,69 +35,50 @@ export default function StudentProfilePage() {
       g.studentId === id &&
       analysis.timeline.some((t) => t.evaluation.id === g.evaluationId),
   );
-  const nextAction = analysis.recommendedActions[0];
 
   return (
     <div className="space-y-8">
       <DataLoadState />
       <header>
-        <Link
-          href={`/app/classes/${student.classId}`}
-          className="inline-flex items-center gap-1 text-sm text-ink-soft hover:text-ink"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          {classInfo?.name}
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: "Accueil", href: "/app" },
+            {
+              label: classInfo?.name ?? "Classe",
+              href: `/app/classes/${student.classId}`,
+            },
+            { label: "Suivi individuel" },
+          ]}
+        />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               {student.name}
             </h1>
             <p className="mt-1 text-sm text-ink-soft">
-              {classInfo?.subject} · {observed.length} évaluations renseignées
+              {classInfo?.name} · {classInfo?.subject} · {observed.length}{" "}
+              évaluation{observed.length > 1 ? "s" : ""} renseignée
+              {observed.length > 1 ? "s" : ""}
             </p>
           </div>
-          {analysis.pattern === "donnees_insuffisantes" ? (
-            <span className="text-sm text-ink-soft">Recul encore limité</span>
-          ) : (
-            <StatusBadge status={analysis.status} />
-          )}
+          <ExportPdfButton target={{ kind: "student", id }} />
         </div>
       </header>
 
-      <ExportPdfButton target={{ kind: "student", id: id }} />
+      <SectionNav
+        label="Dans la fiche élève"
+        items={[
+          { label: "Copies et observations", href: "#suivi-pedagogique" },
+          { label: "Compétences", href: "#competences" },
+          { label: "Évaluations dans le temps", href: "#evolution" },
+        ]}
+      />
 
       <PedagogicalAiPanel studentId={id} />
-      <section
-        aria-labelledby="next-step"
-        className="rounded-xl border border-border bg-surface p-5 sm:p-6"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wide text-brand">
-          Piste à examiner ensemble
-        </p>
-        <h2 id="next-step" className="mt-3 text-xl font-medium">
-          {nextAction?.label ??
-            (analysis.pattern === "donnees_insuffisantes"
-              ? "Compléter les observations avant de conclure"
-              : "Poursuivre les observations")}
-        </h2>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-soft">
-          {analysis.summary}
-        </p>
-        <p className="mt-3 text-xs text-ink-soft">
-          Suggestion issue de règles explicites. À confirmer avec votre
-          connaissance de l’élève.
-        </p>
-        {nextAction && (
-          <div className="mt-4">
-            <CreateAccompagnementDialog
-              studentFirstName={student.name.split(" ")[0]}
-              actions={analysis.recommendedActions}
-            />
-          </div>
-        )}
-      </section>
-
+      <StudentSynthesis
+        analysis={analysis}
+        firstName={student.name.split(" ")[0]}
+      />
       <section aria-labelledby="observations">
         <h2 id="observations" className="text-lg font-semibold">
           Ce qui a été observé
@@ -126,7 +105,10 @@ export default function StudentProfilePage() {
             <p className="mt-2 text-sm text-ink-soft">
               {fragile.length
                 ? fragile
-                    .map((s) => `${s.name} (${s.testedCount} observations)`)
+                    .map(
+                      (s) =>
+                        `${s.name} (${s.testedCount} observation${s.testedCount > 1 ? "s" : ""})`,
+                    )
                     .join(" · ")
                 : "Aucun niveau fragile ou non maîtrisé dans les dernières observations renseignées."}
             </p>
@@ -136,6 +118,7 @@ export default function StudentProfilePage() {
 
       <section
         className="rounded-xl border border-border bg-surface p-5"
+        id="competences"
         aria-labelledby="skills-title"
       >
         <h2 id="skills-title" className="text-lg font-semibold">
@@ -148,11 +131,17 @@ export default function StudentProfilePage() {
         <SkillMasteryList skills={analysis.skillMasteries} />
       </section>
 
-      <EvidenceTimeline studentId={id} classId={student.classId} dataset={dataset} />
+      <div id="evolution" className="scroll-mt-6">
+        <EvidenceTimeline
+          studentId={id}
+          classId={student.classId}
+          dataset={dataset}
+        />
+      </div>
 
       <details className="insights-disclosure border-t border-border pt-4">
         <summary className="cursor-pointer rounded-lg py-3 text-lg font-semibold">
-          Explorer les notes et l’interprétation
+          Explorer les notes
         </summary>
         <div className="mt-4 space-y-6">
           <div className="flex flex-wrap gap-x-12 gap-y-5 text-sm">
@@ -182,19 +171,8 @@ export default function StudentProfilePage() {
           {analysis.average !== null && (
             <GradeChart timeline={analysis.timeline} />
           )}
-          <div className="rounded-lg bg-paper p-4 text-sm">
-            <h3 className="font-medium">Interprétation FOCUS</h3>
-            <p className="mt-2 leading-relaxed text-ink-soft">
-              {analysis.narrative}
-            </p>
-            <p className="mt-3 text-xs text-ink-soft">
-              Cette interprétation ne constitue pas un fait supplémentaire sur
-              l’élève.
-            </p>
-          </div>
         </div>
       </details>
     </div>
   );
 }
-

@@ -1,7 +1,16 @@
 # Supabase — état et mise en service (26 septembre 2026)
 
+> **Mise à jour du 2 octobre 2026.** Les neuf migrations `20260926120000` →
+> `20260927100000` sont appliquées sur le projet live, et son schéma est
+> identique objet pour objet à celui du dépôt (`tests/schema-live.test.ts`,
+> empreinte `supabase/live-schema-fingerprint.tsv`). Reste à appliquer :
+> `20261002120000_access_integrity_hardening` (voir le README). La suite de ce
+> document décrit l’état du 26 septembre.
+
 Projet : FOCUS (`wznqeofsvbutbvbyxfab`). Tout autre projet Supabase du compte
 est hors périmètre.
+
+> **Mise à jour du 27 septembre 2026 :** les neuf migrations `20260926120000` … `20260927100000` sont appliquées sur le projet live, avec l’accord du propriétaire ; détails et vérifications dans [GO_LIVE_LOGIN.md](./GO_LIVE_LOGIN.md). La section ci-dessous décrit l’état d’avant.
 
 ## État du projet live (lecture seule, 26 septembre)
 

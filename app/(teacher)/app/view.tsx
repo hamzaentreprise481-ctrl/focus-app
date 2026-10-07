@@ -2,95 +2,110 @@
 import { useState } from "react";
 import { DataLoadState } from "@/components/evaluations/data-load-state";
 import Link from "next/link";
+import { ArrowRight, Plus, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/feedback";
+import { PageHeader } from "@/components/ui/page-header";
 import {
-  ArrowRight,
-  BookOpen,
-  ClipboardPlus,
-  Users,
-  ChevronDown,
-} from "lucide-react";
-import { analyzeClass, getAttentionFeed } from "@/lib/analysis";
+  analyzeClass,
+  CONFIDENCE_LABEL,
+  getAttentionFeed,
+} from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
 import { useTeacher } from "@/components/layout/teacher-context";
 import { AttentionCard } from "@/components/dashboard/attention-card";
 import { WorkQueue } from "@/components/dashboard/work-queue";
 import { classWorkItems } from "@/lib/pedagogy/work-queue";
 import type { loadTeacherWorkQueue } from "./pedagogy-actions";
-import { MasteryBar } from "@/components/ui/mastery-bar";
 import { formatDate } from "@/lib/utils";
 
-export default function DashboardPage({ workQueue }: { workQueue: Awaited<ReturnType<typeof loadTeacherWorkQueue>> }) {
+export default function DashboardPage({
+  workQueue,
+}: {
+  workQueue: Awaited<ReturnType<typeof loadTeacherWorkQueue>>;
+}) {
   const { dataset, loaded, storageError } = useSchoolData();
   const { name } = useTeacher();
   const [selectedClass, setSelectedClass] = useState("");
-  const activeClass = dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
+  const activeClass =
+    dataset.classes.find((c) => c.id === selectedClass) ?? dataset.classes[0];
   if (!loaded || storageError) return <DataLoadState />;
-  if (!activeClass) return <p className="text-ink-soft">Aucune classe disponible dans cet espace.</p>;
-  const { classInfo, counts, weakestSkills } = analyzeClass(
+  if (!activeClass)
+    return (
+      <EmptyState
+        title="Votre compte attend une classe"
+        description="Aucune classe n’est encore affectée à votre espace. Contactez la personne qui vous a invité pour commencer le suivi."
+        action={
+          <Button variant="secondary" asChild>
+            <Link href="/app/parametres">Voir mes affectations</Link>
+          </Button>
+        }
+      />
+    );
+  const { classInfo, counts, skillSignals } = analyzeClass(
     activeClass.id,
     dataset,
   );
+  const signals = skillSignals
+    .filter((signal) => signal.fragileNow > 0)
+    .slice(0, 3);
   const feed = getAttentionFeed(activeClass.id, 4, dataset);
-  const workItems = workQueue.ok ? classWorkItems(workQueue.queue, activeClass.id, dataset) : null;
-  const classEvaluations = dataset.evaluations.filter((e) => e.classId === activeClass.id);
+  const workItems = workQueue.ok
+    ? classWorkItems(workQueue.queue, activeClass.id, dataset)
+    : null;
+  const classEvaluations = dataset.evaluations.filter(
+    (e) => e.classId === activeClass.id,
+  );
   const recent = [...classEvaluations]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 3);
-  const actions = [
-    {
-      title: "Ouvrir ma classe",
-      description: "Retrouver la vue d’ensemble de mes élèves.",
-      href: `/app/classes/${classInfo.id}`,
-      icon: BookOpen,
-    },
-    {
-      title: "Ajouter une évaluation",
-      description: "Enrichir le suivi à partir de mes observations.",
-      href: `/app/evaluations/nouvelle?classe=${encodeURIComponent(activeClass.id)}`,
-      icon: ClipboardPlus,
-    },
-    {
-      title: "Consulter mes élèves",
-      description: "Prendre le temps d’un suivi individuel.",
-      href: "/app/eleves",
-      icon: Users,
-    },
-  ];
   return (
-    <div className="space-y-10">
-      <section className="welcome-area">
-        {dataset.classes.length > 1 && <div className="mb-5">
-          <label htmlFor="dashboard-class" className="mr-3 text-sm">Classe</label>
-          <select id="dashboard-class" value={activeClass.id} onChange={(event) => setSelectedClass(event.target.value)} className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm">
-            {dataset.classes.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.subject}</option>)}
-          </select>
-        </div>}
-        <p className="text-sm text-brand">
-          {classInfo.name} <span className="mx-2 text-border-strong">/</span>{" "}
-          {classInfo.subject}
+    <div className="space-y-8">
+      <section>
+        <PageHeader
+          title={`Bonjour${name === "Professeur" ? "" : ` ${name}`}.`}
+          eyebrow="Votre suivi pédagogique"
+          description="Les copies à compléter, les analyses à lancer et les hypothèses qui attendent votre décision."
+          actions={
+            <>
+              <Button variant="secondary" asChild>
+                <Link href={`/app/classes/${classInfo.id}`}>
+                  Ouvrir ma classe
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link
+                  href={`/app/evaluations/nouvelle?classe=${encodeURIComponent(activeClass.id)}`}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  Ajouter une évaluation
+                </Link>
+              </Button>
+            </>
+          }
+        />
+        {dataset.classes.length > 1 && (
+          <div className="mt-5">
+            <label htmlFor="dashboard-class" className="mr-3 text-sm">
+              Classe
+            </label>
+            <select
+              id="dashboard-class"
+              value={activeClass.id}
+              onChange={(event) => setSelectedClass(event.target.value)}
+              className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm"
+            >
+              {dataset.classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {c.subject}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <p className="mt-4 text-sm text-ink-soft">
+          {classInfo.name} · {classInfo.subject} · {counts.total} élèves
         </p>
-        <h1 className="mt-5 text-3xl font-medium tracking-tight sm:text-4xl">
-          Bonjour{name === "Professeur" ? "" : ` ${name}`}.
-        </h1>
-        <p className="mt-3 text-lg text-ink-soft">
-          Par quoi souhaitez-vous commencer ?
-        </p>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-soft">
-          Votre espace est prêt. Retrouvez votre classe, ajoutez une observation
-          ou prenez un moment pour un élève.
-        </p>
-        <div className="mt-8 grid gap-3 lg:grid-cols-3">
-          {actions.map(({ title, description, href, icon: Icon }, i) => (
-            <Link key={href} href={href} className={cnAction(i)}>
-              <Icon size={22} aria-hidden="true" />
-              <h2 className="mt-5 text-base font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-relaxed opacity-85">
-                {description}
-              </p>
-              <ArrowRight className="mt-6" size={18} aria-hidden="true" />
-            </Link>
-          ))}
-        </div>
       </section>
       <WorkQueue
         items={workItems}
@@ -101,7 +116,7 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 id="recent-title" className="text-lg font-semibold">
-              Le fil de votre classe
+              Évaluations récentes
             </h2>
             <p className="mt-1 text-sm text-ink-soft">
               {counts.total} élèves · {classEvaluations.length} évaluations
@@ -122,7 +137,7 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
                 href={`/app/evaluations/${e.id}`}
                 className="flex items-center justify-between gap-4 p-5 hover:bg-paper"
               >
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium">{e.name}</p>
                   <p className="mt-1 text-xs text-ink-soft">
                     {formatDate(e.date)} · {e.skillIds.length} compétences
@@ -133,9 +148,17 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
               </Link>
             ))
           ) : (
-            <p className="p-5 text-sm text-ink-soft">
-              Votre première évaluation donnera le point de départ du suivi.
-            </p>
+            <div className="p-5 text-sm text-ink-soft">
+              <p>
+                Votre première évaluation donnera le point de départ du suivi.
+              </p>
+              <Link
+                href={`/app/evaluations/nouvelle?classe=${encodeURIComponent(activeClass.id)}`}
+                className="mt-2 inline-block font-medium text-brand underline"
+              >
+                Créer la première évaluation
+              </Link>
+            </div>
           )}
         </div>
       </section>
@@ -144,11 +167,11 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
           <summary className="flex cursor-pointer items-center justify-between gap-4 rounded-lg py-3">
             <div>
               <h2 className="text-lg font-semibold">
-                À consulter quand vous êtes prêt
+                Points à consulter dans la classe
               </h2>
               <p className="mt-1 text-sm font-normal text-ink-soft">
-                Quelques points pédagogiques et pistes de travail, à relire avec
-                votre regard.
+                Indices issus des résultats saisis. Ils ne constituent pas des
+                observations confirmées sur les copies.
               </p>
             </div>
             <ChevronDown size={20} className="shrink-0" />
@@ -175,21 +198,37 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
                 Compétences à explorer ensemble
               </h3>
               <div className="space-y-5 rounded-xl border border-border bg-white p-5">
-                {weakestSkills.map((s) => (
-                  <div key={s.skillId}>
-                    <div className="mb-2 flex justify-between gap-4 text-sm">
-                      <span>{s.name}</span>
-                      <span>{s.percent}%</span>
+                {signals.map((signal) => (
+                  <div key={signal.skillId} className="text-sm">
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span className="font-medium">{signal.name}</span>
+                      <span className="text-xs text-ink-soft">
+                        {CONFIDENCE_LABEL[signal.confidence]}
+                      </span>
                     </div>
-                    <MasteryBar percent={s.percent} />
                     <p className="mt-1 text-xs text-ink-soft">
-                      À partir des observations de {s.sampleSize} élèves
+                      {signal.fragileNow} sur {signal.documented} élève
+                      {signal.documented > 1 ? "s" : ""} documenté
+                      {signal.documented > 1 ? "s" : ""} au dernier niveau
+                      fragile ou non maîtrisé
+                      {signal.persistent
+                        ? `, dont ${signal.persistent} sur deux observations consécutives`
+                        : ""}
+                      .
                     </p>
                   </div>
                 ))}
-                {!weakestSkills.length && (
+                {signals.length ? (
+                  <Link
+                    href={`/app/classes/${classInfo.id}#competences`}
+                    className="inline-block text-sm font-medium text-brand"
+                  >
+                    Voir les élèves concernés dans la classe →
+                  </Link>
+                ) : (
                   <p className="text-sm text-ink-soft">
-                    Les compétences renseignées apparaîtront ici.
+                    Les compétences renseignées fragiles ou non maîtrisées
+                    apparaîtront ici.
                   </p>
                 )}
               </div>
@@ -199,7 +238,4 @@ export default function DashboardPage({ workQueue }: { workQueue: Awaited<Return
       </section>
     </div>
   );
-}
-function cnAction(index: number) {
-  return `rounded-xl border p-6 transition-colors ${index === 0 ? "border-brand bg-brand text-white hover:bg-brand-hover" : "border-border bg-white text-ink hover:border-brand/40"}`;
 }
