@@ -63,7 +63,7 @@ test("a wrong password for a real teacher is reported the same way", async () =>
 test("a real account without an active teacher membership stops at the role step", async () => {
   const steps = await run(NON_TEACHER.email, NON_TEACHER.password);
   assert.deepEqual(failed(steps), ["teacher_role"]);
-  assert.match(steps.at(-1)!.detail, /app_metadata\.role/);
+  assert.match(steps.at(-1)!.detail, /Aucune appartenance active/);
 });
 
 test("secret keys and another project are refused before any call", async () => {
