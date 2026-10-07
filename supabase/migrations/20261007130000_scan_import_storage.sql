@@ -25,7 +25,14 @@ begin
       for insert to authenticated
       with check (
         bucket_id = 'focus-scan-imports'
-        and split_part(name, '/', 1) = auth.uid()::text
+        and split_part(name, '/', 1) = (select auth.uid())::text
+        and exists (
+          select 1
+          from public.school_memberships sm
+          where sm.user_id = (select auth.uid())
+            and sm.role = 'teacher'
+            and sm.status = 'active'
+        )
       )
   $policy$;
 
@@ -35,7 +42,14 @@ begin
       for select to authenticated
       using (
         bucket_id = 'focus-scan-imports'
-        and split_part(name, '/', 1) = auth.uid()::text
+        and split_part(name, '/', 1) = (select auth.uid())::text
+        and exists (
+          select 1
+          from public.school_memberships sm
+          where sm.user_id = (select auth.uid())
+            and sm.role = 'teacher'
+            and sm.status = 'active'
+        )
       )
   $policy$;
 
@@ -45,7 +59,14 @@ begin
       for delete to authenticated
       using (
         bucket_id = 'focus-scan-imports'
-        and split_part(name, '/', 1) = auth.uid()::text
+        and split_part(name, '/', 1) = (select auth.uid())::text
+        and exists (
+          select 1
+          from public.school_memberships sm
+          where sm.user_id = (select auth.uid())
+            and sm.role = 'teacher'
+            and sm.status = 'active'
+        )
       )
   $policy$;
 end
