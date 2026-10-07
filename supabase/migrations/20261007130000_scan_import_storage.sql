@@ -69,7 +69,8 @@ create or replace function public.focus_import_scanned_copy(
   p_assessment_id uuid,
   p_student_id uuid,
   p_responses jsonb,
-  p_score numeric default null
+  p_score numeric default null,
+  p_clear_score boolean default false
 )
 returns jsonb
 language plpgsql
@@ -141,16 +142,24 @@ begin
       score = excluded.score,
       absent = false,
       updated_at = now();
+  elsif coalesce(p_clear_score, false) then
+    update public.assessment_results
+    set score = null,
+        absent = false,
+        updated_at = now()
+    where assessment_id = p_assessment_id
+      and student_id = p_student_id;
   end if;
 
   return jsonb_build_object(
     'responses', v_response_result,
-    'scoreSaved', p_score is not null
+    'scoreSaved', p_score is not null,
+    'scoreCleared', p_score is null and coalesce(p_clear_score, false)
   );
 end;
 $$;
 
-revoke all on function public.focus_import_scanned_copy(uuid, uuid, jsonb, numeric)
+revoke all on function public.focus_import_scanned_copy(uuid, uuid, jsonb, numeric, boolean)
   from public, anon;
-grant execute on function public.focus_import_scanned_copy(uuid, uuid, jsonb, numeric)
+grant execute on function public.focus_import_scanned_copy(uuid, uuid, jsonb, numeric, boolean)
   to authenticated;
