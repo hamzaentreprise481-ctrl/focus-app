@@ -7,25 +7,44 @@ const subscribeHref = "mailto:hamzaentreprise481@gmail.com?subject=FOCUS%20%E2%8
 const plans = [
   {
     name: "Pilote",
-    price: "99 €",
+    price: "199 €",
     suffix: "/ mois",
     note: "Pendant 3 mois maximum",
-    features: ["1 professeur", "1 classe", "Mathématiques", "Accompagnement au démarrage", "Mesure du temps et des usages"],
+    features: [
+      "1 professeur référent",
+      "1 classe pilote",
+      "Mathématiques",
+      "Accompagnement au démarrage",
+      "Mesure du temps, des usages et des retours",
+    ],
   },
   {
     name: "Établissement",
-    price: "149 €",
+    price: "499 €",
     suffix: "/ mois",
     note: "Prix cible par établissement",
     featured: true,
-    features: ["Plusieurs professeurs", "Plusieurs classes", "Suivi élève et classe", "Analyses pédagogiques", "Exports et historique", "Support établissement"],
+    features: [
+      "Plusieurs professeurs et plusieurs classes",
+      "Suivi individuel des élèves et vision classe",
+      "Analyses pédagogiques fondées sur les preuves disponibles",
+      "Historique et continuité du suivi",
+      "Exports pour le travail pédagogique",
+      "Accompagnement et support établissement",
+    ],
   },
   {
     name: "Réseau",
     price: "Sur devis",
     suffix: "",
     note: "Pour plusieurs établissements",
-    features: ["Déploiement multi-établissements", "Administration centralisée", "Accompagnement dédié", "Conditions contractuelles adaptées", "Suivi de déploiement"],
+    features: [
+      "Déploiement multi-établissements",
+      "Administration centralisée",
+      "Accompagnement dédié",
+      "Conditions contractuelles adaptées",
+      "Suivi de déploiement",
+    ],
   },
 ];
 
@@ -35,8 +54,10 @@ export default function PricingPage() {
       <section className={styles.pageHero}>
         <div className={styles.narrow}>
           <p className={styles.sectionLabel}>ABONNEMENTS</p>
-          <h1>Une tarification simple, pensée pour commencer petit.</h1>
-          <p className={styles.pageLead}>Les offres ci-dessous servent de base commerciale pendant la phase pilote. Le paiement en ligne n’est pas encore ouvert : la souscription passe d’abord par un échange avec l’établissement.</p>
+          <h1>Une tarification établissement, avec une vraie phase pilote.</h1>
+          <p className={styles.pageLead}>
+            FOCUS n’est pas vendu comme un abonnement individuel par professeur ou par élève. L’offre principale est pensée à l’échelle de l’établissement, avec une formule pilote limitée pour mesurer l’usage avant un déploiement plus large. Le paiement en ligne n’est pas encore ouvert : la souscription passe d’abord par un échange avec l’établissement.
+          </p>
         </div>
       </section>
 
@@ -58,15 +79,19 @@ export default function PricingPage() {
               </article>
             ))}
           </div>
-          <p className={styles.integrationNote}>Tarifs indicatifs de lancement, hors éventuelles prestations spécifiques d’intégration. Les conditions définitives devront être contractualisées avant usage réel.</p>
+          <p className={styles.integrationNote}>
+            Tarifs indicatifs de lancement, hors éventuelles prestations spécifiques d’intégration. Les conditions définitives, le périmètre de données et les engagements de service devront être contractualisés avant tout usage réel.
+          </p>
         </div>
       </section>
 
       <section className={`${styles.section} ${styles.softSection}`}>
         <div className={styles.narrow}>
-          <p className={styles.sectionLabel}>POURQUOI 149 € / MOIS ?</p>
-          <h2>Un prix établissement, pas un abonnement par élève.</h2>
-          <p className={styles.pageLead}>Le produit est vendu comme outil de travail pédagogique. Le prix doit rester lisible pour un établissement, sans multiplier les micro-facturations ni rendre l’adoption dépendante du nombre exact d’élèves.</p>
+          <p className={styles.sectionLabel}>POURQUOI 499 € / MOIS ?</p>
+          <h2>Un prix pour l’établissement, pas une addition par élève.</h2>
+          <p className={styles.pageLead}>
+            L’objectif est que FOCUS devienne un outil de travail pédagogique partagé, pas une succession de petits abonnements individuels. À 499 € par mois, l’offre principale correspond à un déploiement établissement avec plusieurs professeurs, plusieurs classes, du suivi dans le temps et un accompagnement identifié. La formule pilote reste volontairement plus accessible afin de vérifier la valeur réelle avant généralisation.
+          </p>
           <Link href="/decouvrir" className={styles.textLink}>Revoir ce qui est inclus dans FOCUS <ArrowRight size={16} /></Link>
         </div>
       </section>
