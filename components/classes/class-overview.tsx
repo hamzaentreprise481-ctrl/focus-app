@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { CONFIDENCE_LABEL, type ClassOverview, type StudentAnalysis } from "@/lib/analysis";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  CONFIDENCE_LABEL,
+  type ClassOverview,
+  type StudentAnalysis,
+} from "@/lib/analysis";
 import type { EvaluationDataset } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n > 1 ? many : one}`;
 
 const GROUPS: {
   key: keyof ClassOverview["groups"];
@@ -41,13 +48,25 @@ const GROUPS: {
 
 /** Why a student is listed: the rising competencies when the pattern
  *  itself (e.g. "stable") does not say it. */
-function reasonFor(group: keyof ClassOverview["groups"], analysis: StudentAnalysis) {
-  if (group !== "improving" || analysis.pattern === "progression_recente") return analysis.summary;
-  const rising = analysis.skillMasteries.filter((m) => m.trend === "hausse" && m.testedCount >= 2);
+function reasonFor(
+  group: keyof ClassOverview["groups"],
+  analysis: StudentAnalysis,
+) {
+  if (group !== "improving" || analysis.pattern === "progression_recente")
+    return analysis.summary;
+  const rising = analysis.skillMasteries.filter(
+    (m) => m.trend === "hausse" && m.testedCount >= 2,
+  );
   return `Niveau en hausse entre la première et la dernière observation : ${rising.map((m) => `« ${m.name} »`).join(", ")}.`;
 }
 
-function StudentLine({ analysis, reason }: { analysis: StudentAnalysis; reason: string }) {
+function StudentLine({
+  analysis,
+  reason,
+}: {
+  analysis: StudentAnalysis;
+  reason: string;
+}) {
   return (
     <li>
       <Link
@@ -64,6 +83,7 @@ function StudentLine({ analysis, reason }: { analysis: StudentAnalysis; reason: 
 }
 
 export function ClassStudentGroups({ overview }: { overview: ClassOverview }) {
+  const [expanded, setExpanded] = useState<string[]>([]);
   return (
     <section aria-labelledby="groups-title">
       <h2 id="groups-title" className="text-lg font-semibold">
@@ -77,7 +97,8 @@ export function ClassStudentGroups({ overview }: { overview: ClassOverview }) {
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {GROUPS.map(({ key, title, hint, empty }) => {
           const list = overview.groups[key];
-          const shown = list.slice(0, 5);
+          const isExpanded = expanded.includes(key);
+          const shown = isExpanded ? list : list.slice(0, 5);
           return (
             <div
               key={key}
@@ -92,19 +113,39 @@ export function ClassStudentGroups({ overview }: { overview: ClassOverview }) {
               </div>
               <p className="mt-1 text-xs text-ink-soft">{hint}</p>
               {shown.length ? (
-                <ul className="mt-3 -mx-2 space-y-0.5 text-sm">
+                <ul
+                  id={`class-group-${key}`}
+                  className="mt-3 -mx-2 space-y-0.5 text-sm"
+                >
                   {shown.map((analysis) => (
-                    <StudentLine key={analysis.studentId} analysis={analysis} reason={reasonFor(key, analysis)} />
+                    <StudentLine
+                      key={analysis.studentId}
+                      analysis={analysis}
+                      reason={reasonFor(key, analysis)}
+                    />
                   ))}
                 </ul>
               ) : (
                 <p className="mt-3 text-sm text-ink-soft">{empty}</p>
               )}
-              {list.length > shown.length && (
-                <p className="mt-2 text-xs text-ink-soft">
-                  Et {plural(list.length - shown.length, "autre élève", "autres élèves")} :
-                  voir la liste ci-dessous.
-                </p>
+              {list.length > 5 && (
+                <Button
+                  variant="ghost"
+                  className="mt-2"
+                  aria-expanded={isExpanded}
+                  aria-controls={`class-group-${key}`}
+                  onClick={() =>
+                    setExpanded((previous) =>
+                      isExpanded
+                        ? previous.filter((item) => item !== key)
+                        : [...previous, key],
+                    )
+                  }
+                >
+                  {isExpanded
+                    ? "Réduire la liste"
+                    : `Voir les ${list.length} élèves`}
+                </Button>
               )}
             </div>
           );
@@ -121,8 +162,12 @@ export function ClassSkillSignals({
   overview: ClassOverview;
   dataset: EvaluationDataset;
 }) {
-  const nameOf = new Map(overview.studentAnalyses.map((a) => [a.studentId, a.name]));
-  const signals = overview.skillSignals.filter((signal) => signal.fragileNow > 0).slice(0, 6);
+  const nameOf = new Map(
+    overview.studentAnalyses.map((a) => [a.studentId, a.name]),
+  );
+  const signals = overview.skillSignals
+    .filter((signal) => signal.fragileNow > 0)
+    .slice(0, 6);
   const documentedSkills = overview.skillSignals.length;
   const classSkills = new Set(
     dataset.evaluations
@@ -135,8 +180,8 @@ export function ClassSkillSignals({
         Points à travailler dans la classe
       </h2>
       <p className="mt-1 text-sm text-ink-soft">
-        Uniquement à partir des niveaux de compétence saisis, jamais déduits
-        des notes. Un niveau manquant n’est pas un niveau faible.
+        Uniquement à partir des niveaux de compétence saisis, jamais déduits des
+        notes. Un niveau manquant n’est pas un niveau faible.
       </p>
       {!documentedSkills ? (
         <p className="mt-4 rounded-xl border border-border bg-surface p-4 text-sm text-ink-soft">
@@ -147,23 +192,44 @@ export function ClassSkillSignals({
       ) : !signals.length ? (
         <p className="mt-4 rounded-xl border border-border bg-surface p-4 text-sm text-ink-soft">
           Aucun niveau fragile ou non maîtrisé dans les dernières observations
-          saisies ({plural(documentedSkills, "compétence documentée", "compétences documentées")}).
+          saisies (
+          {plural(
+            documentedSkills,
+            "compétence documentée",
+            "compétences documentées",
+          )}
+          ).
         </p>
       ) : (
         <ul className="mt-4 divide-y divide-border rounded-xl border border-border bg-surface">
           {signals.map((signal) => {
-            const names = signal.concernedStudentIds.map((id) => nameOf.get(id) ?? "Élève");
+            const names = signal.concernedStudentIds.map(
+              (id) => nameOf.get(id) ?? "Élève",
+            );
             return (
-              <li key={signal.skillId} className="p-4 text-sm" data-skill={signal.name}>
+              <li
+                key={signal.skillId}
+                className="p-4 text-sm"
+                data-skill={signal.name}
+              >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <h3 className="font-semibold">{signal.name}</h3>
                   <span className="text-xs text-ink-soft">
                     {CONFIDENCE_LABEL[signal.confidence]} ·{" "}
-                    {plural(signal.evaluationCount, "évaluation", "évaluations")}
+                    {plural(
+                      signal.evaluationCount,
+                      "évaluation",
+                      "évaluations",
+                    )}
                   </span>
                 </div>
                 <p className="mt-1 text-ink-soft">
-                  {signal.fragileNow} sur {plural(signal.documented, "élève documenté", "élèves documentés")}{" "}
+                  {signal.fragileNow} sur{" "}
+                  {plural(
+                    signal.documented,
+                    "élève documenté",
+                    "élèves documentés",
+                  )}{" "}
                   au dernier niveau fragile ou non maîtrisé
                   {signal.persistent
                     ? `, dont ${signal.persistent} sur deux observations consécutives`
@@ -174,7 +240,9 @@ export function ClassSkillSignals({
                     : ""}
                 </p>
                 <p className="mt-2 text-xs text-ink-soft">
-                  <span className="font-medium text-ink">Élèves concernés : </span>
+                  <span className="font-medium text-ink">
+                    Élèves concernés :{" "}
+                  </span>
                   {names.slice(0, 8).join(", ")}
                   {names.length > 8 ? `, et ${names.length - 8} autres` : ""}
                 </p>
@@ -204,7 +272,10 @@ export function ClassRecentEvaluations({
   const inClass = new Set(overview.classInfo.studentIds);
   const evaluations = dataset.evaluations
     .filter((e) => e.classId === classId)
-    .sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name, "fr"));
+    .sort(
+      (a, b) =>
+        b.date.localeCompare(a.date) || a.name.localeCompare(b.name, "fr"),
+    );
   return (
     <section aria-labelledby="class-evaluations-title">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -222,11 +293,13 @@ export function ClassRecentEvaluations({
         <ul className="mt-4 divide-y divide-border rounded-xl border border-border bg-surface">
           {evaluations.map((evaluation) => {
             const grades = dataset.rawGrades.filter(
-              (g) => g.evaluationId === evaluation.id && inClass.has(g.studentId),
+              (g) =>
+                g.evaluationId === evaluation.id && inClass.has(g.studentId),
             );
             const absent = grades.filter((g) => g.absent).length;
             const withLevels = grades.filter(
-              (g) => !g.absent && Object.values(g.skillLevels ?? {}).some(Boolean),
+              (g) =>
+                !g.absent && Object.values(g.skillLevels ?? {}).some(Boolean),
             ).length;
             const missing = Math.max(0, total - grades.length);
             return (
@@ -239,14 +312,20 @@ export function ClassRecentEvaluations({
                     <span className="font-medium">{evaluation.name}</span>
                     <span className="block text-xs text-ink-soft">
                       {grades.length - absent} saisies sur {total}
-                      {absent ? ` · ${plural(absent, "absence", "absences")}` : ""}
-                      {missing ? ` · ${plural(missing, "élève sans saisie", "élèves sans saisie")}` : ""}
+                      {absent
+                        ? ` · ${plural(absent, "absence", "absences")}`
+                        : ""}
+                      {missing
+                        ? ` · ${plural(missing, "élève sans saisie", "élèves sans saisie")}`
+                        : ""}
                       {evaluation.skillIds.length
                         ? ` · compétences renseignées pour ${withLevels} élève${withLevels > 1 ? "s" : ""}`
                         : " · aucune compétence associée"}
                     </span>
                   </span>
-                  <span className="text-ink-soft">{formatDate(evaluation.date)} →</span>
+                  <span className="text-ink-soft">
+                    {formatDate(evaluation.date)} →
+                  </span>
                 </Link>
               </li>
             );

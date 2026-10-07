@@ -131,7 +131,7 @@ test("a double click analyses the whole class; refused, insufficient and failed 
   assert.equal(await page.getByText("Analyse arrêtée à votre demande").count(), 0);
   await page.getByText("Arthur Meunier : L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard.").waitFor();
   // The failed copy stays queued; nothing was recorded for it.
-  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).waitFor();
+  await page.getByRole("button", { name: "Analyser la copie non analysée" }).waitFor();
 
   // Insufficient evidence is said as such on the copy, never as "no error".
   await page.getByRole("list", { name: "Élèves de la classe" }).getByRole("button", { name: /^Anaïs Renault/ }).click();
@@ -147,7 +147,7 @@ test("a hypothesis replaced meanwhile cannot be decided, and the list says so an
   const { page } = await teacherPage();
   await assessmentWithQuestion(page, "Cas limites — remplacement");
   await enterCopy(page, "Adam Benali", "2(x + 3) = 2x + 3", "0,5");
-  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).click();
+  await page.getByRole("button", { name: "Analyser la copie non analysée" }).click();
   const review = page.locator("#hypotheses");
   await review.getByRole("button", { name: "À examiner (1)" }).waitFor({ timeout: 30_000 });
 
@@ -160,7 +160,7 @@ test("a hypothesis replaced meanwhile cannot be decided, and the list says so an
   await review.getByRole("button", { name: "À examiner (0)" }).waitFor();
   // The explanation stays on screen once the list is empty, and the copy is offered again.
   await review.getByText(/Cette recommandation a été remplacée/).waitFor();
-  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).waitFor();
+  await page.getByRole("button", { name: "Analyser la copie non analysée" }).waitFor();
   const decided = await stack.db.query<{ n: number }>(
     `select count(*)::int as n from public.pedagogical_recommendations p join public.assessments a on a.id = p.assessment_id
      where a.title = 'Cas limites — remplacement' and p.teacher_decision is not null`,
@@ -213,7 +213,7 @@ test("a copy edited while the model reads it is not recorded with the old text",
   await assessmentWithQuestion(page, title);
   await enterCopy(page, "Adam Benali", "2(x + 3) = 2x + 3", "0,5");
   const calls = stack.model.calls.length;
-  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).click();
+  await page.getByRole("button", { name: "Analyser la copie non analysée" }).click();
   // The model has the copy; meanwhile it is corrected elsewhere (another tab).
   while (stack.model.calls.length === calls) await delay(20);
   await stack.db.query(
@@ -230,7 +230,7 @@ test("a copy edited while the model reads it is not recorded with the old text",
   );
   assert.equal(recorded.rows[0].n, 0, "nothing was recorded for the text the model read");
   // Relaunched, the analysis reads the corrected copy: no error, no hypothesis.
-  await page.getByRole("button", { name: "Analyser les 1 copie non analysée" }).click();
+  await page.getByRole("button", { name: "Analyser la copie non analysée" }).click();
   await page.getByText("1 copie analysée : 1 copie sans erreur observée — ce n’est pas une preuve de maîtrise.").waitFor({ timeout: 30_000 });
   assert.deepEqual(errors, []);
   await page.context().close();

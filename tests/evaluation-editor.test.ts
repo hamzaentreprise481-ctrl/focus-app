@@ -2,30 +2,101 @@ import "./helpers/dom";
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createElement } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { EvaluationEditor } from "../components/evaluations/evaluation-editor";
-import { SchoolDataProvider, type SchoolData, type SaveResult } from "../lib/school-data-context";
+import {
+  SchoolDataProvider,
+  type SchoolData,
+  type SaveResult,
+} from "../lib/school-data-context";
 import type { EvaluationDataset, Evaluation, RawGrade } from "../lib/types";
 
 afterEach(cleanup);
 const dataset: EvaluationDataset = {
   classes: [
-    { id: "a", name: "Classe A", level: "Première", subject: "Physique", teacher: "Test", studentIds: ["a"] },
-    { id: "b", name: "Classe B", level: "Première", subject: "Physique", teacher: "Test", studentIds: ["b"] },
+    {
+      id: "a",
+      name: "Classe A",
+      level: "Première",
+      subject: "Physique",
+      teacher: "Test",
+      studentIds: ["a"],
+    },
+    {
+      id: "b",
+      name: "Classe B",
+      level: "Première",
+      subject: "Physique",
+      teacher: "Test",
+      studentIds: ["b"],
+    },
   ],
-  students: [{ id: "a", name: "Élève A", classId: "a" }, { id: "b", name: "Élève B", classId: "b" }],
-  skills: [], evaluations: [], rawGrades: [],
+  students: [
+    { id: "a", name: "Élève A", classId: "a" },
+    { id: "b", name: "Élève B", classId: "b" },
+  ],
+  skills: [],
+  evaluations: [],
+  rawGrades: [],
 };
-const evaluation: Evaluation = { id: "demo-test", name: "Test", date: "2026-09-25", classId: "b", skillIds: [], important: false };
+const evaluation: Evaluation = {
+  id: "demo-test",
+  name: "Test",
+  date: "2026-09-25",
+  classId: "b",
+  skillIds: [],
+  important: false,
+};
 function mount(saveEvaluation: SchoolData["saveEvaluation"], edit = false) {
-  return render(createElement(SchoolDataProvider, { value: {
-    dataset, loaded: true, storageError: null, retryStorage: () => {}, editableEvaluationIds: [evaluation.id], saveEvaluation,
-  } }, createElement(EvaluationEditor, edit ? { initialEvaluation: evaluation, initialGrades: [{ studentId: "b", evaluationId: evaluation.id, score: 12, absent: false }] } : { initialClassId: "b" })));
+  return render(
+    createElement(
+      SchoolDataProvider,
+      {
+        value: {
+          dataset,
+          loaded: true,
+          storageError: null,
+          retryStorage: () => {},
+          editableEvaluationIds: [evaluation.id],
+          saveEvaluation,
+        },
+      },
+      createElement(
+        EvaluationEditor,
+        edit
+          ? {
+              initialEvaluation: evaluation,
+              initialGrades: [
+                {
+                  studentId: "b",
+                  evaluationId: evaluation.id,
+                  score: 12,
+                  absent: false,
+                },
+              ],
+            }
+          : { initialClassId: "b" },
+      ),
+    ),
+  );
 }
 function fill() {
-  fireEvent.change(screen.getByLabelText("Nom de l’évaluation"), { target: { value: "Mesures" } });
-  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-25" } });
-  fireEvent.change(screen.getByLabelText("Note de Élève B sur 20"), { target: { value: "0" } });
+  fireEvent.change(screen.getByLabelText("Nom de l’évaluation"), {
+    target: { value: "Mesures" },
+  });
+  fireEvent.change(screen.getByLabelText("Date"), {
+    target: { value: "2026-09-25" },
+  });
+  fireEvent.change(screen.getByLabelText("Note de Élève B sur 20"), {
+    target: { value: "0" },
+  });
 }
 
 test("editor selects the requested class and waits for confirmation before reporting success", async () => {
@@ -36,11 +107,15 @@ test("editor selects the requested class and waits for confirmation before repor
     calls++;
     assert.equal(e.classId, "b");
     savedGrades = grades;
-    return new Promise<SaveResult>((resolve) => { finish = resolve; });
+    return new Promise<SaveResult>((resolve) => {
+      finish = resolve;
+    });
   });
   fill();
   assert.equal(screen.queryByLabelText("Note de Élève A sur 20"), null);
-  const button = screen.getByRole("button", { name: "Enregistrer l’évaluation" });
+  const button = screen.getByRole("button", {
+    name: "Enregistrer l’évaluation",
+  });
   fireEvent.click(button);
   fireEvent.click(button);
   assert.equal(calls, 1);
@@ -59,10 +134,22 @@ test("failed async saves preserve the form and reuse the same id on retry", asyn
     return { ok: true };
   });
   fill();
-  fireEvent.click(screen.getByRole("button", { name: "Enregistrer l’évaluation" }));
-  await waitFor(() => assert.match(screen.getByRole("alert").textContent!, /saisie est conservée/));
-  assert.equal((screen.getByLabelText("Note de Élève B sur 20") as HTMLInputElement).value, "0");
-  fireEvent.click(screen.getByRole("button", { name: "Enregistrer l’évaluation" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Enregistrer l’évaluation" }),
+  );
+  await waitFor(() =>
+    assert.match(
+      screen.getByRole("alert").textContent!,
+      /saisie est conservée/,
+    ),
+  );
+  assert.equal(
+    (screen.getByLabelText("Note de Élève B sur 20") as HTMLInputElement).value,
+    "0",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Enregistrer l’évaluation" }),
+  );
   await waitFor(() => assert.ok(screen.getByText("Évaluation enregistrée")));
   assert.equal(ids.length, 2);
   assert.equal(ids[0], ids[1]);
@@ -70,9 +157,16 @@ test("failed async saves preserve the form and reuse the same id on retry", asyn
 
 test("editing can clear the last observation instead of retaining an incorrect grade", async () => {
   let saved: RawGrade[] | undefined;
-  mount(async (_, grades) => { saved = grades; return { ok: true }; }, true);
-  fireEvent.change(screen.getByLabelText("Note de Élève B sur 20"), { target: { value: "" } });
-  fireEvent.click(screen.getByRole("button", { name: "Enregistrer l’évaluation" }));
+  mount(async (_, grades) => {
+    saved = grades;
+    return { ok: true };
+  }, true);
+  fireEvent.change(screen.getByLabelText("Note de Élève B sur 20"), {
+    target: { value: "" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Enregistrer l’évaluation" }),
+  );
   await waitFor(() => assert.ok(screen.getByText("Évaluation mise à jour")));
   assert.deepEqual(saved, []);
 });
@@ -84,14 +178,36 @@ test("a new evaluation can be saved before any grade, to add its subject and cop
     return { ok: true };
   });
   // A name and a date are still required.
-  assert.equal(screen.queryByRole("button", { name: "Enregistrer l’évaluation" }), null);
-  fireEvent.change(screen.getByLabelText("Nom de l’évaluation"), { target: { value: "Développements" } });
-  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-02" } });
-  const button = screen.getByRole("button", { name: "Enregistrer l’évaluation" });
+  // The next action stays visible, with an explicit hint, until the required
+  // name and date are provided. It must not save an incomplete assessment.
+  assert.equal(
+    (
+      screen.getByRole("button", {
+        name: "Enregistrer l’évaluation",
+      }) as HTMLButtonElement
+    ).disabled,
+    true,
+  );
+  assert.match(
+    screen.getByText("Renseignez le nom et une date valide pour enregistrer.")
+      .textContent!,
+    /nom et une date valide/,
+  );
+  fireEvent.change(screen.getByLabelText("Nom de l’évaluation"), {
+    target: { value: "Développements" },
+  });
+  fireEvent.change(screen.getByLabelText("Date"), {
+    target: { value: "2026-10-02" },
+  });
+  const button = screen.getByRole("button", {
+    name: "Enregistrer l’évaluation",
+  });
   assert.equal((button as HTMLButtonElement).disabled, false);
   fireEvent.click(button);
   await waitFor(() => assert.ok(screen.getByText("Évaluation enregistrée")));
   assert.equal(saved?.evaluation.name, "Développements");
   assert.deepEqual(saved?.grades, []);
-  assert.ok(screen.getByRole("link", { name: "Ajouter le sujet et les copies" }));
+  assert.ok(
+    screen.getByRole("link", { name: "Ajouter le sujet et les copies" }),
+  );
 });

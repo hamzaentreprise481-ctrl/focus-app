@@ -1,7 +1,4 @@
+import { SectionLoading } from "@/components/ui/feedback";
 export default function Loading() {
-  return (
-    <p role="status" className="py-8 text-sm text-ink-soft">
-      Chargement de votre espace…
-    </p>
-  );
+  return <SectionLoading label="Chargement de votre espace…" />;
 }

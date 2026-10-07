@@ -9,6 +9,7 @@ import { useSchoolData } from "@/lib/school-data-context";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn, formatScore } from "@/lib/utils";
+import { Feedback } from "@/components/ui/feedback";
 
 import {
   emptyRow,
@@ -37,12 +38,17 @@ export function EvaluationEditor({
   const { dataset, saveEvaluation, loaded, storageError } = useSchoolData();
 
   const { classes } = dataset;
-  const [selectedClassId, setSelectedClassId] = useState(initialEvaluation?.classId ?? initialClassId ?? "");
-  const activeClass = classes.find((c) => c.id === selectedClassId) ?? classes[0];
+  const [selectedClassId, setSelectedClassId] = useState(
+    initialEvaluation?.classId ?? initialClassId ?? "",
+  );
+  const activeClass =
+    classes.find((c) => c.id === selectedClassId) ?? classes[0];
   const classId = activeClass?.id;
-  // Only the competencies of the class's subjects (a competency of another
-  // subject would be refused on save), plus any already on the evaluation.
-  const classSubjects = activeClass?.subjectIds ?? (activeClass?.subjectId ? [activeClass.subjectId] : []);
+  // Preserve the canonical subject scope: the server rejects competencies
+  // from other subjects. Already selected competencies remain editable.
+  const classSubjects =
+    activeClass?.subjectIds ??
+    (activeClass?.subjectId ? [activeClass.subjectId] : []);
   const skills = dataset.skills.filter(
     (skill) =>
       !skill.subjectId ||
@@ -53,10 +59,15 @@ export function EvaluationEditor({
   const evaluationId = useRef(initialEvaluation?.id ?? "");
   const saveLock = useRef(false);
   const [saving, setSaving] = useState(false);
-  const classStudents = useMemo(() => dataset.students.filter((s) => s.classId === classId), [dataset.students, classId]);
+  const classStudents = useMemo(
+    () => dataset.students.filter((s) => s.classId === classId),
+    [dataset.students, classId],
+  );
   const [name, setName] = useState(initialEvaluation?.name ?? "");
   const [date, setDate] = useState(initialEvaluation?.date ?? "");
-  const [important, setImportant] = useState(initialEvaluation?.important ?? false);
+  const [important, setImportant] = useState(
+    initialEvaluation?.important ?? false,
+  );
   const [selectedSkills, setSelectedSkills] = useState<string[]>(
     initialEvaluation?.skillIds ?? [],
   );
@@ -157,7 +168,13 @@ export function EvaluationEditor({
     name.trim() !== "" && name.trim().length <= 200 && validDate(date);
   // Grades are optional: a teacher may create the assessment first, then add
   // its subject, questions and copies, and grade later (or never on /20).
-  const canSave = loaded && !!classId && !storageError && !saving && readyToGrade && !hasErrors;
+  const canSave =
+    loaded &&
+    !!classId &&
+    !storageError &&
+    !saving &&
+    readyToGrade &&
+    !hasErrors;
 
   const handleSave = async () => {
     if (!canSave || saveLock.current) return;
@@ -165,28 +182,35 @@ export function EvaluationEditor({
     setSaving(true);
     setSaveError(null);
     try {
-    if (!evaluationId.current) evaluationId.current = crypto.randomUUID();
-    const evaluation: Evaluation = {
-      id: evaluationId.current,
-      name: name.trim(),
-      date,
-      classId: classId!,
-      skillIds: selectedSkills,
-      important,
-    };
-    const grades = parsedRows.flatMap(({ student, row }) => {
-      const grade = gradeFromRow(student.id, evaluationId.current, row, selectedSkills);
-      return grade ? [grade] : [];
-    });
-    const result = await saveEvaluation(evaluation, grades);
-    if (!result.ok) {
-      setSaveError(result.error);
-      return;
-    }
-    setSaveError(null);
-    setSavedEvaluation(evaluation);
+      if (!evaluationId.current) evaluationId.current = crypto.randomUUID();
+      const evaluation: Evaluation = {
+        id: evaluationId.current,
+        name: name.trim(),
+        date,
+        classId: classId!,
+        skillIds: selectedSkills,
+        important,
+      };
+      const grades = parsedRows.flatMap(({ student, row }) => {
+        const grade = gradeFromRow(
+          student.id,
+          evaluationId.current,
+          row,
+          selectedSkills,
+        );
+        return grade ? [grade] : [];
+      });
+      const result = await saveEvaluation(evaluation, grades);
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+      setSaveError(null);
+      setSavedEvaluation(evaluation);
     } catch {
-      setSaveError("Enregistrement impossible. Votre saisie est conservée. Réessayez.");
+      setSaveError(
+        "Enregistrement impossible. Votre saisie est conservée. Réessayez.",
+      );
     } finally {
       saveLock.current = false;
       setSaving(false);
@@ -217,14 +241,14 @@ export function EvaluationEditor({
               : "Évaluation enregistrée"}
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
-            « {savedEvaluation.name} » est enregistrée dans votre espace professeur.
-            Les statistiques et les fiches élèves concernées sont à jour.
-            
+            « {savedEvaluation.name} » est enregistrée dans votre espace
+            professeur. Ajoutez maintenant les questions, le corrigé et les
+            réponses exactes des élèves pour préparer l’analyse.
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Button asChild>
-            <Link href={`/app/evaluations/${savedEvaluation.id}#copies-title`}>
+            <Link href={`/app/evaluations/${savedEvaluation.id}#sujet`}>
               Ajouter le sujet et les copies
             </Link>
           </Button>
@@ -263,15 +287,31 @@ export function EvaluationEditor({
             : "Nouvelle évaluation"}
         </h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Les notes et les compétences sont enregistrées dans votre espace professeur.
+          {initialEvaluation
+            ? "Complétez les notes et les compétences observées. Les réponses détaillées se saisissent depuis la page de l’évaluation."
+            : "Commencez par le nom, la date et la classe. Vous ajouterez ensuite le sujet et les copies ; aucune note n’est obligatoire."}
         </p>
+        {!initialEvaluation && (
+          <ol
+            aria-label="Progression de la création"
+            className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm"
+          >
+            <li className="font-semibold text-brand">1. Informations</li>
+            <li className="text-ink-soft">2. Sujet et corrigé</li>
+            <li className="text-ink-soft">3. Copies et analyse</li>
+          </ol>
+        )}
       </div>
 
-      <fieldset disabled={saving} className="grid grid-cols-1 gap-5 rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:grid-cols-2">
+      <fieldset
+        disabled={saving}
+        className="grid grid-cols-1 gap-5 rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:grid-cols-2"
+      >
         <div>
           <Label htmlFor="eval-name">Nom de l&rsquo;évaluation</Label>
           <Input
             id="eval-name"
+            required
             placeholder="Ex. Contrôle — Probabilités"
             maxLength={200}
             value={name}
@@ -282,6 +322,7 @@ export function EvaluationEditor({
           <Label htmlFor="eval-date">Date</Label>
           <Input
             id="eval-date"
+            required
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -298,25 +339,40 @@ export function EvaluationEditor({
             <span>
               Séquence charnière
               <span className="block text-xs text-ink-soft">
-                Une absence à cette évaluation laisse un manque à rattraper, pas seulement une note en moins.
+                Une absence à cette évaluation laisse un manque à rattraper, pas
+                seulement une note en moins.
               </span>
             </span>
           </label>
         </div>
         <div>
           <Label htmlFor="eval-class">Classe</Label>
-          <select id="eval-class" value={classId ?? ""}
-            disabled={!!initialEvaluation || Object.keys(rows).length > 0 || saving}
+          <select
+            id="eval-class"
+            value={classId ?? ""}
+            disabled={
+              !!initialEvaluation || Object.keys(rows).length > 0 || saving
+            }
             onChange={(event) => {
               setSelectedClassId(event.target.value);
-              // Competencies belong to a subject: start again for another class.
               setSelectedSkills([]);
             }}
-            className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm">
-            {!classes.length && <option value="">Aucune classe disponible</option>}
-            {classes.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.subject}</option>)}
+            className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm"
+          >
+            {!classes.length && (
+              <option value="">Aucune classe disponible</option>
+            )}
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} · {c.subject}
+              </option>
+            ))}
           </select>
-          {!initialEvaluation && Object.keys(rows).length > 0 && <p className="mt-2 text-xs text-ink-soft">La classe reste fixe après le début de la saisie.</p>}
+          {!initialEvaluation && Object.keys(rows).length > 0 && (
+            <p className="mt-2 text-xs text-ink-soft">
+              La classe reste fixe après le début de la saisie.
+            </p>
+          )}
         </div>
         <div className="sm:col-span-2">
           <p className="mb-2 text-sm font-medium">
@@ -330,8 +386,8 @@ export function EvaluationEditor({
           {!skills.length && (
             <p className="text-sm text-ink-soft">
               Aucune compétence n’est encore définie pour cette matière. Le
-              référentiel de compétences est géré par l’établissement ; vous
-              pouvez enregistrer les notes dès maintenant.
+              référentiel est géré par l’établissement ; vous pouvez enregistrer
+              les notes dès maintenant.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -359,165 +415,183 @@ export function EvaluationEditor({
       </fieldset>
 
       {readyToGrade && (
-        <fieldset disabled={saving}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-[15px] font-semibold text-ink">
-                Résultats des élèves
-              </h2>
-              <p className="mt-1 text-sm text-ink-soft">
-                {gradedCount} / {classStudents.length} élève
-                {classStudents.length > 1 ? "s" : ""} renseigné(s)
-                {hasErrors && (
-                  <span className="ml-2 text-attention">
-                    · corrigez les notes invalides
-                  </span>
-                )}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-2 text-right">
-                <p className="text-xs text-muted">Moyenne actuelle</p>
-                <p className="text-lg font-semibold text-ink">
-                  {liveAverage !== null
-                    ? `${formatScore(liveAverage)} / 20`
-                    : "—"}
+        <details
+          open={!!initialEvaluation || selectedSkills.length > 0}
+          className="rounded-[var(--radius-lg)] border border-border bg-surface p-5"
+        >
+          <summary className="cursor-pointer text-base font-semibold">
+            Renseigner des notes ou des compétences{" "}
+            <span className="font-normal text-ink-soft">(facultatif)</span>
+          </summary>
+          <fieldset disabled={saving} className="mt-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-ink">
+                  Résultats des élèves
+                </h2>
+                <p className="mt-1 text-sm text-ink-soft">
+                  {gradedCount} / {classStudents.length} élève
+                  {classStudents.length > 1 ? "s" : ""} renseigné(s)
+                  {hasErrors && (
+                    <span className="ml-2 text-attention">
+                      · corrigez les notes invalides
+                    </span>
+                  )}
                 </p>
               </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-2 text-right">
+                  <p className="text-xs text-muted">Moyenne actuelle</p>
+                  <p className="text-lg font-semibold text-ink">
+                    {liveAverage !== null
+                      ? `${formatScore(liveAverage)} / 20`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div
-            role="region"
-            aria-label="Saisie des élèves, défilement horizontal et vertical"
-            tabIndex={0}
-            className="table-scroll rounded-[var(--radius-lg)] border border-border bg-surface"
-          >
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-surface">
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                  <th scope="col" className="px-5 py-3 font-medium">
-                    Élève
-                  </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
-                    Absent
-                  </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
-                    Note / 20
-                  </th>
-                  {selectedSkills.map((skillId) => (
-                    <th
-                      scope="col"
-                      key={skillId}
-                      className="px-4 py-3 font-medium"
-                    >
-                      {skills.find((s) => s.id === skillId)?.name}
+            <div
+              role="region"
+              aria-label="Saisie des élèves, défilement horizontal et vertical"
+              tabIndex={0}
+              className="table-scroll rounded-[var(--radius-lg)] border border-border bg-surface"
+            >
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-surface">
+                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                    <th scope="col" className="px-5 py-3 font-medium">
+                      Élève
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {parsedRows.map(({ student, row, parsed }) => (
-                  <tr
-                    key={student.id}
-                    className="border-b border-border last:border-0 align-top"
-                  >
-                    <th
-                      scope="row"
-                      className="px-5 py-2.5 text-left font-medium text-ink"
-                    >
-                      {student.name}
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Absent
                     </th>
-                    <td className="px-4 py-2.5">
-                      <input
-                        type="checkbox"
-                        checked={row.absent}
-                        onChange={(e) =>
-                          setAbsent(student.id, e.target.checked)
-                        }
-                        className="h-4 w-4 accent-brand"
-                        aria-label={`${student.name} absent(e)`}
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {row.absent ? (
-                        <span className="text-xs text-muted">Absent(e)</span>
-                      ) : (
-                        <>
-                          <input
-                            inputMode="decimal"
-                            aria-label={`Note de ${student.name} sur 20`}
-                            aria-invalid={!!parsed.error}
-                            placeholder="—"
-                            value={row.scoreInput}
-                            onChange={(e) =>
-                              setScore(student.id, e.target.value)
-                            }
-                            className={cn(
-                              "h-8 w-20 rounded-[var(--radius-sm)] border bg-surface px-2 text-sm tabular-nums focus:outline-none focus:ring-2",
-                              parsed.error
-                                ? "border-attention focus:border-attention focus:ring-attention-soft"
-                                : "border-border-strong focus:border-brand focus:ring-brand-soft",
-                            )}
-                          />
-                          {parsed.error && (
-                            <p className="mt-1 text-xs text-attention">
-                              {parsed.error}
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </td>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Note / 20
+                    </th>
                     {selectedSkills.map((skillId) => (
-                      <td key={skillId} className="px-4 py-2.5">
-                        {row.absent ? (
-                          <span className="text-xs text-muted">—</span>
-                        ) : (
-                          <select
-                            aria-label={`${skills.find((s) => s.id === skillId)?.name} — ${student.name}`}
-                            value={row.levels[skillId] ?? ""}
-                            onChange={(e) =>
-                              setLevel(
-                                student.id,
-                                skillId,
-                                e.target.value as SkillLevel | "",
-                              )
-                            }
-                            className="h-8 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-sm text-ink-soft focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
-                          >
-                            <option value="">Non renseigné</option>
-                            {LEVEL_OPTIONS.map((level) => (
-                              <option key={level} value={level}>
-                                {SKILL_LEVEL_LABEL[level]}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
+                      <th
+                        scope="col"
+                        key={skillId}
+                        className="px-4 py-3 font-medium"
+                      >
+                        {skills.find((s) => s.id === skillId)?.name}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {parsedRows.map(({ student, row, parsed }) => (
+                    <tr
+                      key={student.id}
+                      className="border-b border-border last:border-0 align-top"
+                    >
+                      <th
+                        scope="row"
+                        className="px-5 py-2.5 text-left font-medium text-ink"
+                      >
+                        {student.name}
+                      </th>
+                      <td className="px-4 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={row.absent}
+                          onChange={(e) =>
+                            setAbsent(student.id, e.target.checked)
+                          }
+                          className="h-4 w-4 accent-brand"
+                          aria-label={`${student.name} absent(e)`}
+                        />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {row.absent ? (
+                          <span className="text-xs text-muted">Absent(e)</span>
+                        ) : (
+                          <>
+                            <input
+                              inputMode="decimal"
+                              aria-label={`Note de ${student.name} sur 20`}
+                              aria-invalid={!!parsed.error}
+                              placeholder="—"
+                              value={row.scoreInput}
+                              onChange={(e) =>
+                                setScore(student.id, e.target.value)
+                              }
+                              className={cn(
+                                "h-8 w-20 rounded-[var(--radius-sm)] border bg-surface px-2 text-sm tabular-nums focus:outline-none focus:ring-2",
+                                parsed.error
+                                  ? "border-attention focus:border-attention focus:ring-attention-soft"
+                                  : "border-border-strong focus:border-brand focus:ring-brand-soft",
+                              )}
+                            />
+                            {parsed.error && (
+                              <p className="mt-1 text-xs text-attention">
+                                {parsed.error}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      {selectedSkills.map((skillId) => (
+                        <td key={skillId} className="px-4 py-2.5">
+                          {row.absent ? (
+                            <span className="text-xs text-muted">—</span>
+                          ) : (
+                            <select
+                              aria-label={`${skills.find((s) => s.id === skillId)?.name} — ${student.name}`}
+                              value={row.levels[skillId] ?? ""}
+                              onChange={(e) =>
+                                setLevel(
+                                  student.id,
+                                  skillId,
+                                  e.target.value as SkillLevel | "",
+                                )
+                              }
+                              className="h-8 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-sm text-ink-soft focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
+                            >
+                              <option value="">Non renseigné</option>
+                              {LEVEL_OPTIONS.map((level) => (
+                                <option key={level} value={level}>
+                                  {SKILL_LEVEL_LABEL[level]}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          <p className="mt-3 text-sm text-ink-soft">
-            Une case vide reste « non renseignée ». Vous pourrez compléter les
-            résultats après l’enregistrement.
-          </p>
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-            {saveError && (
-              <p role="alert" className="max-w-lg text-sm text-watch">
-                {saveError}
-              </p>
-            )}
-            <Button variant="primary" onClick={handleSave} disabled={!canSave}>
-              <Save className="h-4 w-4" />
-              {saving ? "Enregistrement…" : "Enregistrer l’évaluation"}
-            </Button>
-          </div>
-        </fieldset>
+            <p className="mt-3 text-sm text-ink-soft">
+              Une case vide reste « non renseignée ». Vous pourrez compléter les
+              résultats après l’enregistrement.
+            </p>
+          </fieldset>
+        </details>
       )}
+      {saveError && (
+        <Feedback tone="error">
+          {saveError} Vos saisies sont conservées ; vous pouvez réessayer.
+        </Feedback>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+        <p className="max-w-xl text-sm text-ink-soft">
+          {!classId
+            ? "Une classe doit être affectée à votre compte avant de créer une évaluation."
+            : !readyToGrade
+              ? "Renseignez le nom et une date valide pour enregistrer."
+              : hasErrors
+                ? "Corrigez les notes invalides dans les résultats ci-dessus."
+                : "Enregistrement explicite. Les résultats peuvent être complétés plus tard."}
+        </p>
+        <Button variant="primary" onClick={handleSave} disabled={!canSave}>
+          <Save className="h-4 w-4" aria-hidden="true" />
+          {saving ? "Enregistrement…" : "Enregistrer l’évaluation"}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1,93 +1,163 @@
 "use client";
 
-import { DataLoadState } from "@/components/evaluations/data-load-state";
+import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Plus, Users } from "lucide-react";
+import { ChevronRight, Plus, Search } from "lucide-react";
 import { analyzeEvaluation } from "@/lib/analysis";
 import { useSchoolData } from "@/lib/school-data-context";
+import { DataLoadState } from "@/components/evaluations/data-load-state";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatScore } from "@/lib/utils";
+import { Input, Label } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/feedback";
+import { formatDate } from "@/lib/utils";
 
 export default function EvaluationsPage() {
-  const { dataset, loaded, storageError, editableEvaluationIds } = useSchoolData();
-  const evaluations = [...dataset.evaluations].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-  );
-
+  const { dataset, loaded, storageError } = useSchoolData();
+  const [classId, setClassId] = useState("");
+  const [query, setQuery] = useState("");
   if (!loaded || storageError) return <DataLoadState />;
+  const evaluations = [...dataset.evaluations]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .filter(
+      (e) =>
+        (!classId || e.classId === classId) &&
+        e.name
+          .toLocaleLowerCase("fr")
+          .includes(query.trim().toLocaleLowerCase("fr")),
+    );
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            Évaluations
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Seconde 3 — Mathématiques
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/app/evaluations/nouvelle">
-            <Plus className="h-4 w-4" />
-            Nouvelle évaluation
-          </Link>
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        {evaluations.map((evaluation) => {
-          const analysis = analyzeEvaluation(evaluation.id, dataset);
-          const ownEvaluation = editableEvaluationIds.includes(evaluation.id);
-          return (
+      <PageHeader
+        title="Évaluations"
+        description="Retrouvez le sujet, les copies, les analyses et vos décisions pour chaque évaluation."
+        actions={
+          <Button asChild>
             <Link
-              key={evaluation.id}
-              href={`/app/evaluations/${evaluation.id}`}
-              className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border bg-surface p-5 transition-colors hover:border-border-strong hover:bg-paper sm:flex-row sm:items-center sm:gap-4"
+              href={`/app/evaluations/nouvelle${classId ? `?classe=${encodeURIComponent(classId)}` : ""}`}
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-[15px] font-medium text-ink">
-                    {evaluation.name}
-                  </p>
-                  {evaluation.important && (
-                    <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink">
-                      Séquence charnière
-                    </span>
-                  )}
-                  {ownEvaluation && (
-                    <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-medium text-ink-soft">
-                      Créée par vous
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-sm text-ink-soft">
-                  {formatDate(evaluation.date)}
-                </p>
-              </div>
-              <div className="flex items-center gap-6 text-sm">
-                <div className="text-right">
-                  <p className="text-xs text-muted">Moyenne classe</p>
-                  <p className="font-semibold text-ink">
-                    {analysis.average !== null
-                      ? `${formatScore(analysis.average)} / 20`
-                      : "—"}
-                  </p>
-                </div>
-                <div className="hidden items-center gap-1.5 text-ink-soft sm:flex">
-                  <Users className="h-3.5 w-3.5" />
-                  {analysis.presentCount}
-                  {analysis.absentStudents.length > 0 && (
-                    <span className="text-muted">
-                      · {analysis.absentStudents.length} absent{analysis.absentStudents.length > 1 ? "s" : ""}
-                    </span>
-                  )}
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
-              </div>
+              <Plus size={16} aria-hidden="true" />
+              Nouvelle évaluation
             </Link>
-          );
-        })}
+          </Button>
+        }
+      />
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="w-full sm:max-w-xs">
+          <Label htmlFor="evaluation-search">Rechercher une évaluation</Label>
+          <div className="relative">
+            <Search
+              size={16}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-3 text-muted"
+            />
+            <Input
+              id="evaluation-search"
+              className="pl-9"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Nom de l’évaluation"
+            />
+          </div>
+        </div>
+        <div className="w-full sm:w-auto">
+          <Label htmlFor="evaluation-class">Classe</Label>
+          <select
+            id="evaluation-class"
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="h-10 w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm"
+          >
+            <option value="">Toutes mes classes</option>
+            {dataset.classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} · {c.subject}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p role="status" className="pb-2 text-sm text-ink-soft">
+          {evaluations.length} évaluation{evaluations.length > 1 ? "s" : ""}
+        </p>
+        {(query || classId) && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setQuery("");
+              setClassId("");
+            }}
+          >
+            Réinitialiser les filtres
+          </Button>
+        )}
       </div>
+      {evaluations.length === 0 ? (
+        <EmptyState
+          title={
+            dataset.evaluations.length
+              ? "Aucune évaluation ne correspond"
+              : "Commencez par une évaluation"
+          }
+          description={
+            dataset.evaluations.length
+              ? "Modifiez la recherche ou la classe sélectionnée pour retrouver une évaluation."
+              : "Créez une évaluation, ajoutez son corrigé puis une première réponse d’élève. Vous pouvez commencer sans notes."
+          }
+          action={
+            dataset.evaluations.length ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setQuery("");
+                  setClassId("");
+                }}
+              >
+                Afficher toutes les évaluations
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link href="/app/evaluations/nouvelle">
+                  Créer la première évaluation
+                </Link>
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <ul className="divide-y divide-border rounded-[var(--radius-lg)] border border-border bg-surface">
+          {evaluations.map((evaluation) => {
+            const analysis = analyzeEvaluation(evaluation.id, dataset);
+            const c = dataset.classes.find((c) => c.id === evaluation.classId);
+            return (
+              <li key={evaluation.id}>
+                <Link
+                  href={`/app/evaluations/${evaluation.id}`}
+                  className="flex flex-wrap items-center justify-between gap-4 p-5 hover:bg-paper"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-medium">{evaluation.name}</p>
+                    <p className="mt-1 text-sm text-ink-soft">
+                      {c?.name ?? "Classe"} · {c?.subject ?? "Matière"} ·{" "}
+                      {formatDate(evaluation.date)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-4 text-sm">
+                    <span className="text-ink-soft">
+                      {analysis.recordedCount} / {c?.studentIds.length ?? 0}{" "}
+                      résultats saisis
+                    </span>
+                    <ChevronRight
+                      size={18}
+                      aria-hidden="true"
+                      className="text-muted"
+                    />
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
