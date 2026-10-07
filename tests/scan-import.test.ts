@@ -5,7 +5,7 @@ import {
   scanCopyIssue,
   type ScanCopyCandidate,
   type ScanQuestion,
-} from "../lib/scan-import";
+} from "../lib/scan-import-core";
 
 const questions: ScanQuestion[] = [
   { id: "11111111-1111-4111-8111-111111111111", position: 1, prompt: "Q1", maxPoints: 4 },
