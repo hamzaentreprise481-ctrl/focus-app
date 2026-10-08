@@ -36,7 +36,7 @@ export interface PedagogicalAiInput {
 }
 
 export function pedagogicalAiModel() {
-  return process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
+  return process.env.FOCUS_AI_MODEL || "gpt-6-astra";
 }
 
 /** The model key and the signing key that lets the database accept its output. */
