@@ -65,9 +65,9 @@ export default function PresentationPage() {
                 Demander une démonstration{" "}
                 <ArrowRight size={17} aria-hidden="true" />
               </a>
-              <Link href="/fonctionnement" className={styles.secondaryButton}>
+              <a href="#fonctionnement" className={styles.secondaryButton}>
                 Comprendre le parcours
-              </Link>
+              </a>
             </div>
             <p className={styles.heroTrust}>
               Pilote en mathématiques · Une classe pour commencer · Accès sur
@@ -229,10 +229,10 @@ export default function PresentationPage() {
               Une hypothèse ne devient une observation confirmée qu’après votre
               décision. Un manque de preuve reste visible.
             </p>
-            <Link className={styles.textLink} href="/confiance">
-              Comprendre nos garde-fous{" "}
+            <a className={styles.textLink} href="#faq">
+              Voir les limites de la V1{" "}
               <ArrowRight size={16} aria-hidden="true" />
-            </Link>
+            </a>
           </div>
           <ul className={styles.trustList}>
             {[

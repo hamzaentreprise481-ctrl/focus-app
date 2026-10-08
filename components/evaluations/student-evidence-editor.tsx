@@ -77,6 +77,12 @@ export function StudentEvidenceEditor({
   const [batchRunning, setBatchRunning] = useState(false);
   const lock = useRef(false);
   const scrolled = useRef(false);
+  // The student on screen, read when a slow save or analysis completes: its
+  // reload must never be applied to another student's form.
+  const shownStudent = useRef(studentId);
+  useEffect(() => {
+    shownStudent.current = studentId;
+  }, [studentId]);
 
   const applyOverview = useCallback(
     (result: Awaited<ReturnType<typeof loadResponseOverview>>) => {
@@ -122,8 +128,11 @@ export function StudentEvidenceEditor({
   const loadStudent = useCallback(
     async (id: string) => {
       try {
-        applyEvidence(await loadStudentEvidence(assessmentId, id));
+        const result = await loadStudentEvidence(assessmentId, id);
+        if (id !== shownStudent.current) return;
+        applyEvidence(result);
       } catch {
+        if (id !== shownStudent.current) return;
         setLoadError(
           "La copie n’a pas pu être chargée. Réessayez pour retrouver les réponses enregistrées.",
         );
@@ -174,7 +183,7 @@ export function StudentEvidenceEditor({
 
   const selectStudent = (id: string) => {
     if (id === studentId) return;
-    if (batchRunning) return;
+    if (batchRunning || busy !== null) return;
     if (
       dirty &&
       !window.confirm(
@@ -279,9 +288,10 @@ export function StudentEvidenceEditor({
         Copies des élèves
       </h2>
       <p className="mt-1 max-w-3xl text-sm leading-relaxed text-ink-soft">
-        Recopiez la réponse exacte de l’élève (calculs compris), les points
-        attribués et, si besoin, votre annotation. Une copie vide n’est jamais
-        interprétée comme une erreur.
+        Les copies importées par PDF apparaissent ici automatiquement. Vous
+        pouvez aussi saisir ou corriger manuellement la réponse exacte de
+        l’élève, les points attribués et votre annotation. Une copie vide n’est
+        jamais interprétée comme une erreur.
       </p>
 
       {overviewError && (

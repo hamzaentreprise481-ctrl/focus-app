@@ -3,7 +3,7 @@
 -- one DO block that raises at the first failed check. Success prints
 -- "FOCUS staging verification: OK".
 --
--- Checks: schema version (20261004090000); the 44 curriculum UUIDs captured from live on
+-- Checks: schema version (20261007130000); the 44 curriculum UUIDs captured from live on
 -- 2026-09-26 are unchanged; the Seconde graph (99 active nodes, 330
 -- relationships) and its catalogue (272 objectives, 99 typical errors,
 -- 99 remediations); RLS on every public table; nothing granted to anon;
@@ -24,8 +24,8 @@ begin
   -- 1. Schema version (Supabase records each migration it applied).
   if to_regclass('supabase_migrations.schema_migrations') is not null then
     select max(version) into v_version from supabase_migrations.schema_migrations;
-    if v_version is distinct from '20261004090000' then
-      raise exception 'schema version is %, expected 20261004090000', v_version;
+    if v_version is distinct from '20261007130000' then
+      raise exception 'schema version is %, expected 20261007130000', v_version;
     end if;
   end if;
 
@@ -134,7 +134,8 @@ begin
     'focus_persist_pedagogical_analysis', 'focus_persist_no_evidence', 'focus_review_pedagogical_recommendation',
     'focus_teacher_work_queue', 'focus_curriculum_graph', 'focus_schema_version', 'focus_import_curriculum',
     'focus_import_curriculum_catalogue', 'focus_record_ai_usage', 'teaches_class_subject', 'focus_normalize_math_text',
-    'focus_record_engine_analysis', 'focus_analysis_evidence_versions'
+    'focus_record_engine_analysis', 'focus_analysis_evidence_versions',
+    'focus_import_scanned_copy'
   ]) as f
   where not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = f);
   if v_missing is not null then raise exception 'missing functions: %', v_missing; end if;
@@ -144,7 +145,40 @@ begin
     raise exception 'focus_persist_pedagogical_analysis does not refuse findings on full marks';
   end if;
 
-  -- 7. AI output only from the FOCUS engine (20261004090000).
+  -- 7. Scan Storage: on a real Supabase environment, the admin setup
+  -- command must have provisioned a private, PDF-only bucket and the migration
+  -- must have installed the three owner/active-teacher policies.
+  if to_regclass('storage.buckets') is not null
+     and to_regclass('storage.objects') is not null then
+    select count(*) into v_count
+    from storage.buckets
+    where id = 'focus-scan-imports'
+      and public = false
+      and file_size_limit = 50000000
+      and allowed_mime_types = array['application/pdf']::text[];
+    if v_count <> 1 then
+      raise exception 'FOCUS Scan bucket missing or misconfigured: run npm run setup:scan-storage -- --commit';
+    end if;
+
+    select string_agg(required.name, ', ' order by required.name) into v_missing
+    from (values
+      ('focus_scan_imports_insert'),
+      ('focus_scan_imports_select'),
+      ('focus_scan_imports_delete')
+    ) as required(name)
+    where not exists (
+      select 1
+      from pg_policies p
+      where p.schemaname = 'storage'
+        and p.tablename = 'objects'
+        and p.policyname = required.name
+    );
+    if v_missing is not null then
+      raise exception 'FOCUS Scan storage policies missing: %', v_missing;
+    end if;
+  end if;
+
+  -- 8. AI output only from the FOCUS engine (20261004090000).
   select string_agg(p.proname, ', ') into v_missing from pg_proc p
   where p.pronamespace = 'public'::regnamespace
     and p.proname in ('focus_persist_pedagogical_analysis', 'focus_persist_no_evidence')

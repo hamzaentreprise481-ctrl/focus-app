@@ -22,9 +22,12 @@ interface AnalyzeQuestionInput {
 }
 
 export interface PedagogicalAiInput {
+  /**
+   * Everything here is covered by the evidence version the database checks
+   * when it records the analysis (focus_private.evidence_version).
+   */
   assessment: {
     id: string;
-    title: string;
     contextText: string | null;
     instructionsText: string | null;
   };
@@ -33,12 +36,7 @@ export interface PedagogicalAiInput {
 }
 
 export function pedagogicalAiModel() {
-  const configured = process.env.FOCUS_AI_MODEL?.trim();
-  // Terra was FOCUS's previous default. Keep old deployments safe: even if
-  // Vercel still carries that legacy override, route pedagogical analysis to
-  // Astra until the environment variable is updated.
-  if (!configured || configured === "gpt-5.6-terra") return "gpt-6-astra";
-  return configured;
+  return process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
 }
 
 /** The model key and the signing key that lets the database accept its output. */

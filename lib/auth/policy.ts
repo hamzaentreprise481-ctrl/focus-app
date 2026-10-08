@@ -1,28 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-type AuthenticatedUser = { id: string; is_anonymous?: boolean };
-
-/**
- * Teacher authorization is derived from the canonical school membership row.
- * RLS allows an authenticated user to read their own membership, so this check
- * does not need a service-role key and cannot be forged through user metadata.
- */
-export async function hasActiveTeacherMembership(
-  supabase: SupabaseClient,
-  user: AuthenticatedUser | null | undefined,
-): Promise<boolean> {
-  if (!user || user.is_anonymous === true) return false;
-  const { data, error } = await supabase
-    .from("school_memberships")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("role", "teacher")
-    .eq("status", "active")
-    .limit(1);
-  return !error && Array.isArray(data) && data.length > 0;
-}
-
-/** @deprecated Metadata is not the authorization source of truth. */
+/** Authorization uses provider-managed metadata, never user-editable metadata. */
 export function isTeacher(
   user:
     | { app_metadata?: Record<string, unknown>; is_anonymous?: boolean }

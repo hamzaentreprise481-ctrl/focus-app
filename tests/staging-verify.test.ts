@@ -44,7 +44,7 @@ test("staging verification fails on a changed UUID, a missing migration or an an
   try {
     const cases: Array<[string, string, RegExp]> = [
       ["update public.curriculum_nodes set active = false where code = 'MATH.ALG.DISTRIBUTIVITE'", "", /live curriculum identifiers changed or inactive: MATH\.ALG\.DISTRIBUTIVITE/],
-      ["delete from supabase_migrations.schema_migrations where version = '20261004090000'", "", /schema version is 20261002120000/],
+      ["delete from supabase_migrations.schema_migrations where version = '20261007130000'", "", /schema version is 20261007090000/],
       ["grant execute on function public.focus_persist_no_evidence(uuid, uuid, uuid, text, text, text) to authenticated", "", /API roles may record AI output directly: focus_persist_no_evidence/],
       ["grant usage on schema focus_private to service_role", "", /an API role can read the engine key schema/],
       ["delete from focus_private.engine_keys", "", /engine signing key not installed/],

@@ -114,7 +114,7 @@ test("every teacher page checks authentication before rendering", () => {
     assert.match(readFileSync(file, "utf8"), /await requireTeacher\(\)/);
 });
 
-test("the Supabase service role key is only read by the administrator CLIs (curriculum, invitation)", () => {
+test("the Supabase service role key is only read by administrator CLIs", () => {
   const root = path.join(__dirname, "..");
   const sources = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -131,6 +131,7 @@ test("the Supabase service role key is only read by the administrator CLIs (curr
     path.join("lib", "auth", "invite-plan.ts"),
     path.join("scripts", "admin-invite-teacher.ts"),
     path.join("scripts", "curriculum.ts"),
+    path.join("scripts", "setup-scan-storage.ts"),
   ]);
 
   // File-system loading, CSV parsing and SQL rendering never reach the app bundle.

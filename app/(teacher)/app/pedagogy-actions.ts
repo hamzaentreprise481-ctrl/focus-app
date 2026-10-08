@@ -544,9 +544,10 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       if (!assessmentQuestions.length) return [];
       const material = materialByAssessment.get(assessment.id);
       const aiInput = {
+        // Only evidence the version check covers reaches the model: the
+        // title is not evidence (renaming does not supersede an analysis).
         assessment: {
           id: assessment.id,
-          title: assessment.title,
           contextText: material?.context_text ?? null,
           instructionsText: material?.instructions_text ?? null,
         },

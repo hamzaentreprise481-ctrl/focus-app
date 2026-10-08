@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { authConfig } from "./config";
-import { hasActiveTeacherMembership } from "./policy";
+import { isTeacher } from "./policy";
 
 export async function createAuthClient() {
   const config = authConfig();
@@ -41,8 +41,7 @@ export const getTeacher = cache(async () => {
       data: { user },
       error,
     } = await supabase.auth.getUser();
-    if (error || !user) return null;
-    return (await hasActiveTeacherMembership(supabase, user)) ? user : null;
+    return !error && isTeacher(user) ? user : null;
   } catch {
     return null;
   }

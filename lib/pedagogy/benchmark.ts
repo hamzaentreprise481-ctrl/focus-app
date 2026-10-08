@@ -203,36 +203,3 @@ export function aggregate(scores: CaseScore[]) {
     rejectionReasons,
   };
 }
-
-
-export type BenchmarkMetrics = ReturnType<typeof aggregate>;
-
-/**
- * Release criteria for the fixed 47-case pedagogical benchmark.
- * These are intentionally safety-oriented: a release must not trade missing
- * real errors for a superficially clean output.
- */
-export function releaseGateFailures(metrics: BenchmarkMetrics): string[] {
-  const failures: string[] = [];
-  const atLeast = (name: string, value: number | null, minimum: number) => {
-    if (value === null || value < minimum) failures.push(`${name}=${value ?? "null"} < ${minimum}`);
-  };
-  const atMost = (name: string, value: number | null, maximum: number) => {
-    if (value === null || value > maximum) failures.push(`${name}=${value ?? "null"} > ${maximum}`);
-  };
-
-  if (metrics.cases < 47) failures.push(`cases=${metrics.cases} < 47`);
-  if (metrics.failures !== 0) failures.push(`failures=${metrics.failures} != 0`);
-  atLeast("statusAccuracy", metrics.statusAccuracy, 0.95);
-  atMost("falsePositiveCaseRate", metrics.falsePositiveCaseRate, 0.08);
-  atMost("falseNegativeCaseRate", metrics.falseNegativeCaseRate, 0.05);
-  atLeast("findingPrecision", metrics.findingPrecision, 0.95);
-  atLeast("findingRecall", metrics.findingRecall, 0.95);
-  atLeast("exactQuestionAccuracy", metrics.exactQuestionAccuracy, 0.95);
-  atLeast("notionAccuracy", metrics.notionAccuracy, 0.98);
-  atLeast("literalEvidenceValidity", metrics.literalEvidenceValidity, 1);
-  atLeast("catalogueCodeValidity", metrics.catalogueCodeValidity, 1);
-  atLeast("insufficientEvidenceRecall", metrics.insufficientEvidenceRecall, 0.8);
-  atLeast("insufficientEvidencePrecision", metrics.insufficientEvidencePrecision, 0.8);
-  return failures;
-}

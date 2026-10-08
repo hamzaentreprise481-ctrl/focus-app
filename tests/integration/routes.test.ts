@@ -87,18 +87,6 @@ const mock = createServer(async (req, res) => {
     res.statusCode = 204;
     return res.end();
   }
-  if (url.pathname === "/rest/v1/school_memberships") {
-    const bearer = req.headers.authorization?.replace("Bearer ", "");
-    const activeTeacher = bearer === token() && !revoked;
-    res.setHeader("Content-Range", activeTeacher ? "0-0/*" : "*/*");
-    return res.end(
-      JSON.stringify(
-        activeTeacher
-          ? [{ id: "22222222-2222-4222-8222-222222222222" }]
-          : [],
-      ),
-    );
-  }
   res.statusCode = 404;
   res.end("{}");
 });
@@ -323,7 +311,7 @@ test("real login server action creates persistent HttpOnly session and returns t
     assert.match(page.headers.get("cache-control")!, /no-store/);
   }
 });
-test("active teacher membership revocation immediately blocks the same session", async () => {
+test("provider-side role revocation immediately blocks the same session", async () => {
   revoked = true;
   const r = await request("/app/eleves");
   assert.equal(r.status, 307);

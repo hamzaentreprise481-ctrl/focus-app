@@ -1,19 +1,19 @@
 # Staging — rehearse the migrations on a real Supabase database
 
-> **2 October 2026.** The nine migrations below are now applied on the live
-> project (schema identical to the repository, `tests/schema-live.test.ts`).
-> The same procedure applies to the next pending migrations,
-> `20261002120000_access_integrity_hardening` and
-> `20261004090000_engine_signed_analyses`: dump live, restore, mark every
-> version up to `20260927100000` as applied, `supabase db push`, install the
-> engine key (section 2), then run `supabase/staging/verify.sql` (it now
-> expects `20261004090000`) and `supabase/staging/rls-probe.sql`.
+> **7 October 2026.** The live FOCUS project currently ends at
+> `20260927100000_ai_usage_events`. The repository also contains the pending
+> migrations `20261002120000_access_integrity_hardening`,
+> `20261004090000_engine_signed_analyses`,
+> `20261007090000_active_teacher_membership`, and
+> `20261007130000_scan_import_storage`. None of those four has been applied
+> to live. Rehearse them on a real Supabase staging database before any
+> production promotion.
 
-The nine migrations after the live head (`20260926120000` → `20260927100000`)
-have only run on PostgreSQL in PGlite. Before the live project, they must run
-on a **real Supabase database that holds a copy of the live data**, because the
-key check — the 44 curriculum UUIDs stay the same — is only meaningful on live
-identifiers. Nothing here touches the live project except read-only dumps.
+The scan migration creates the atomic database import function and Storage RLS
+policies. The private `focus-scan-imports` bucket itself is an environment
+resource and is provisioned through the Supabase Storage API with
+`npm run setup:scan-storage`; the migration never writes Storage metadata
+directly.
 
 ## 0. What the owner decides
 
@@ -57,9 +57,9 @@ returns `ce217d6976dbfcbf2f714e3143cea930` (the live fingerprint).
 
 ```bash
 supabase link --project-ref <staging-ref>
-supabase db push --dry-run     # lists exactly the nine new migrations
+supabase db push --dry-run     # lists the repository migrations missing on staging
 supabase db push
-supabase migration list        # now ends at 20260927100000
+supabase migration list        # must now end at 20261007130000
 ```
 
 Then install the engine signing key once in staging (SQL editor), with the
@@ -70,6 +70,22 @@ insert into focus_private.engine_keys (id, secret) values (1, decode('<hex>', 'h
 on conflict (id) do update set secret = excluded.secret, rotated_at = now();
 ```
 
+Provision the private scan bucket with the staging project credentials from an
+administrator shell. The command is a dry run unless `--commit` is present:
+
+```bash
+SUPABASE_URL=https://<staging-ref>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<staging service-role key> \
+npm run setup:scan-storage
+
+# After checking the target:
+SUPABASE_URL=https://<staging-ref>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<staging service-role key> \
+npm run setup:scan-storage -- --commit
+```
+
+Never put `SUPABASE_SERVICE_ROLE_KEY` in Vercel or in a browser environment.
+
 ## 3. Verify
 
 1. **Schema, curriculum, catalogue, grants:** run
@@ -78,8 +94,9 @@ on conflict (id) do update set secret = excluded.secret, rotated_at = now();
    `FOCUS staging verification: OK`. It checks the schema version, the 44 live
    UUIDs, 99 active nodes, 330 relationships, 272 objectives, 99 typical
    errors, 99 remediations, RLS on every table, nothing granted to anon, the
-   one definer function anon may run, no per-row `auth.uid()` policy, and the
-   functions the app calls. The same script is tested on a replica
+   one definer function anon may run, no per-row `auth.uid()` policy, the
+   functions the app calls, and — on real Supabase — the private PDF-only scan
+   bucket plus its three Storage policies. The same script is tested on a replica
    (`tests/staging-verify.test.ts`), including that it fails when a UUID,
    migration, count or grant is wrong.
 2. **Advisors:** Dashboard → Advisors (security and performance). Expected:
