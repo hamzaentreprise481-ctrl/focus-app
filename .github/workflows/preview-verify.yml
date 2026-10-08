@@ -1,0 +1,83 @@
+name: FOCUS Preview verification
+
+# Runs once per Vercel deployment, on that deployment's own URL and commit.
+# A pass means the deployment serves exactly this commit AND its Supabase,
+# database schema and model are usable. Anything unproven (protection,
+# wrong commit, missing configuration) fails this check; it never passes
+# by default. The normal code checks live in ci.yml and are independent.
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-preview:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      !contains(github.event.deployment.environment, 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Verify the deployment of this commit
+        id: verify
+        env:
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          EXPECTED_SHA: ${{ github.event.deployment.sha }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          ENVIRONMENT: ${{ github.event.deployment.environment }}
+        shell: bash
+        run: |
+          set +e
+          node scripts/verify-preview.mjs "$DEPLOYMENT_URL" "$EXPECTED_SHA" | tee result.json
+          code=${PIPESTATUS[0]}
+          verdict="$(jq -r '.verdict // "UNVERIFIED"' result.json 2>/dev/null || echo UNVERIFIED)"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Preview verification: $verdict"
+            echo
+            echo "Environment: \`$ENVIRONMENT\` — commit \`$EXPECTED_SHA\`"
+            echo
+            echo '```json'
+            cat result.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - name: Record the verdict on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.deployment.sha }}
+          ENVIRONMENT: ${{ github.event.deployment.environment }}
+          VERDICT: ${{ steps.verify.outputs.verdict }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          state=failure
+          [ "$VERDICT" = "VERIFIED" ] && state=success
+          case "$VERDICT" in
+            VERIFIED) description="This deployment runs this commit; Supabase, schema and model are ready." ;;
+            "NOT READY") description="Right commit, but Supabase, schema or model is not ready (see run)." ;;
+            *) description="Not verified: protected, unreachable or another commit (see run)." ;;
+          esac
+          jq -n --arg state "$state" --arg context "FOCUS Preview verified ($ENVIRONMENT)" \
+                --arg description "$description" --arg target_url "$RUN_URL" \
+                '{state: $state, context: $context, description: $description, target_url: $target_url}' |
+            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPOSITORY/statuses/$SHA" -d @- > /dev/null
+      - name: Fail unless verified
+        if: steps.verify.outputs.verdict != 'VERIFIED'
+        env:
+          VERDICT: ${{ steps.verify.outputs.verdict }}
+        run: |
+          echo "::error::Preview $VERDICT — see the job summary. Nothing about this deployment's Supabase/OpenAI integration is proven."
+          exit 1

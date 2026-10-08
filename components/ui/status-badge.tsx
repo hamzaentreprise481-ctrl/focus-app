@@ -1,9 +1,12 @@
 import { cn } from "@/lib/utils";
 import type { StatusLevel } from "@/lib/types";
 
-const STATUS_CONFIG: Record<StatusLevel, { label: string; dot: string; text: string; bg: string }> = {
+const STATUS_CONFIG: Record<
+  StatusLevel,
+  { label: string; dot: string; text: string; bg: string }
+> = {
   normal: {
-    label: "Normal",
+    label: "Sans signal particulier",
     dot: "bg-normal",
     text: "text-normal",
     bg: "bg-normal-soft",
@@ -15,14 +18,20 @@ const STATUS_CONFIG: Record<StatusLevel, { label: string; dot: string; text: str
     bg: "bg-watch-soft",
   },
   attention: {
-    label: "Attention",
-    dot: "bg-attention",
-    text: "text-attention",
-    bg: "bg-attention-soft",
+    label: "À examiner",
+    dot: "bg-brand",
+    text: "text-brand",
+    bg: "bg-brand-soft",
   },
 };
 
-export function StatusBadge({ status, className }: { status: StatusLevel; className?: string }) {
+export function StatusBadge({
+  status,
+  className,
+}: {
+  status: StatusLevel;
+  className?: string;
+}) {
   const config = STATUS_CONFIG[status];
   return (
     <span
@@ -30,7 +39,7 @@ export function StatusBadge({ status, className }: { status: StatusLevel; classN
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
         config.bg,
         config.text,
-        className
+        className,
       )}
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", config.dot)} />
