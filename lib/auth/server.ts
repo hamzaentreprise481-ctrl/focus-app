@@ -4,7 +4,10 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { authConfig } from "./config";
-import { hasActiveTeacherMembership } from "./policy";
+import {
+  hasActiveStudentMembership,
+  hasActiveTeacherMembership,
+} from "./policy";
 
 export async function createAuthClient() {
   const config = authConfig();
@@ -48,6 +51,21 @@ export const getTeacher = cache(async () => {
   }
 });
 
+export const getStudent = cache(async () => {
+  const supabase = await createAuthClient();
+  if (!supabase) return null;
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    return (await hasActiveStudentMembership(supabase, user)) ? user : null;
+  } catch {
+    return null;
+  }
+});
+
 /** Call again in every future server data reader and mutation, not only layouts. */
 export async function requireTeacher() {
   const teacher = await getTeacher();
@@ -55,12 +73,19 @@ export async function requireTeacher() {
   return teacher;
 }
 
+/** Student readers use the same server-side membership check as the layout. */
+export async function requireStudent() {
+  const student = await getStudent();
+  if (!student) redirect("/connexion-eleve");
+  return student;
+}
+
 /** Only called by server actions; also clears chunked cookies after provider errors. */
 export async function clearAuthCookies() {
   const cookieStore = await cookies();
   const config = authConfig();
   if (!config) return;
-  const prefix = `sb-${new URL(config.url).hostname.split(".")[0]}-auth-token`;
+  const prefix = "sb-" + new URL(config.url).hostname.split(".")[0] + "-auth-token";
   for (const cookie of cookieStore.getAll()) {
     if (
       cookie.name === prefix ||
