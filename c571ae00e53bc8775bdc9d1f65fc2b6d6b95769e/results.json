@@ -1,0 +1,250 @@
+{
+  "mode": "baseline-current-pipeline",
+  "generatedAt": "2026-10-09T08:50:39.698Z",
+  "sha": "c571ae00e53bc8775bdc9d1f65fc2b6d6b95769e",
+  "scanModel": "gpt-6-astra",
+  "analysisModel": "gpt-6-astra",
+  "analysisEffort": "low",
+  "results": [
+    {
+      "id": "E2-S1-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 2054
+      }
+    },
+    {
+      "id": "E1-S2-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 2113
+      }
+    },
+    {
+      "id": "E3-S1-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 2135
+      }
+    },
+    {
+      "id": "E2-S2-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1763
+      }
+    },
+    {
+      "id": "E1-S3-C",
+      "kind": "profile",
+      "level": "C",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1781
+      }
+    },
+    {
+      "id": "E2-S3-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 2743
+      }
+    },
+    {
+      "id": "E3-S3-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1322
+      }
+    },
+    {
+      "id": "E1-S3-series-A",
+      "kind": "legibility_series",
+      "level": "A",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1025
+      }
+    },
+    {
+      "id": "E1-S5-E",
+      "kind": "profile",
+      "level": "E",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1457
+      }
+    },
+    {
+      "id": "E1-S3-series-B",
+      "kind": "legibility_series",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1063
+      }
+    },
+    {
+      "id": "E1-S3-series-C",
+      "kind": "legibility_series",
+      "level": "C",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1804
+      }
+    },
+    {
+      "id": "E1-S3-series-D",
+      "kind": "legibility_series",
+      "level": "D",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 2235
+      }
+    },
+    {
+      "id": "E1-S3-series-E",
+      "kind": "legibility_series",
+      "level": "E",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1619
+      }
+    },
+    {
+      "id": "FM-blur",
+      "kind": "failure_mode",
+      "level": "A",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1205
+      }
+    },
+    {
+      "id": "FM-rotated-180",
+      "kind": "failure_mode",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 847
+      }
+    },
+    {
+      "id": "FM-dark",
+      "kind": "failure_mode",
+      "level": "A",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1055
+      }
+    },
+    {
+      "id": "FM-cut",
+      "kind": "failure_mode",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1760
+      }
+    },
+    {
+      "id": "FM-blank",
+      "kind": "failure_mode",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 942
+      }
+    },
+    {
+      "id": "E1-S4-B",
+      "kind": "profile",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 30706
+      }
+    },
+    {
+      "id": "E1-S1-A",
+      "kind": "profile",
+      "level": "A",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 38439
+      }
+    },
+    {
+      "id": "FM-injection",
+      "kind": "failure_mode",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 1279
+      }
+    },
+    {
+      "id": "FM-rotated-90",
+      "kind": "failure_mode",
+      "level": "B",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 30763
+      }
+    },
+    {
+      "id": "FM-not-a-copy",
+      "kind": "failure_mode",
+      "level": null,
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 30761
+      }
+    },
+    {
+      "id": "FM-multipage-reversed",
+      "kind": "failure_mode",
+      "level": "C",
+      "scan": {
+        "ok": false,
+        "error": "SCAN_MODEL_HTTP_429",
+        "latencyMs": 31008
+      }
+    }
+  ]
+}
