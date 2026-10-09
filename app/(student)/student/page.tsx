@@ -1,3 +1,4 @@
+import { requireStudent } from "@/lib/auth/server";
 import Link from "next/link";
 import { ArrowRight, ClipboardCheck, TrendingUp } from "lucide-react";
 import {
@@ -15,6 +16,7 @@ function formatDate(value: string) {
 }
 
 export default async function StudentHomePage() {
+  await requireStudent();
   const [identity, assessments, progress] = await Promise.all([
     loadStudentIdentity(),
     loadStudentAssessments(),

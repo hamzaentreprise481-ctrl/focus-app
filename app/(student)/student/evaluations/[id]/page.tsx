@@ -1,3 +1,4 @@
+import { requireStudent } from "@/lib/auth/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MessageCircleQuestion } from "lucide-react";
@@ -23,6 +24,7 @@ export default async function StudentAssessmentPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireStudent();
   const { id } = await params;
   const assessment = await loadStudentAssessmentDetail(id);
   if (!assessment) notFound();

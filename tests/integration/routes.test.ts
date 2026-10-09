@@ -184,11 +184,18 @@ test("public response uses only fictitious marketing fixture and keeps login sep
   const response = await request("/");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Données fictives de démonstration/);
-  assert.doesNotMatch(
-    html,
-    /Lucas Bernard|Adam Benali|lucas-bernard|demo-overlay|Se déconnecter/,
-  );
+  // The portal: one entry per space, each with its own login.
+  for (const href of ["/connexion", "/connexion-eleve", "/connexion-direction"])
+    assert.match(html, new RegExp(`href="${href}"`));
+  const teacher = await request("/enseignants");
+  assert.equal(teacher.status, 200);
+  const teacherHtml = await teacher.text();
+  assert.match(teacherHtml, /Données fictives de démonstration/);
+  for (const page of [html, teacherHtml])
+    assert.doesNotMatch(
+      page,
+      /Lucas Bernard|Adam Benali|lucas-bernard|demo-overlay|Se déconnecter/,
+    );
 });
 test("all unauthenticated teacher routes and RSC requests redirect without roster data", async () => {
   for (const route of [
@@ -241,7 +248,7 @@ test("deployment smoke check accepts the configured public and protected routes"
     "scripts/check-deployment.mjs", origin,
   ]);
   assert.doesNotMatch(stdout, /FAIL/);
-  assert.equal((stdout.match(/^PASS /gm) ?? []).length, 8);
+  assert.equal((stdout.match(/^PASS /gm) ?? []).length, 12);
 });
 
 test("invalid password and missing input never establish a teacher session", async () => {

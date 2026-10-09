@@ -191,9 +191,15 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
       selectAll<ClassRow>("Les classes", (from, to) =>
         supabase.from("classes").select("id,name,level,academic_year_id", { count: "exact" })
           .eq("school_id", schoolId).order("id").range(from, to)),
-      selectAll<SubjectRow>("Les matières", (from, to) =>
-        supabase.from("subjects").select("id,name,code", { count: "exact" })
-          .or(`school_id.eq.${schoolId},school_id.is.null`).order("id").range(from, to)),
+      // The school's own subjects and the shared ones (school_id null).
+      Promise.all([
+        selectAll<SubjectRow>("Les matières", (from, to) =>
+          supabase.from("subjects").select("id,name,code", { count: "exact" })
+            .eq("school_id", schoolId).order("id").range(from, to)),
+        selectAll<SubjectRow>("Les matières communes", (from, to) =>
+          supabase.from("subjects").select("id,name,code", { count: "exact" })
+            .is("school_id", null).order("id").range(from, to)),
+      ]).then((parts) => parts.flat()),
       selectAll<Assignment>("Les affectations", (from, to) =>
         supabase.from("teacher_assignments").select("teacher_id,class_id,subject_id", { count: "exact" })
           .eq("school_id", schoolId).order("id").range(from, to)),
@@ -206,9 +212,14 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
       selectAll<Lesson>("Les séances", (from, to) =>
         supabase.from("lessons").select("id,class_id,subject_id,teacher_id,date", { count: "exact" })
           .eq("school_id", schoolId).order("id").range(from, to)),
-      selectAll<Competency>("Le référentiel de compétences", (from, to) =>
-        supabase.from("competencies").select("id,subject_id,name", { count: "exact" })
-          .or(`school_id.eq.${schoolId},school_id.is.null`).order("id").range(from, to)),
+      Promise.all([
+        selectAll<Competency>("Le référentiel de compétences", (from, to) =>
+          supabase.from("competencies").select("id,subject_id,name", { count: "exact" })
+            .eq("school_id", schoolId).order("id").range(from, to)),
+        selectAll<Competency>("Le référentiel commun", (from, to) =>
+          supabase.from("competencies").select("id,subject_id,name", { count: "exact" })
+            .is("school_id", null).order("id").range(from, to)),
+      ]).then((parts) => parts.flat()),
       selectAll<Source>("Les programmes officiels", (from, to) =>
         supabase.from("curriculum_sources").select("id,subject_code,level_code", { count: "exact" })
           .order("id").range(from, to)),
