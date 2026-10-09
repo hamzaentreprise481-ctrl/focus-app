@@ -347,12 +347,12 @@ test("unusable photos, documents that are not copies and an exhausted credit fai
 
   nextReading = () => ({ __status: 429, __body: { error: { type: "insufficient_quota", code: "credit_balance_exhausted", message: "fictional" } } });
   await upload(page, "E1-S2-B.jpg");
-  await page.getByText(/Le quota du service de lecture des copies est épuisé/).waitFor({ timeout: 60_000 });
+  await page.getByText(/Le crédit du fournisseur d’IA \(OpenAI\) est épuisé : le service de lecture des copies ne peut pas fonctionner/).waitFor({ timeout: 60_000 });
 
   const before = stack.model.calls.length;
   nextReading = () => ({ __status: 503, __body: {} });
   await upload(page, "E1-S2-B.jpg");
-  await page.getByText(/La reconnaissance du PDF n’a pas abouti/).waitFor({ timeout: 90_000 });
+  await page.getByText(/Le service de lecture des copies est injoignable ou en panne pour le moment\. Aucune copie n’a été importée\./).waitFor({ timeout: 90_000 });
   assert.equal(stack.model.calls.length - before, 3, "a provider outage is retried, within the time budget");
 
   const rows = await stack.db.query("select 1 from public.student_responses where assessment_id = $1", [failuresAssessment]);

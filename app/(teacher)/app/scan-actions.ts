@@ -1,5 +1,6 @@
 "use server";
 
+import { classifyProviderFailure, providerFailureMessage } from "@/lib/pedagogy/provider-errors";
 import { randomUUID } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { revalidatePath } from "next/cache";
@@ -123,15 +124,10 @@ function friendlyError(error: unknown): string {
   if (code === "EMPTY_ROSTER")
     return "Aucun élève n’est inscrit dans cette classe.";
   if (code === "SCAN_FILE_SIZE")
-    return "Le PDF est vide ou dépasse 50 Mo.";
-  if (code === "SCAN_MODEL_TIMEOUT")
-    return "La reconnaissance du PDF a dépassé le délai prévu. Réessayez avec un PDF plus court.";
-  if (code === "SCAN_MODEL_QUOTA")
-    return "Le quota du service de lecture des copies est épuisé. Aucune copie n’a été importée ; prévenez l’administrateur de FOCUS.";
-  if (code === "SCAN_MODEL_RATE_LIMITED")
-    return "Le service de lecture des copies est momentanément saturé. Aucune copie n’a été importée ; réessayez dans quelques minutes.";
+    return "Le fichier est vide ou dépasse 50 Mo.";
   if (code.startsWith("SCAN_MODEL_"))
-    return "La reconnaissance du PDF n’a pas abouti. Le fichier est conservé uniquement le temps du traitement ; réessayez.";
+    // Credit, configuration, provider or unusable reading: one precise sentence.
+    return providerFailureMessage(classifyProviderFailure(code), "scan");
   return "L’import des copies n’a pas abouti. Réessayez.";
 }
 

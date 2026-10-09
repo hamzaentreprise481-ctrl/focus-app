@@ -138,7 +138,7 @@ test("a double click analyses the whole class; refused, insufficient and failed 
   assert.equal(new Set(retried).size, 1, "a retry resends the identical request");
   assert.equal(found.filter((answers) => answers.length === 0).length, 1, "the copy equal to the correction is analysed once");
   assert.equal(await page.getByText("Analyse arrêtée à votre demande").count(), 0);
-  await page.getByText("Arthur Meunier : L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard.").waitFor();
+  await page.getByText("Arthur Meunier : Le service d’analyse est injoignable ou en panne pour le moment. Rien n’a été enregistré. Réessayez plus tard.").waitFor();
   // The failed copy stays queued; nothing was recorded for it.
   await page.getByRole("button", { name: "Analyser la copie non analysée" }).waitFor();
 
