@@ -1,9 +1,9 @@
 name: FOCUS eval collect (temporary)
 
 # TEMPORARY — evaluation branch only. After a successful Vercel Preview of a
-# commit that contains scripts/eval/ENABLED, fetch the evaluation outputs the
-# build wrote under /__focus-eval/ (protected deployment: automation bypass)
-# and store them on the focus-eval-results branch, under the commit SHA.
+# commit that contains scripts/eval/PLAN.json, drive the Preview's
+# /api/focus-eval endpoint copy by copy (scripts/eval/drive.mjs) and store
+# every answer on the focus-eval-results branch, under the commit SHA.
 
 on:
   deployment_status:
@@ -12,56 +12,50 @@ permissions:
   contents: write
 
 concurrency:
-  group: focus-eval-collect
+  group: focus-eval-collect-${{ github.event.deployment.sha }}
   cancel-in-progress: false
 
 jobs:
   collect:
     if: github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.deployment.sha }}
           fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
       - name: Only evaluation commits
         id: gate
         shell: bash
         run: |
-          if [ -f scripts/eval/ENABLED ]; then echo "on=1" >> "$GITHUB_OUTPUT"; else echo "on=0" >> "$GITHUB_OUTPUT"; fi
-      - name: Fetch and store evaluation outputs
+          if [ -f scripts/eval/PLAN.json ]; then echo "on=1" >> "$GITHUB_OUTPUT"; else echo "on=0" >> "$GITHUB_OUTPUT"; fi
+      - name: Prepare the results worktree
+        if: steps.gate.outputs.on == '1'
+        shell: bash
+        run: |
+          git config --global user.name "focus-eval-bot"
+          git config --global user.email "focus-eval-bot@users.noreply.github.com"
+          if git ls-remote --exit-code origin refs/heads/focus-eval-results >/dev/null; then
+            git fetch -q origin focus-eval-results
+            git worktree add -q "$RUNNER_TEMP/res" FETCH_HEAD
+            git -C "$RUNNER_TEMP/res" checkout -q -B focus-eval-results
+          else
+            git worktree add -q --detach "$RUNNER_TEMP/res" HEAD
+            git -C "$RUNNER_TEMP/res" checkout -q --orphan focus-eval-results
+            git -C "$RUNNER_TEMP/res" rm -rfq .
+          fi
+      - name: Drive the evaluation
         if: steps.gate.outputs.on == '1'
         shell: bash
         env:
           URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
-          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           SHA: ${{ github.event.deployment.sha }}
-          GH_HAS_OPENAI: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
-          set -u
-          mkdir -p "$RUNNER_TEMP/out"
-          for f in probe.json results.json harness-error.json; do
-            code=$(curl -sS -H "x-vercel-protection-bypass: $BYPASS" "$URL/__focus-eval/$f" -o "$RUNNER_TEMP/out/$f" -w "%{http_code}" || echo 000)
-            echo "$f -> $code"
-            [ "$code" = "200" ] || rm -f "$RUNNER_TEMP/out/$f"
-          done
-          curl -sS -H "x-vercel-protection-bypass: $BYPASS" "$URL/api/health" -o "$RUNNER_TEMP/out/health.json" || true
-          printf '{"githubHasOpenAiSecret": %s, "collectedAt": "%s"}\n' "$GH_HAS_OPENAI" "$(date -u +%FT%TZ)" > "$RUNNER_TEMP/out/github.json"
-          git config user.name "focus-eval-bot"
-          git config user.email "focus-eval-bot@users.noreply.github.com"
-          for attempt in 1 2 3 4 5; do
-            rm -rf "$RUNNER_TEMP/res"
-            if git ls-remote --exit-code origin refs/heads/focus-eval-results >/dev/null; then
-              git fetch -q --depth=1 origin focus-eval-results
-              git worktree add -q --detach "$RUNNER_TEMP/res" FETCH_HEAD
-            else
-              git worktree add -q --detach "$RUNNER_TEMP/res" HEAD
-              (cd "$RUNNER_TEMP/res" && git checkout -q --orphan results-tmp && git rm -rfq .)
-            fi
-            mkdir -p "$RUNNER_TEMP/res/$SHA"
-            cp "$RUNNER_TEMP"/out/* "$RUNNER_TEMP/res/$SHA/"
-            (cd "$RUNNER_TEMP/res" && git add -A && git commit -qm "eval outputs for $SHA" && git push -q origin HEAD:refs/heads/focus-eval-results) && break
-            git worktree remove --force "$RUNNER_TEMP/res" || true
-            sleep $((attempt * 5))
-          done
+          curl -sS -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" "$URL/api/health" -o "$RUNNER_TEMP/health.json" || true
+          mkdir -p "$RUNNER_TEMP/res/$SHA" && cp "$RUNNER_TEMP/health.json" "$RUNNER_TEMP/res/$SHA/health.json" || true
+          node scripts/eval/drive.mjs "$URL" "$RUNNER_TEMP/res" "$SHA"

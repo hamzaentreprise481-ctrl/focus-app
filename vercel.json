@@ -1,5 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "fluid": true,
-  "buildCommand": "node scripts/eval/vercel-build.mjs"
+  "fluid": true
 }
