@@ -51,6 +51,24 @@ export async function POST(request: Request) {
         entry.errorCode = "unparsable";
       }
     }
+    if (response.ok) {
+      // Usage only (token counts and the model snapshot that answered) — never content.
+      try {
+        const payload = (await response.clone().json()) as {
+          model?: string;
+          usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number }; output_tokens_details?: { reasoning_tokens?: number } };
+        };
+        entry.model = payload.model ?? null;
+        entry.usage = {
+          input: payload.usage?.input_tokens ?? null,
+          cachedInput: payload.usage?.input_tokens_details?.cached_tokens ?? null,
+          output: payload.usage?.output_tokens ?? null,
+          reasoning: payload.usage?.output_tokens_details?.reasoning_tokens ?? null,
+        };
+      } catch {
+        entry.usage = "unparsable";
+      }
+    }
     providerLog.push(entry);
     return response;
   }) as typeof fetch;

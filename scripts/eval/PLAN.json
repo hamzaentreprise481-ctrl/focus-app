@@ -1,7 +1,14 @@
 {
-  "about": "FIXED pipeline (work/fiabiliser-analyse-ia): the production reader and analysis via runHandwritingCopy, on every fictitious handwritten copy. 'pdf' = what the browser sends (photos assembled into a PDF); 'images' = the same photos sent as images, on the legibility series only, to compare. No harness-level retry: the production client's own bounded retries are measured. Stops at the first exhausted-credit answer.",
+  "about": "STEP 1 of the paid evaluation (credit recharged 9 Oct, owner asked: one copy first, measure, then small batches). ONE representative fictitious copy: E1-S2-B (level B phone photo, 4 correct answers, 1 real fraction error) through the production reader and analysis. The driver stops if /api/health does not report the model as answering.",
   "runs": [
-    { "name": "fixed-pdf", "copies": "all", "options": { "input": "pdf" } },
-    { "name": "fixed-images", "copies": ["E1-S3-series-A", "E1-S3-series-B", "E1-S3-series-C", "E1-S3-series-D", "E1-S3-series-E"], "options": { "input": "images" } }
+    {
+      "name": "step1",
+      "copies": [
+        "E1-S2-B"
+      ],
+      "options": {
+        "input": "pdf"
+      }
+    }
   ]
 }

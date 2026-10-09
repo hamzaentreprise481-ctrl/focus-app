@@ -44,6 +44,18 @@ function commit(message) {
 
 const runs = plan.runs ?? [];
 writeFileSync(path.join(outDir, "plan.json"), JSON.stringify(plan, null, 2));
+// Spend nothing unless the deployment's own health check says the model answers.
+let health = null;
+try {
+  health = JSON.parse(readFileSync(path.join(outDir, "health.json"), "utf8"));
+} catch {
+  /* unreadable health */
+}
+if (health?.ai?.ok !== true) {
+  writeFileSync(path.join(outDir, "STOPPED.txt"), `Not run: /api/health ai=${JSON.stringify(health?.ai ?? null)}\n`);
+  commit(`eval ${sha.slice(0, 7)} not run: model not answering`);
+  process.exit(0);
+}
 for (const run of runs) {
   const copies = run.copies === "all" ? manifest.copies : manifest.copies.filter((c) => run.copies.includes(c.id));
   for (const copy of copies) {
