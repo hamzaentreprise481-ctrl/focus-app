@@ -39,6 +39,18 @@ export async function hasActiveStudentMembership(
   return hasActiveMembership(supabase, user, "student");
 }
 
+/**
+ * FOCUS Direction is the database role "admin": the RLS policies already give
+ * an active school admin read access to their own school (is_school_admin),
+ * so no new role or migration is needed. A teacher membership never grants it.
+ */
+export async function hasActiveDirectorMembership(
+  supabase: SupabaseClient,
+  user: AuthenticatedUser | null | undefined,
+): Promise<boolean> {
+  return hasActiveMembership(supabase, user, "admin");
+}
+
 /** @deprecated Metadata is not the authorization source of truth. */
 export function isTeacher(
   user:
@@ -53,7 +65,10 @@ export function isTeacher(
   );
 }
 
-function safePortalNext(value: unknown, root: "/app" | "/student"): string {
+function safePortalNext(
+  value: unknown,
+  root: "/app" | "/student" | "/director",
+): string {
   if (typeof value !== "string" || /[\\\r\n\x00-\x1f]/.test(value))
     return root;
   try {
@@ -77,4 +92,8 @@ export function safeNext(value: unknown): string {
 
 export function safeStudentNext(value: unknown): string {
   return safePortalNext(value, "/student");
+}
+
+export function safeDirectorNext(value: unknown): string {
+  return safePortalNext(value, "/director");
 }
