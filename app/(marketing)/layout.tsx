@@ -23,8 +23,8 @@ export default function MarketingLayout({
             <Link href="/abonnements">Abonnements</Link>
             <Link href="/questions">Questions</Link>
           </nav>
-          <Link href="/connexion" className={styles.smallButton}>
-            Espace professeur
+          <Link href="/#espaces" className={styles.smallButton}>
+            Accéder à FOCUS
           </Link>
         </div>
       </header>
@@ -34,7 +34,7 @@ export default function MarketingLayout({
           <Link href="/" className={styles.brand}>
             FOCUS
           </Link>
-          <p>Des preuves visibles. Un professeur décisionnaire.</p>
+          <p>Teacher · Student · Director</p>
           <span>© 2026 FOCUS</span>
         </div>
       </footer>

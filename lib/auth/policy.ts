@@ -20,23 +20,33 @@ async function hasActiveMembership(
 }
 
 /**
- * Teacher authorization is derived from the canonical school membership row.
- * RLS allows an authenticated user to read their own membership, so this check
- * does not need a service-role key and cannot be forged through user metadata.
+ * Authorization is derived from canonical school membership rows.
+ * User metadata is never the source of truth for access.
  */
-export async function hasActiveTeacherMembership(
+export function hasActiveTeacherMembership(
   supabase: SupabaseClient,
   user: AuthenticatedUser | null | undefined,
-): Promise<boolean> {
+) {
   return hasActiveMembership(supabase, user, "teacher");
 }
 
-/** Student authorization follows the same canonical membership rule. */
-export async function hasActiveStudentMembership(
+export function hasActiveStudentMembership(
   supabase: SupabaseClient,
   user: AuthenticatedUser | null | undefined,
-): Promise<boolean> {
+) {
   return hasActiveMembership(supabase, user, "student");
+}
+
+/**
+ * The database role is named "admin"; the product surface calls it Director.
+ * Keeping the existing DB role avoids a schema migration while preserving a
+ * distinct route and UI.
+ */
+export function hasActiveDirectorMembership(
+  supabase: SupabaseClient,
+  user: AuthenticatedUser | null | undefined,
+) {
+  return hasActiveMembership(supabase, user, "admin");
 }
 
 /** @deprecated Metadata is not the authorization source of truth. */
@@ -53,7 +63,10 @@ export function isTeacher(
   );
 }
 
-function safePortalNext(value: unknown, root: "/app" | "/student"): string {
+function safePortalNext(
+  value: unknown,
+  root: "/app" | "/student" | "/director",
+): string {
   if (typeof value !== "string" || /[\\\r\n\x00-\x1f]/.test(value))
     return root;
   try {
@@ -63,7 +76,6 @@ function safePortalNext(value: unknown, root: "/app" | "/student"): string {
       !(url.pathname === root || url.pathname.startsWith(root + "/"))
     )
       return root;
-    // Reject encoded path characters to keep redirects unambiguous.
     if (/%/.test(url.pathname)) return root;
     return url.pathname + url.search + url.hash;
   } catch {
@@ -77,4 +89,8 @@ export function safeNext(value: unknown): string {
 
 export function safeStudentNext(value: unknown): string {
   return safePortalNext(value, "/student");
+}
+
+export function safeDirectorNext(value: unknown): string {
+  return safePortalNext(value, "/director");
 }

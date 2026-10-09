@@ -5,6 +5,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { authConfig } from "./config";
 import {
+  hasActiveDirectorMembership,
   hasActiveStudentMembership,
   hasActiveTeacherMembership,
 } from "./policy";
@@ -23,7 +24,6 @@ export async function createAuthClient() {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll(values) {
-        // Server Components cannot write cookies; proxy refreshes them first.
         try {
           values.forEach(({ name, value, options }) =>
             cookieStore.set(name, value, options),
@@ -36,51 +36,56 @@ export async function createAuthClient() {
   });
 }
 
-export const getTeacher = cache(async () => {
+async function authenticatedUser() {
   const supabase = await createAuthClient();
-  if (!supabase) return null;
+  if (!supabase) return { supabase: null, user: null };
   try {
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser();
-    if (error || !user) return null;
-    return (await hasActiveTeacherMembership(supabase, user)) ? user : null;
+    return { supabase, user: error ? null : user };
   } catch {
-    return null;
+    return { supabase, user: null };
   }
+}
+
+export const getTeacher = cache(async () => {
+  const { supabase, user } = await authenticatedUser();
+  if (!supabase || !user) return null;
+  return (await hasActiveTeacherMembership(supabase, user)) ? user : null;
 });
 
 export const getStudent = cache(async () => {
-  const supabase = await createAuthClient();
-  if (!supabase) return null;
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-    if (error || !user) return null;
-    return (await hasActiveStudentMembership(supabase, user)) ? user : null;
-  } catch {
-    return null;
-  }
+  const { supabase, user } = await authenticatedUser();
+  if (!supabase || !user) return null;
+  return (await hasActiveStudentMembership(supabase, user)) ? user : null;
 });
 
-/** Call again in every future server data reader and mutation, not only layouts. */
+export const getDirector = cache(async () => {
+  const { supabase, user } = await authenticatedUser();
+  if (!supabase || !user) return null;
+  return (await hasActiveDirectorMembership(supabase, user)) ? user : null;
+});
+
 export async function requireTeacher() {
   const teacher = await getTeacher();
   if (!teacher) redirect("/connexion");
   return teacher;
 }
 
-/** Student readers use the same server-side membership check as the layout. */
 export async function requireStudent() {
   const student = await getStudent();
   if (!student) redirect("/connexion-eleve");
   return student;
 }
 
-/** Only called by server actions; also clears chunked cookies after provider errors. */
+export async function requireDirector() {
+  const director = await getDirector();
+  if (!director) redirect("/connexion-direction");
+  return director;
+}
+
 export async function clearAuthCookies() {
   const cookieStore = await cookies();
   const config = authConfig();
