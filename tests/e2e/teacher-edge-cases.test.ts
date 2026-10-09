@@ -122,13 +122,21 @@ test("a double click analyses the whole class; refused, insufficient and failed 
     await summary.textContent(),
     "3 copies analysées : 1 copie avec erreur(s) observée(s) (1 hypothèse à examiner) ; 1 copie sans erreur observée — ce n’est pas une preuve de maîtrise ; 1 copie : preuves insuffisantes ; 1 échec, à relancer.",
   );
-  assert.equal(stack.model.calls.length - calls, 4, "one model call per copy, none twice");
+  // One analysis per copy despite the double click. The provider failure
+  // (HTTP 500) is retried by the client — the SAME request, 3 attempts at
+  // most within one deadline — and is then reported as a failure.
+  // Only the evidence sent (the system prompt itself names the [illisible] marker).
+  const made = stack.model.calls.slice(calls).map((call) => (call as { input: Array<{ content: Array<{ text: string }> }> }).input[1].content[0].text);
+  assert.equal(made.length, 6, "4 copies, the failing one attempted 3 times");
   // Each request carries one student's copy only (Baptiste's answer is the
   // correction, present in every request, so it marks nobody).
   const distinctive = ["2x + 3", ILLEGIBLE_MARKER, MODEL_FAILURE_MARKER];
-  const found = stack.model.calls.slice(calls).map((call) => distinctive.filter((answer) => JSON.stringify(call).includes(answer)));
+  const found = made.map((evidence) => distinctive.filter((answer) => evidence.includes(answer)));
   assert.ok(found.every((answers) => answers.length <= 1), JSON.stringify(found));
-  assert.deepEqual(found.flat().sort(), [...distinctive].sort());
+  assert.deepEqual(found.flat().sort(), ["2x + 3", ILLEGIBLE_MARKER, MODEL_FAILURE_MARKER, MODEL_FAILURE_MARKER, MODEL_FAILURE_MARKER].sort());
+  const retried = made.filter((evidence) => evidence.includes(MODEL_FAILURE_MARKER));
+  assert.equal(new Set(retried).size, 1, "a retry resends the identical request");
+  assert.equal(found.filter((answers) => answers.length === 0).length, 1, "the copy equal to the correction is analysed once");
   assert.equal(await page.getByText("Analyse arrêtée à votre demande").count(), 0);
   await page.getByText("Arthur Meunier : L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard.").waitFor();
   // The failed copy stays queued; nothing was recorded for it.

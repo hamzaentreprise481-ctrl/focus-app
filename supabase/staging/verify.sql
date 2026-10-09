@@ -3,7 +3,7 @@
 -- one DO block that raises at the first failed check. Success prints
 -- "FOCUS staging verification: OK".
 --
--- Checks: schema version (20261007130000); the 44 curriculum UUIDs captured from live on
+-- Checks: schema version (20261009120000); the 44 curriculum UUIDs captured from live on
 -- 2026-09-26 are unchanged; the Seconde graph (99 active nodes, 330
 -- relationships) and its catalogue (272 objectives, 99 typical errors,
 -- 99 remediations); RLS on every public table; nothing granted to anon;
@@ -24,8 +24,8 @@ begin
   -- 1. Schema version (Supabase records each migration it applied).
   if to_regclass('supabase_migrations.schema_migrations') is not null then
     select max(version) into v_version from supabase_migrations.schema_migrations;
-    if v_version is distinct from '20261007130000' then
-      raise exception 'schema version is %, expected 20261007130000', v_version;
+    if v_version is distinct from '20261009120000' then
+      raise exception 'schema version is %, expected 20261009120000', v_version;
     end if;
   end if;
 
@@ -135,12 +135,12 @@ begin
     'focus_teacher_work_queue', 'focus_curriculum_graph', 'focus_schema_version', 'focus_import_curriculum',
     'focus_import_curriculum_catalogue', 'focus_record_ai_usage', 'teaches_class_subject', 'focus_normalize_math_text',
     'focus_record_engine_analysis', 'focus_analysis_evidence_versions',
-    'focus_import_scanned_copy'
+    'focus_import_scanned_copy', 'focus_verify_transcription'
   ]) as f
   where not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = f);
   if v_missing is not null then raise exception 'missing functions: %', v_missing; end if;
   -- A recorded finding respects the teacher's grading (section 6 of 20261002120000).
-  if pg_get_functiondef('public.focus_persist_pedagogical_analysis(uuid, uuid, uuid, text, text, jsonb, jsonb)'::regprocedure)
+  if pg_get_functiondef('public.focus_persist_pedagogical_analysis(uuid, uuid, uuid, text, text, jsonb, jsonb, jsonb)'::regprocedure)
      !~ 'answer given full marks' then
     raise exception 'focus_persist_pedagogical_analysis does not refuse findings on full marks';
   end if;

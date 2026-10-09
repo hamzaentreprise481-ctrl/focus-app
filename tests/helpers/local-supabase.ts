@@ -8,6 +8,10 @@
 //   many-to-one embeds), eq/neq/in/is/gt/gte/lt/lte filters, order, limit,
 //   exact counts (HEAD), PATCH, and POST /rpc/<function>.
 //
+// - Storage: the private scan bucket's signed upload, upload, download and
+//   remove, with the same rule as the bucket's RLS policies (own folder,
+//   active teacher membership), MIME types and size limit.
+//
 // Every data request runs in its own transaction as the `authenticated` role
 // with request.jwt.claim.sub set to the caller, so RLS policies, SECURITY
 // INVOKER functions and grants behave exactly as they do on the project.
@@ -42,6 +46,8 @@ export interface LocalSupabase {
   /** Current password of an account (to check a reset really changed it). */
   passwordOf(email: string): string | undefined;
   requests: string[];
+  /** Objects currently stored (bucket/path → size), to check temporary uploads are removed. */
+  storedObjects(): Map<string, number>;
   close(): Promise<void>;
 }
 
@@ -49,6 +55,33 @@ const PUBLISHABLE_KEY = "sb_publishable_local_test_key";
 
 function b64(value: unknown) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+async function readRaw(req: IncomingMessage) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks);
+}
+
+/** The file part of a multipart body (supabase-js appends it with filename "blob"). */
+function multipartFile(raw: Buffer, contentType: string): { bytes: Buffer; type: string } | null {
+  const boundary = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!boundary) return null;
+  const marker = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+  let start = raw.indexOf(marker);
+  while (start >= 0) {
+    const next = raw.indexOf(marker, start + marker.length);
+    if (next < 0) break;
+    const part = raw.subarray(start + marker.length + 2, next - 2);
+    const split = part.indexOf("\r\n\r\n");
+    const headers = part.subarray(0, split).toString("utf8");
+    if (/filename=/i.test(headers)) {
+      const type = headers.match(/content-type:\s*([^\r\n]+)/i)?.[1]?.trim() ?? "application/octet-stream";
+      return { bytes: Buffer.from(part.subarray(split + 4)), type };
+    }
+    start = next;
+  }
+  return null;
 }
 
 async function readBody(req: IncomingMessage) {
@@ -82,6 +115,8 @@ export async function startLocalSupabase(
     accessTokenSeconds?: number;
     /** PostgREST's max-rows: every response is capped at it, silently (Supabase default 1000). */
     maxRows?: number;
+    /** Private buckets (default: the FOCUS scan bucket as provisioned by scripts/setup-scan-storage.ts). */
+    buckets?: Record<string, { mimeTypes: string[]; maxBytes: number }>;
   },
 ): Promise<LocalSupabase> {
   const maxRows = options.maxRows ?? 1000;
@@ -541,12 +576,86 @@ export async function startLocalSupabase(
     return send(res, 404, { msg: "not found" });
   }
 
+  // --- Storage ---------------------------------------------------------------
+
+  const buckets = options.buckets ?? { "focus-scan-imports": { mimeTypes: ["application/pdf"], maxBytes: 50_000_000 } };
+  const objects = new Map<string, { bytes: Buffer; type: string }>();
+  const uploadTokens = new Map<string, string>();
+  const storageError = (res: ServerResponse, status: number, message: string) =>
+    send(res, status, { statusCode: String(status), error: status === 403 ? "Unauthorized" : "Error", message });
+
+  /** The bucket's RLS policies (20261007130000): own folder and an active teacher membership. */
+  async function mayUseObject(identity: { role: string; userId: string | null }, objectPath: string) {
+    if (identity.role !== "authenticated" || !identity.userId || objectPath.split("/")[0] !== identity.userId) return false;
+    const { rows } = await queue(() =>
+      db.query("select 1 from public.school_memberships where user_id = $1 and role = 'teacher' and status = 'active' limit 1", [identity.userId]),
+    );
+    return rows.length > 0;
+  }
+
+  async function handleStorage(req: IncomingMessage, res: ServerResponse, url: URL) {
+    const identity = caller(req);
+    if (identity === "expired") return storageError(res, 401, "jwt expired");
+    const sign = url.pathname.match(/^\/storage\/v1\/object\/upload\/sign\/([^/]+)\/(.+)$/);
+    if (sign) {
+      const [bucket, objectPath] = [sign[1], decodeURIComponent(sign[2])];
+      const key = `${bucket}/${objectPath}`;
+      if (!buckets[bucket]) return storageError(res, 404, "Bucket not found");
+      if (req.method === "POST") {
+        if (!(await mayUseObject(identity, objectPath))) return storageError(res, 403, "new row violates row-level security policy");
+        const token = randomBytes(18).toString("hex");
+        uploadTokens.set(token, key);
+        return send(res, 200, { url: `/object/upload/sign/${bucket}/${encodeURI(objectPath)}?token=${token}` });
+      }
+      if (req.method === "PUT") {
+        const token = url.searchParams.get("token") ?? "";
+        if (uploadTokens.get(token) !== key) return storageError(res, 400, "invalid signature");
+        const raw = await readRaw(req);
+        const type = req.headers["content-type"] ?? "";
+        const file = type.startsWith("multipart/form-data") ? multipartFile(raw, type) : { bytes: raw, type };
+        if (!file) return storageError(res, 400, "no file");
+        if (!buckets[bucket].mimeTypes.includes(file.type)) return storageError(res, 415, `mime type ${file.type} is not supported`);
+        if (file.bytes.length > buckets[bucket].maxBytes) return storageError(res, 413, "The object exceeded the maximum allowed size");
+        objects.set(key, file);
+        uploadTokens.delete(token);
+        return send(res, 200, { Key: key });
+      }
+    }
+    const object = url.pathname.match(/^\/storage\/v1\/object\/(?:authenticated\/)?([^/]+)\/(.+)$/);
+    if (object && req.method === "GET") {
+      const objectPath = decodeURIComponent(object[2]);
+      if (!(await mayUseObject(identity, objectPath))) return storageError(res, 400, "Object not found");
+      const stored = objects.get(`${object[1]}/${objectPath}`);
+      if (!stored) return storageError(res, 400, "Object not found");
+      res.writeHead(200, { "Content-Type": stored.type, "Content-Length": String(stored.bytes.length) });
+      return res.end(stored.bytes);
+    }
+    const bucketOnly = url.pathname.match(/^\/storage\/v1\/object\/([^/]+)$/);
+    if (bucketOnly && req.method === "DELETE") {
+      const { prefixes } = JSON.parse((await readBody(req)) || "{}") as { prefixes?: string[] };
+      const removed = [];
+      for (const objectPath of prefixes ?? [])
+        if ((await mayUseObject(identity, objectPath)) && objects.delete(`${bucketOnly[1]}/${objectPath}`)) removed.push({ name: objectPath });
+      return send(res, 200, removed);
+    }
+    return storageError(res, 404, "not found");
+  }
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${options.port}`);
+    // The browser uploads scans directly to Storage (another origin).
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
+    res.setHeader("Access-Control-Allow-Headers", "authorization, apikey, content-type, x-client-info, x-upsert, cache-control");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
     requests.push(`${req.method} ${url.pathname}${url.search}`);
     try {
       if (url.pathname.startsWith("/auth/v1/")) return await handleAuth(req, res, url);
       if (url.pathname.startsWith("/rest/v1/")) return await handleRest(req, res, url);
+      if (url.pathname.startsWith("/storage/v1/")) return await handleStorage(req, res, url);
       send(res, 404, { msg: "not found" });
     } catch (error) {
       send(res, 500, { message: error instanceof Error ? error.message : String(error) });
@@ -572,6 +681,9 @@ export async function startLocalSupabase(
     },
     passwordOf(email) {
       return accountByEmail(email)?.password;
+    },
+    storedObjects() {
+      return new Map([...objects].map(([key, value]) => [key, value.bytes.length]));
     },
     async close() {
       server.closeAllConnections();

@@ -18,7 +18,6 @@ function copy(patch: Partial<ScanCopyCandidate> = {}): ScanCopyCandidate {
     studentNameRead: "Alice Martin",
     identificationConfidence: 0.99,
     groupingConfidence: 0.99,
-    transcriptionConfidence: 0.95,
     startPage: 1,
     endPage: 3,
     score: 14.5,
@@ -29,12 +28,16 @@ function copy(patch: Partial<ScanCopyCandidate> = {}): ScanCopyCandidate {
         responseText: "x = 2",
         awardedPoints: "4",
         teacherAnnotation: "OK",
+        legibility: "lisible",
+        crossedOut: "",
       },
       {
         questionId: questions[1].id,
         responseText: "Calcul",
         awardedPoints: "3,5",
         teacherAnnotation: "",
+        legibility: "lisible",
+        crossedOut: "",
       },
     ],
     warnings: [],
@@ -68,12 +71,16 @@ test("scan import refuses impossible awarded points", () => {
         responseText: "x = 2",
         awardedPoints: "5",
         teacherAnnotation: "",
+        legibility: "lisible",
+        crossedOut: "",
       },
       {
         questionId: questions[1].id,
         responseText: "suite",
         awardedPoints: "2",
         teacherAnnotation: "",
+        legibility: "lisible",
+        crossedOut: "",
       },
     ],
   });
@@ -107,6 +114,8 @@ test("scan import normalizes every assessment question and decimal commas", () =
         responseText: "  réponse  ",
         awardedPoints: "3,5",
         teacherAnnotation: "  vu  ",
+        legibility: "lisible",
+        crossedOut: "",
       },
     ],
   });
@@ -116,12 +125,17 @@ test("scan import normalizes every assessment question and decimal commas", () =
       responseText: "",
       awardedPoints: "",
       teacherAnnotation: "",
+      // Not returned by the reader at all: never treated as "no answer".
+      legibility: "absente",
+      crossedOut: "",
     },
     {
       questionId: questions[1].id,
       responseText: "réponse",
       awardedPoints: "3.5",
       teacherAnnotation: "vu",
+      legibility: "lisible",
+      crossedOut: "",
     },
   ]);
 });

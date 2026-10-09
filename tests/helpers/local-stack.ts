@@ -210,12 +210,27 @@ export const MODEL_FAILURE_MARKER = "[panne-modele]";
 
 export function scriptedAnalysis(input: AiInput, script: ScriptedError[]) {
   const answered = input.questions.filter((question) => question.responseText.trim());
+  // One outcome per question, as the production schema requires.
+  const outcomes = (withErrors: Set<string>, fallback: string) =>
+    input.questions.map((question) => ({
+      questionId: question.questionId,
+      outcome: !question.responseText.trim()
+        ? "no_answer"
+        : question.responseText.includes(ILLEGIBLE_MARKER)
+          ? "illegible"
+          : withErrors.has(question.questionId)
+            ? "error"
+            : fallback,
+      observedExcerpt: "",
+      note: "",
+    }));
   if (!answered.length)
-    return { status: "insufficient_evidence", insufficientReason: "Aucune réponse n’est fournie.", errors: [] };
+    return { status: "insufficient_evidence", insufficientReason: "Aucune réponse n’est fournie.", questionOutcomes: outcomes(new Set(), "no_answer"), errors: [] };
   if (answered.every((question) => question.responseText.includes(ILLEGIBLE_MARKER)))
     return {
       status: "insufficient_evidence",
       insufficientReason: "La réponse recopiée est trop incomplète pour identifier une erreur.",
+      questionOutcomes: outcomes(new Set(), "insufficient_evidence"),
       errors: [],
     };
   const errors = answered.flatMap((question) =>
@@ -234,14 +249,17 @@ export function scriptedAnalysis(input: AiInput, script: ScriptedError[]) {
       })),
   );
   return errors.length
-    ? { status: "errors_found", insufficientReason: "", errors }
-    : { status: "no_error_observed", insufficientReason: "", errors: [] };
+    ? { status: "errors_found", insufficientReason: "", questionOutcomes: outcomes(new Set(errors.map((error) => error.questionId)), "no_error_observed"), errors }
+    : { status: "no_error_observed", insufficientReason: "", questionOutcomes: outcomes(new Set(), "no_error_observed"), errors: [] };
 }
+
+/** What a scripted scan reading returns, in the reader's own keys (Sxxx, Qxx). */
+export type ScriptedScan = (request: { studentKeys: string[]; questionKeys: string[]; pages: number; keyOf: (name: string) => string | null }) => unknown;
 
 export async function startModelStandIn(
   port: number,
   script: ScriptedError[] = DEFAULT_SCRIPT,
-  options: { delayMs?: number } = {},
+  options: { delayMs?: number; scan?: ScriptedScan; analysis?: (input: AiInput) => unknown } = {},
 ): Promise<ModelStandIn> {
   const calls: unknown[] = [];
   const server = createServer(async (req, res) => {
@@ -255,6 +273,31 @@ export async function startModelStandIn(
     }
     const body = JSON.parse(raw);
     calls.push(body);
+    if (body.text?.format?.name === "focus_scan_stack") {
+      // A scripted READING of a scan (never a real transcription): the test
+      // supplies it, keyed like the production schema.
+      const schema = body.text.format.schema;
+      const studentKeys = schema.properties.copies.items.properties.studentKey.anyOf[0].enum as string[];
+      const questionKeys = schema.properties.copies.items.properties.responses.items.properties.questionKey.enum as string[];
+      const pages = (body.input[0].content as Array<{ type: string }>).filter((part) => part.type === "input_image" || part.type === "input_file").length;
+      if (!options.scan) {
+        res.statusCode = 500;
+        return res.end(JSON.stringify({ error: { message: "no scripted scan" } }));
+      }
+      const instructions = (body.input[0].content as Array<{ type: string; text?: string }>).map((part) => part.text ?? "").join("\n");
+      const keyOf = (name: string) => instructions.match(new RegExp(`(S\\d{3}) \\| ${name}\\n`))?.[1] ?? null;
+      const output = options.scan({ studentKeys, questionKeys, pages, keyOf }) as { __status?: number; __body?: unknown };
+      if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      if (output && typeof output === "object" && output.__status) {
+        // A scripted provider failure (quota, outage).
+        res.statusCode = output.__status;
+        return res.end(JSON.stringify(output.__body ?? {}));
+      }
+      return res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(output) }] }], usage: { total_tokens: 2000 } }));
+    }
+    if (typeof body.input === "string")
+      // The health probe's minimal generation (it only needs an answer).
+      return res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }], usage: { total_tokens: 3 } }));
     const input = JSON.parse(body.input[1].content[0].text) as AiInput;
     // A slow model: the app must show progress and stay usable.
     if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
@@ -262,7 +305,7 @@ export async function startModelStandIn(
       res.statusCode = 500;
       return res.end(JSON.stringify({ error: { message: "scripted failure" } }));
     }
-    const output = scriptedAnalysis(input, script);
+    const output = options.analysis ? options.analysis(input) : scriptedAnalysis(input, script);
     // Fixed, clearly synthetic token counts so usage recording is exercised.
     res.end(
       JSON.stringify({
@@ -303,6 +346,10 @@ export async function startLocalStack(options: {
   modelDelayMs?: number;
   /** Last migration to apply, to reproduce a database that is behind the code. */
   upTo?: string;
+  /** Scripted scan reading (tests of the photo/PDF import). */
+  scan?: ScriptedScan;
+  /** Scripted analysis replacing the default script (e.g. a recorded live model answer). */
+  analysis?: (input: AiInput) => unknown;
   /** PostgREST max-rows of the stand-in (default 1000, as on Supabase). */
   maxRows?: number;
 }): Promise<LocalStack> {
@@ -316,7 +363,7 @@ export async function startLocalStack(options: {
     { email: NON_TEACHER.email, password: NON_TEACHER.password, userId: NON_TEACHER.id },
   ];
   const supabase = await startLocalSupabase(db, { port: options.supabasePort, accounts, maxRows: options.maxRows });
-  const model = await startModelStandIn(options.modelPort, options.script, { delayMs: options.modelDelayMs });
+  const model = await startModelStandIn(options.modelPort, options.script, { delayMs: options.modelDelayMs, scan: options.scan, analysis: options.analysis });
   return {
     db,
     supabase,

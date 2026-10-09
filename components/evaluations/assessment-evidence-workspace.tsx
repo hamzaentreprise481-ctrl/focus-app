@@ -32,7 +32,7 @@ export function AssessmentEvidenceWorkspace({
         label="Étapes de cette évaluation"
         items={[
           { label: "1. Sujet et corrigé", href: "#sujet" },
-          { label: "2. Import PDF", href: "#scan-import" },
+          { label: "2. Import scan ou photos", href: "#scan-import" },
           { label: "3. Copies et analyse", href: "#copies" },
           ...(analysisAvailable
             ? [{ label: "4. Décisions professeur", href: "#hypotheses" }]
