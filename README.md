@@ -6,12 +6,12 @@ Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGEN
 
 ## État réel
 
-- **Connexion** : comptes professeurs Supabase Auth, rôle `app_metadata.role = "teacher"` attribué par l’administrateur. Aucun identifiant de démonstration, aucune session simulée.
+- **Connexion** : comptes professeurs Supabase Auth ; l’autorisation Teacher vient d’une appartenance `school_memberships` active avec le rôle `teacher`, vérifiée côté serveur et par RLS. `app_metadata` n’est plus une source d’autorisation. Aucun identifiant de démonstration ni contournement public.
 - **Données** : classes, élèves, évaluations, résultats, sujets, copies et décisions sont lus et écrits dans Supabase, sous RLS, avec la session du professeur. L’application n’affiche aucun jeu fictif en secours et n’utilise pas le stockage du navigateur.
 - **Parcours** : tableau de bord « À traiter » → évaluation (créée avant toute note) → sujet, questions, corrigé, barème et notions visées → import facultatif d’une pile de copies scannées en un PDF (séparation/nom/note/transcription, confirmation des cas incertains) ou saisie manuelle → analyse de toutes les copies de la classe en une action, copie par copie (mathématiques) → hypothèses de l’évaluation que le professeur confirme ou écarte sur place, avec note → dossier élève longitudinal et export PDF.
 - **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Hypothèses, notes et décisions ne sont lisibles que par les professeurs de la classe **et de la matière** et l’administrateur de l’établissement — jamais par l’élève ni par les professeurs d’autres matières. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
-- **Base live** : les migrations jusqu’à `20260927100000` sont appliquées sur le projet Supabase ; son schéma est identique, objet pour objet, à celui que construisent ces migrations (empreinte relevée le 2 octobre 2026, `tests/schema-live.test.ts` ; procédure du 27 septembre dans [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md)). La migration `20261002120000` (durcissement des accès) est **dans le dépôt, pas encore sur le projet**.
-- **Pas encore validé en conditions réelles** : aucune connexion réelle de professeur n’a encore été faite sur le projet ; l’analyse n’a jamais été exécutée avec le vrai modèle (aucune clé disponible dans l’environnement de développement), et le cadre RGPD de l’établissement n’est pas établi. Ne saisir aucune donnée réelle d’élève avant ces validations.
+- **Base live** : les migrations sont appliquées jusqu’à `20261004090000`, y compris le durcissement des accès par classe + matière et la provenance signée des analyses. `supabase/staging/verify.sql` a été rejoué sur la base live le 7 octobre 2026 et retourne `FOCUS staging verification: OK`.
+- **Validation de release** : des comptes professeurs se sont connectés au projet live ; la Preview de release vérifie le schéma `20261004090000`, l’accès au modèle `gpt-6-astra` et la clé de signature. Le benchmark réel du modèle et la CI de release sont documentés dans `docs/PEDAGOGICAL_AI_VALIDATION.md` et `docs/RELEASE_V1.md`. Le cadre RGPD reste à contractualiser avec chaque établissement avant toute donnée réelle d’élève.
 
 ## Développement
 
@@ -38,16 +38,16 @@ Le schéma réel (toutes les migrations) tourne dans PGlite avec une école fict
 
 | Espace            | Routes                                                                       | Implémentation                                                                  |
 | ----------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Public            | `/`                                                                          | `app/(marketing)` ; aperçu issu uniquement de `lib/demo/marketing-data.ts` (fictif) |
+| Public            | `/`, `/decouvrir`, `/fonctionnement`, `/confiance`, `/abonnements`, `/questions` | `app/(marketing)` ; aperçu issu uniquement de `lib/demo/marketing-data.ts` (fictif) |
 | Connexion         | `/connexion`, `/connexion/mot-de-passe-oublie`, `/connexion/nouveau-mot-de-passe`, `/auth/confirm` | `app/(auth)`, `app/auth/confirm` ; connexion, déconnexion, réinitialisation et invitation côté serveur |
 | Professeur privé  | `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres` | `app/(teacher)/app` ; `requireTeacher()` sur chaque page, action et le layout   |
-| Liens historiques | `/classes/*`, `/eleves/*`, `/evaluations/*`, `/parametres/*`, `/decouvrir`   | Redirections permanentes définies dans `next.config.ts`                         |
+| Liens historiques | `/classes/*`, `/eleves/*`, `/evaluations/*`, `/parametres/*`                 | Redirections permanentes définies dans `next.config.ts`                         |
 
 Le Proxy actualise les cookies et refuse les requêtes privées sans professeur. Chaque page et chaque Server Action revérifie l’utilisateur ; la base revérifie chaque ligne (RLS) et chaque écriture (fonctions `focus_*`).
 
 ## Base de données
 
-`supabase/migrations/` reproduit exactement le schéma du projet live jusqu’à `20260927100000` (empreinte relevée le 2 octobre 2026 et vérifiée par `tests/schema-live.test.ts`, mêmes versions que `supabase_migrations.schema_migrations`). Les migrations postérieures au 25 septembre :
+`supabase/migrations/` reproduit le schéma requis par la V1 jusqu’à `20261004090000`. Le projet live est aligné sur cette version ; les versions de `supabase_migrations.schema_migrations` ont été vérifiées le 7 octobre 2026. Les migrations postérieures au 25 septembre :
 
 | Migration | Contenu |
 | --- | --- |
@@ -60,8 +60,8 @@ Le Proxy actualise les cookies et refuse les requêtes privées sans professeur.
 | `20260926190000_security_performance_hardening` | Recommandations des advisors Supabase : anon sans accès aux tables, `(select auth.uid())` dans les policies, index des clés étrangères |
 | `20260927090000_schema_version` | `focus_schema_version()` : version du schéma lue par `/api/health` (seule fonction SECURITY DEFINER ouverte à anon, ne renvoie qu’une version) |
 | `20260927100000_ai_usage_events` | Usage IA par requête (modèle, latence, jetons, issue, réutilisation), sans contenu ni identifiant d’élève ; voir [docs/AI_USAGE.md](./docs/AI_USAGE.md) |
-| `20261002120000_access_integrity_hardening` | **Pas encore appliquée sur le projet.** Hypothèses IA, notes et décisions lisibles par les professeurs de la classe et de la matière et l’administrateur, plus par l’élève ni par les autres matières ; décision par un professeur actuellement affecté ; écritures directes soumises aux règles des fonctions `focus_*` (école et classe de l’évaluation, élèves inscrits, maximum ≥ points attribués, notions actives) ; aucune constatation IA enregistrable sur une réponse notée au maximum ou identique au corrigé (comme dans l’application) ; plus de TRUNCATE/TRIGGER/REFERENCES pour `authenticated` ; tables V0 inutilisées en lecture seule. Retour arrière testé : `supabase/rollback/20261002120000_access_integrity_hardening.down.sql` |
-| `20261004090000_engine_signed_analyses` | **Pas encore appliquée sur le projet.** Une analyse IA ne s’enregistre plus que par `focus_record_engine_analysis`, avec une enveloppe signée par le serveur FOCUS (HMAC-SHA256, clé dans `FOCUS_ANALYSIS_SIGNING_KEY` et dans `focus_private.engine_keys`, illisible par les rôles de l’API), liée au professeur connecté, valable dix minutes et à la version des preuves lue **avant** la copie : copie, sujet, corrigé, barème, notions ou consignes modifiés pendant l’analyse ⇒ refus, rien n’est enregistré. Les fonctions de persistance ne sont plus appelables par `authenticated`. Une évaluation dont des copies ont été analysées ne se supprime plus par l’API. Retour arrière testé : `supabase/rollback/20261004090000_engine_signed_analyses.down.sql` |
+| `20261002120000_access_integrity_hardening` | **Appliquée sur le projet live.** Hypothèses IA, notes et décisions lisibles par les professeurs de la classe et de la matière et l’administrateur, plus par l’élève ni par les autres matières ; décision par un professeur actuellement affecté ; écritures directes soumises aux règles des fonctions `focus_*` (école et classe de l’évaluation, élèves inscrits, maximum ≥ points attribués, notions actives) ; aucune constatation IA enregistrable sur une réponse notée au maximum ou identique au corrigé (comme dans l’application) ; plus de TRUNCATE/TRIGGER/REFERENCES pour `authenticated` ; tables V0 inutilisées en lecture seule. Retour arrière testé : `supabase/rollback/20261002120000_access_integrity_hardening.down.sql` |
+| `20261004090000_engine_signed_analyses` | **Appliquée sur le projet live.** Une analyse IA ne s’enregistre plus que par `focus_record_engine_analysis`, avec une enveloppe signée par le serveur FOCUS (HMAC-SHA256, clé dans `FOCUS_ANALYSIS_SIGNING_KEY` et dans `focus_private.engine_keys`, illisible par les rôles de l’API), liée au professeur connecté, valable dix minutes et à la version des preuves lue **avant** la copie : copie, sujet, corrigé, barème, notions ou consignes modifiés pendant l’analyse ⇒ refus, rien n’est enregistré. Les fonctions de persistance ne sont plus appelables par `authenticated`. Une évaluation dont des copies ont été analysées ne se supprime plus par l’API. Retour arrière testé : `supabase/rollback/20261004090000_engine_signed_analyses.down.sql` |
 | `20261007090000_active_teacher_membership` | **Pas encore appliquée sur le projet.** Une affectation classe/matière ne donne accès que si l’adhésion professeur à l’établissement est active. |
 | `20261007130000_scan_import_storage` | **Pas encore appliquée sur le projet.** Ajoute l’import atomique copie + note et les politiques du bucket privé de PDF ; le bucket `focus-scan-imports` est créé/mis à jour via `npm run setup:scan-storage -- --commit`, jamais par écriture SQL directe dans les tables internes de Storage. |
 
@@ -78,7 +78,7 @@ Utiliser le projet Supabase réservé à FOCUS ; ne jamais réutiliser les resso
 3. **Email Templates** : les liens doivent passer par `/auth/confirm` avec un `token_hash` (vérifié côté serveur, à usage unique) :
    - *Reset Password* : `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
    - *Invite user* : `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
-4. Inviter les professeurs avec `scripts/admin-invite-teacher.ts` (ci-dessous) ou les outils d’administration Supabase, puis affecter **côté administrateur** `app_metadata: { "role": "teacher" }`. Jamais dans `user_metadata`, modifiable par l’utilisateur. `user_metadata.display_name` sert uniquement à l’affichage si le profil n’a pas de nom.
+4. Inviter les professeurs avec `scripts/admin-invite-teacher.ts` (ci-dessous) ou les outils d’administration Supabase. L’accès Teacher est accordé par une ligne `school_memberships` active avec `role = teacher`, créée côté administrateur ; ni `user_metadata` ni `app_metadata` n’autorisent l’accès. `user_metadata.display_name` reste uniquement de l’affichage.
 5. Créer l’appartenance à l’établissement et les affectations classe/matière (`school_memberships`, `teacher_assignments`) : un professeur ne voit que ses classes. Le script d’invitation le fait.
 
 Parcours de compte dans FOCUS :
@@ -110,7 +110,7 @@ npm run check:login -- --project-ref <ref>
 
 Avec `FOCUS_CHECK_APP_URL=<déploiement>` (et `VERCEL_AUTOMATION_BYPASS_SECRET` si la Preview est protégée), le même contrôle passe aussi par le vrai formulaire du déploiement : cookie HttpOnly, rechargement, pages classe/élèves/évaluations, déconnexion. État et étapes restantes : [docs/GO_LIVE_LOGIN.md](./docs/GO_LIVE_LOGIN.md).
 
-Une ligne PASS/FAIL par étape du parcours de l’application : connexion, session vérifiée, `app_metadata.role`, profil, établissement, affectations, lectures sous RLS, version du schéma, renouvellement, déconnexion, refus anonyme. Aucun mot de passe, jeton ni contenu n’est affiché ; une clé secrète est refusée.
+Une ligne PASS/FAIL par étape du parcours de l’application : connexion, session vérifiée, appartenance Teacher active, profil, établissement, affectations, lectures sous RLS, version du schéma, renouvellement, déconnexion, refus anonyme. Aucun mot de passe, jeton ni contenu n’est affiché ; une clé secrète est refusée.
 
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 
@@ -121,7 +121,7 @@ Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté 
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production et Preview | Projet Supabase FOCUS ; clé publiable, jamais `service_role` |
 | `OPENAI_API_KEY` | Serveur uniquement | Analyse pédagogique ; jamais en `NEXT_PUBLIC_` |
 | `FOCUS_ANALYSIS_SIGNING_KEY` | Serveur uniquement | 32 à 64 octets en hexadécimal ; signe chaque analyse enregistrée (la même valeur que `focus_private.engine_keys`) ; jamais en `NEXT_PUBLIC_` |
-| `FOCUS_AI_MODEL` | Serveur | Modèle d’analyse (défaut `gpt-5.6-terra`) |
+| `FOCUS_AI_MODEL` | Serveur | Modèle d’analyse (défaut `gpt-6-astra` ; l’ancien override `gpt-5.6-terra` est routé vers Astra par compatibilité) |
 | `FOCUS_AI_HOURLY_LIMIT` | Serveur | Appels au modèle par professeur et par heure (défaut 150) |
 | `FOCUS_AI_REASONING_EFFORT` | Serveur | `low` (défaut), `medium` ou `high` |
 | `FOCUS_SITE_URL` | Serveur, recommandé | Origine HTTPS utilisée dans les liens de réinitialisation ; sinon l’hôte de la requête |

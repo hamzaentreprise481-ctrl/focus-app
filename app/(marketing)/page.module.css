@@ -511,3 +511,251 @@
     padding-inline: 16px;
   }
 }
+
+
+/* Dedicated marketing pages */
+.pageHero {
+  padding-block: 76px 64px;
+  border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(circle at 78% 20%, rgba(37, 60, 120, 0.08), transparent 28%),
+    #fff;
+}
+.pageHero h1 {
+  margin-top: 16px;
+  max-width: 820px;
+  font-size: clamp(34px, 4.2vw, 54px);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+  font-weight: 600;
+}
+.pageLead {
+  margin-top: 22px;
+  max-width: 760px;
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--color-ink-soft);
+}
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 36px;
+}
+.infoGrid article {
+  min-height: 220px;
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+}
+.infoGrid article > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--color-brand);
+}
+.infoGrid h3 {
+  margin-top: 22px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.infoGrid p {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-ink-soft);
+}
+.callout {
+  align-self: start;
+  padding: 28px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: #fff;
+}
+.callout strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+.callout p {
+  margin-top: 12px;
+  color: var(--color-ink-soft);
+  line-height: 1.7;
+}
+.callout a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  color: var(--color-brand);
+  font-size: 14px;
+  font-weight: 500;
+}
+.detailedSteps {
+  display: grid;
+  gap: 0;
+  max-width: 900px;
+  margin-inline: auto;
+  border-top: 1px solid var(--color-border);
+}
+.detailedSteps li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 20px;
+  padding-block: 26px;
+  border-bottom: 1px solid var(--color-border);
+}
+.detailedSteps > li > span {
+  color: var(--color-brand);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.detailedSteps h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.detailedSteps p {
+  margin-top: 8px;
+  color: var(--color-ink-soft);
+  line-height: 1.7;
+}
+.checkGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin-top: 30px;
+  max-width: 900px;
+}
+.checkGrid li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-ink-soft);
+  font-size: 14px;
+}
+.checkGrid svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--color-brand);
+}
+.plainList {
+  margin-top: 28px;
+  border-top: 1px solid var(--color-border);
+}
+.plainList li {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-ink-soft);
+  line-height: 1.6;
+}
+.pricingGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.pricingCard,
+.featuredPricing {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 500px;
+  padding: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+}
+.featuredPricing {
+  border: 2px solid var(--color-brand);
+  box-shadow: 0 18px 48px rgba(24, 45, 100, 0.10);
+}
+.priceBadge {
+  align-self: flex-start;
+  margin-bottom: 18px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--color-brand-soft);
+  color: var(--color-brand-ink);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+.pricingCard h2,
+.featuredPricing h2 {
+  font-size: 22px;
+  font-weight: 600;
+}
+.price {
+  margin-top: 20px;
+  color: var(--color-ink);
+}
+.price strong {
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.price span {
+  color: var(--color-ink-soft);
+  font-size: 14px;
+}
+.priceNote {
+  margin-top: 10px;
+  min-height: 22px;
+  color: var(--color-ink-soft);
+  font-size: 13px;
+}
+.featureList {
+  display: grid;
+  gap: 12px;
+  margin: 28px 0 30px;
+}
+.featureList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--color-ink-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.featureList svg {
+  flex: 0 0 auto;
+  color: var(--color-brand);
+}
+.pricingCard > a,
+.featuredPricing > a {
+  margin-top: auto;
+}
+
+@media (max-width: 900px) {
+  .infoGrid,
+  .pricingGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pricingGrid > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 640px) {
+  .pageHero {
+    padding-block: 52px 44px;
+  }
+  .infoGrid,
+  .pricingGrid,
+  .checkGrid {
+    grid-template-columns: 1fr;
+  }
+  .pricingGrid > :last-child {
+    grid-column: auto;
+  }
+  .detailedSteps li {
+    grid-template-columns: 46px 1fr;
+    gap: 12px;
+  }
+  .pricingCard,
+  .featuredPricing {
+    min-height: auto;
+  }
+}

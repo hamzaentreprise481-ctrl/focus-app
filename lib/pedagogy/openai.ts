@@ -36,7 +36,12 @@ export interface PedagogicalAiInput {
 }
 
 export function pedagogicalAiModel() {
-  return process.env.FOCUS_AI_MODEL || "gpt-6-astra";
+  const configured = process.env.FOCUS_AI_MODEL?.trim();
+  // Terra was FOCUS's previous default. Keep old deployments safe: even if
+  // Vercel still carries that legacy override, route pedagogical analysis to
+  // Astra until the environment variable is updated.
+  if (!configured || configured === "gpt-5.6-terra") return "gpt-6-astra";
+  return configured;
 }
 
 /** The model key and the signing key that lets the database accept its output. */

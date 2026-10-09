@@ -1,6 +1,6 @@
 // Step-by-step diagnosis of a teacher login against a real Supabase project,
 // with the publishable key only: the same calls the app makes (password
-// grant, server-verified getUser, app_metadata role, profile, RLS reads,
+// grant, server-verified getUser, active teacher membership, profile, RLS reads,
 // refresh, logout). Reports what failed and where; never returns a token,
 // key, password or row content.
 
@@ -97,14 +97,21 @@ export async function diagnoseTeacherLogin(input: DiagnosisInput): Promise<Diagn
     return steps;
   const user = verified.user!;
 
-  const role = user.app_metadata?.role;
+  const { count: activeTeacherMemberships, error: teacherMembershipError } = await supabase
+    .from("school_memberships")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("role", "teacher")
+    .eq("status", "active");
   if (
     !add(
       "teacher_role",
-      role === "teacher",
-      role === "teacher"
-        ? "app_metadata.role = teacher."
-        : `app_metadata.role = ${role ? `« ${role} »` : "absent"} : l’application refuse ce compte. Un administrateur doit définir app_metadata.role = "teacher" (jamais user_metadata).`,
+      !teacherMembershipError && (activeTeacherMemberships ?? 0) > 0,
+      teacherMembershipError
+        ? `Lecture du rôle professeur refusée (${teacherMembershipError.code ?? "error"}).`
+        : (activeTeacherMemberships ?? 0) > 0
+          ? "Rôle professeur actif confirmé dans school_memberships."
+          : "Aucune appartenance active avec role = teacher : l’application refuse ce compte.",
     )
   )
     return steps;

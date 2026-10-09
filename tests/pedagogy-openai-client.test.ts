@@ -178,3 +178,38 @@ test("a failed call reports a FOCUS code and its latency, never the provider bod
     return true;
   });
 });
+
+
+test("temporary 429 responses are retried within the same request budget", async () => {
+  let calls = 0;
+  const fetchImpl: typeof fetch = async () => {
+    calls++;
+    if (calls < 3) return new Response("", { status: 429, headers: { "Retry-After": "0" } });
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ status: "no_error_observed", insufficientReason: "", errors: [] }) }] }],
+      usage: { total_tokens: 10 },
+    });
+  };
+  const result = await requestPedagogicalAnalysis({}, {
+    apiKey: "fictional-test-key",
+    model: "fictional-model",
+    fetchImpl,
+    maxAttempts: 3,
+    timeoutMs: 1000,
+  });
+  assert.equal(calls, 3);
+  assert.equal(result.status, "no_error_observed");
+});
+
+test("non-retryable provider errors fail immediately", async () => {
+  let calls = 0;
+  const fetchImpl: typeof fetch = async () => {
+    calls++;
+    return new Response("", { status: 401 });
+  };
+  await assert.rejects(
+    requestPedagogicalAnalysis({}, { apiKey: "fictional-test-key", model: "fictional-model", fetchImpl, maxAttempts: 3 }),
+    /OPENAI_REQUEST_FAILED:401/,
+  );
+  assert.equal(calls, 1);
+});
