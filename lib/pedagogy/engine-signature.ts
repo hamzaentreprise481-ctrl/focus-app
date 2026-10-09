@@ -38,9 +38,11 @@ export interface EnvelopeQuestionOutcome {
   note: string;
 }
 
+// questionOutcomes is required: the database accepts an envelope without it
+// only from a server older than migration 20261009120000.
 export type EngineEnvelope =
-  | (EnvelopeBase & { kind: "analysis"; errors: unknown[]; recommendations: unknown[]; questionOutcomes?: EnvelopeQuestionOutcome[] })
-  | (EnvelopeBase & { kind: "no_evidence"; reason: string; questionOutcomes?: EnvelopeQuestionOutcome[] });
+  | (EnvelopeBase & { kind: "analysis"; errors: unknown[]; recommendations: unknown[]; questionOutcomes: EnvelopeQuestionOutcome[] })
+  | (EnvelopeBase & { kind: "no_evidence"; reason: string; questionOutcomes: EnvelopeQuestionOutcome[] });
 
 /**
  * The exact text the database verifies and parses, and its HMAC-SHA256.
