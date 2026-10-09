@@ -10,7 +10,7 @@
 // plus latencies; never keys. Output: public/__focus-eval/results.json.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import { extractScanStack, scanImportModel } from "../../lib/scan-import";
@@ -50,23 +50,74 @@ async function pool<T>(items: T[], size: number, run: (item: T) => Promise<void>
   }));
 }
 
+// Diagnostics around the provider (the pipeline under test is unchanged):
+// status, rate-limit headers and the provider's error code/type only (never
+// the message body, which may echo input). On 429/5xx the harness itself
+// waits and retries so that a quota/rate problem is measured, not hidden:
+// every retry is counted per call.
+const providerLog: Array<Record<string, unknown>> = [];
+const realFetch = globalThis.fetch;
+const RETRY = Number(process.env.FOCUS_EVAL_HARNESS_RETRIES ?? 6);
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input);
+  if (!url.includes("/responses")) return realFetch(input, init);
+  let attempt = 0;
+  for (;;) {
+    const started = Date.now();
+    const response = await realFetch(input, init);
+    const headers = Object.fromEntries([...response.headers.entries()].filter(([k]) => k.startsWith("x-ratelimit") || k === "retry-after" || k === "openai-processing-ms"));
+    const entry: Record<string, unknown> = { at: new Date().toISOString(), status: response.status, ms: Date.now() - started, attempt, headers };
+    if (!response.ok) {
+      try {
+        const body = (await response.clone().json()) as { error?: { code?: string; type?: string; param?: string } };
+        entry.errorCode = body.error?.code ?? null;
+        entry.errorType = body.error?.type ?? null;
+        entry.errorParam = body.error?.param ?? null;
+      } catch {
+        entry.errorCode = "unparsable";
+      }
+    }
+    providerLog.push(entry);
+    if ((response.status === 429 || response.status >= 500) && attempt < RETRY) {
+      const ra = Number(response.headers.get("retry-after"));
+      const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, 60_000) : Math.min(5_000 * 2 ** attempt, 60_000);
+      attempt++;
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    return response;
+  }
+}) as typeof fetch;
+
+async function probeCall(model: string) {
+  const response = await globalThis.fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, input: "Réponds uniquement: OK", reasoning: { effort: "low" } }),
+  });
+  return { model, status: response.status };
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const spec = JSON.parse(readFileSync(path.join(FIXTURES, "spec.json"), "utf8")) as Spec;
   const manifest = JSON.parse(readFileSync(path.join(FIXTURES, "manifest.json"), "utf8")) as { copies: ManifestCopy[] };
-  const only = process.env.FOCUS_EVAL_ONLY?.split(",");
-  const copies = only ? manifest.copies.filter((c) => only.includes(c.id)) : manifest.copies;
+  const onlyFile = path.join(ROOT, "scripts", "eval", "ONLY");
+  const only = (process.env.FOCUS_EVAL_ONLY ?? (existsSync(onlyFile) ? readFileSync(onlyFile, "utf8").trim() : "")).split(",").filter(Boolean);
+  const copies = only.length ? manifest.copies.filter((c) => only.includes(c.id)) : manifest.copies;
   const roster = Object.entries(spec.students).map(([key, s]) => ({ id: uuid(`student:${key}`), name: s.name, key }));
   const curriculum = await loadProductionCurriculum();
   const results: Record<string, unknown>[] = [];
+  const probes = [];
+  for (const model of ["gpt-6-astra", "gpt-6.1-sol", "gpt-5.5", "gpt-5.6-terra"]) probes.push(await probeCall(model));
   const report = () =>
     writeFileSync(
       path.join(OUT, "results.json"),
       `${JSON.stringify({ mode: "baseline-current-pipeline", generatedAt: new Date().toISOString(), sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-        scanModel: scanImportModel(), analysisModel: pedagogicalAiModel(), analysisEffort: pedagogicalReasoningEffort(), results }, null, 2)}\n`,
+        scanModel: scanImportModel(), analysisModel: pedagogicalAiModel(), analysisEffort: pedagogicalReasoningEffort(), probes, providerLog, results }, null, 2)}\n`,
     );
 
-  await pool(copies, 4, async (copy) => {
+  await pool(copies, Number(process.env.FOCUS_EVAL_CONCURRENCY ?? 1), async (copy) => {
     const assessment = spec.assessments[copy.assessment];
     const questions: ScanQuestion[] = assessment.questions.map((q, index) => ({
       id: uuid(`question:${copy.assessment}:${q.key}`), position: index + 1, prompt: q.prompt, maxPoints: q.maxPoints,
