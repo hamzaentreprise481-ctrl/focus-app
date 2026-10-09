@@ -1,0 +1,54 @@
+{
+  "httpStatus": 200,
+  "copyId": "E1-S3-C",
+  "scanModel": "gpt-6-astra",
+  "analysisModel": "gpt-6-astra",
+  "analysisEffort": "low",
+  "scan": {
+    "ok": false,
+    "error": "SCAN_MODEL_HTTP_429",
+    "latencyMs": 87999
+  },
+  "providerLog": [
+    {
+      "status": 429,
+      "ms": 30684,
+      "attempt": 0,
+      "headers": {},
+      "errorCode": "credit_balance_exhausted",
+      "errorType": "insufficient_quota",
+      "errorParam": null
+    },
+    {
+      "status": 429,
+      "ms": 1110,
+      "attempt": 1,
+      "headers": {},
+      "errorCode": "credit_balance_exhausted",
+      "errorType": "insufficient_quota",
+      "errorParam": null
+    },
+    {
+      "status": 429,
+      "ms": 1102,
+      "attempt": 2,
+      "headers": {},
+      "errorCode": "credit_balance_exhausted",
+      "errorType": "insufficient_quota",
+      "errorParam": null
+    },
+    {
+      "status": 429,
+      "ms": 957,
+      "attempt": 3,
+      "headers": {},
+      "errorCode": "credit_balance_exhausted",
+      "errorType": "insufficient_quota",
+      "errorParam": null
+    }
+  ],
+  "wallMs": 89099,
+  "run": "measure",
+  "level": "C",
+  "kind": "profile"
+}
