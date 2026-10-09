@@ -20,6 +20,7 @@ import { students } from "../fixtures/demo-dataset/data/students";
 import { installEngineKey, TEST_ENGINE_KEY } from "./engine";
 import { createMigratedDatabase } from "./pg";
 import { startLocalSupabase, type LocalAccount, type LocalSupabase } from "./local-supabase";
+import { analysisInputFromRequest } from "../../lib/pedagogy/openai-client";
 
 /** Deterministic UUID (v4 layout) for a fixture identifier. */
 export function fixtureUuid(label: string) {
@@ -298,7 +299,7 @@ export async function startModelStandIn(
     if (typeof body.input === "string")
       // The health probe's minimal generation (it only needs an answer).
       return res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }], usage: { total_tokens: 3 } }));
-    const input = JSON.parse(body.input[1].content[0].text) as AiInput;
+    const input = analysisInputFromRequest(body) as AiInput;
     // A slow model: the app must show progress and stay usable.
     if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     if (input.questions.some((question) => question.responseText.includes(MODEL_FAILURE_MARKER))) {

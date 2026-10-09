@@ -21,6 +21,7 @@ import {
   scoreHandwritingRecord,
   type ManifestCopy,
 } from "./helpers/handwriting-eval";
+import { analysisInputFromRequest } from "../lib/pedagogy/openai-client";
 
 const manifest = loadManifest();
 const graded = manifest.copies.filter((copy) => copy.kind !== "failure_mode");
@@ -177,7 +178,7 @@ test("the runner drives the production reader and analysis (scripted provider, n
     call++;
     const body = JSON.parse(String(init?.body));
     if (body.text.format.name === "focus_scan_stack") return answer(ideal);
-    const input = JSON.parse(body.input[1].content[0].text) as { questions: Array<{ questionId: string; responseText: string }> };
+    const input = analysisInputFromRequest(body) as { questions: Array<{ questionId: string; responseText: string }> };
     return answer({
       status: "insufficient_evidence",
       insufficientReason: "Passages illisibles.",
