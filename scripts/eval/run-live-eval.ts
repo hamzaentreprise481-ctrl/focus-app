@@ -90,6 +90,14 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof fetch;
 
 async function probeCall(model: string) {
+  try {
+    return await probeCallUnsafe(model);
+  } catch (error) {
+    return { model, status: `network:${error instanceof Error ? error.message : "error"}` };
+  }
+}
+
+async function probeCallUnsafe(model: string) {
   const response = await globalThis.fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
