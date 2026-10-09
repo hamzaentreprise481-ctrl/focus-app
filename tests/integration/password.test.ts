@@ -146,7 +146,10 @@ test("a non-teacher account can set a password but still cannot enter", async ()
     confirmation: "mot de passe du parent fictif",
   });
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /n’a pas encore accès à l’espace professeur/);
+  assert.match(
+    await response.text(),
+    /aucun espace FOCUS actif n’est associé à ce compte/,
+  );
   assert.equal((await request("/app")).status, 307);
 });
 

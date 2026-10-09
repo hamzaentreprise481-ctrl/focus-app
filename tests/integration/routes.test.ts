@@ -180,11 +180,16 @@ after(async () => {
   mock.closeAllConnections();
   await new Promise<void>((resolve) => mock.close(() => resolve()));
 });
-test("public response uses only fictitious marketing fixture and keeps login separate", async () => {
+test("public response exposes the three role portals without private school data", async () => {
   const response = await request("/");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Données fictives de démonstration/);
+  assert.match(html, /href="\/connexion"/);
+  assert.match(html, /href="\/connexion-eleve"/);
+  assert.match(html, /href="\/connexion-direction"/);
+  assert.match(html, /Teacher/);
+  assert.match(html, /Student/);
+  assert.match(html, /Director/);
   assert.doesNotMatch(
     html,
     /Lucas Bernard|Adam Benali|lucas-bernard|demo-overlay|Se déconnecter/,
@@ -241,7 +246,7 @@ test("deployment smoke check accepts the configured public and protected routes"
     "scripts/check-deployment.mjs", origin,
   ]);
   assert.doesNotMatch(stdout, /FAIL/);
-  assert.equal((stdout.match(/^PASS /gm) ?? []).length, 8);
+  assert.equal((stdout.match(/^PASS /gm) ?? []).length, 12);
 });
 
 test("invalid password and missing input never establish a teacher session", async () => {
