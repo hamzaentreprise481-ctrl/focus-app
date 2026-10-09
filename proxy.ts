@@ -1,21 +1,32 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth/config";
-import { hasActiveTeacherMembership, safeNext } from "@/lib/auth/policy";
+import {
+  hasActiveStudentMembership,
+  hasActiveTeacherMembership,
+  safeNext,
+  safeStudentNext,
+} from "@/lib/auth/policy";
 
 export async function proxy(request: NextRequest) {
   const config = authConfig();
   let response = NextResponse.next({ request });
-  const protectedRoute =
+  const teacherProtected =
     request.nextUrl.pathname === "/app" ||
     request.nextUrl.pathname.startsWith("/app/");
-  const deny = () => {
+  const studentProtected =
+    request.nextUrl.pathname === "/student" ||
+    request.nextUrl.pathname.startsWith("/student/");
+
+  const deny = (kind: "teacher" | "student") => {
     const url = request.nextUrl.clone();
-    url.pathname = "/connexion";
+    url.pathname = kind === "teacher" ? "/connexion" : "/connexion-eleve";
     url.search = "";
     url.searchParams.set(
       "next",
-      safeNext(request.nextUrl.pathname + request.nextUrl.search),
+      kind === "teacher"
+        ? safeNext(request.nextUrl.pathname + request.nextUrl.search)
+        : safeStudentNext(request.nextUrl.pathname + request.nextUrl.search),
     );
     const redirected = NextResponse.redirect(url);
     response.cookies
@@ -24,7 +35,13 @@ export async function proxy(request: NextRequest) {
     redirected.headers.set("Cache-Control", "private, no-store");
     return redirected;
   };
-  if (!config) return protectedRoute ? deny() : response;
+
+  if (!config) {
+    if (teacherProtected) return deny("teacher");
+    if (studentProtected) return deny("student");
+    return response;
+  }
+
   const supabase = createServerClient(config.url, config.key, {
     cookieOptions: {
       httpOnly: true,
@@ -43,18 +60,39 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  // getUser verifies identity; the canonical role/status comes from school_memberships under RLS.
+
+  // getUser verifies identity; canonical role/status comes from school_memberships under RLS.
   try {
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser();
-    if (protectedRoute && (error || !(await hasActiveTeacherMembership(supabase, user)))) return deny();
+
+    if (teacherProtected) {
+      if (error || !(await hasActiveTeacherMembership(supabase, user)))
+        return deny("teacher");
+    }
+    if (studentProtected) {
+      if (error || !(await hasActiveStudentMembership(supabase, user)))
+        return deny("student");
+    }
   } catch {
-    if (protectedRoute) return deny();
+    if (teacherProtected) return deny("teacher");
+    if (studentProtected) return deny("student");
   }
+
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
 
-export const config = { matcher: ["/app/:path*", "/connexion", "/connexion/:path*", "/auth/:path*"] };
+export const config = {
+  matcher: [
+    "/app/:path*",
+    "/student/:path*",
+    "/connexion",
+    "/connexion/:path*",
+    "/connexion-eleve",
+    "/connexion-eleve/:path*",
+    "/auth/:path*",
+  ],
+};

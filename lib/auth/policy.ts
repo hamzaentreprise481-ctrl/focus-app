@@ -1,6 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AuthenticatedUser = { id: string; is_anonymous?: boolean };
+type MembershipRole = "admin" | "teacher" | "student" | "parent";
+
+async function hasActiveMembership(
+  supabase: SupabaseClient,
+  user: AuthenticatedUser | null | undefined,
+  role: MembershipRole,
+): Promise<boolean> {
+  if (!user || user.is_anonymous === true) return false;
+  const { data, error } = await supabase
+    .from("school_memberships")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("role", role)
+    .eq("status", "active")
+    .limit(1);
+  return !error && Array.isArray(data) && data.length > 0;
+}
 
 /**
  * Teacher authorization is derived from the canonical school membership row.
@@ -11,15 +28,15 @@ export async function hasActiveTeacherMembership(
   supabase: SupabaseClient,
   user: AuthenticatedUser | null | undefined,
 ): Promise<boolean> {
-  if (!user || user.is_anonymous === true) return false;
-  const { data, error } = await supabase
-    .from("school_memberships")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("role", "teacher")
-    .eq("status", "active")
-    .limit(1);
-  return !error && Array.isArray(data) && data.length > 0;
+  return hasActiveMembership(supabase, user, "teacher");
+}
+
+/** Student authorization follows the same canonical membership rule. */
+export async function hasActiveStudentMembership(
+  supabase: SupabaseClient,
+  user: AuthenticatedUser | null | undefined,
+): Promise<boolean> {
+  return hasActiveMembership(supabase, user, "student");
 }
 
 /** @deprecated Metadata is not the authorization source of truth. */
@@ -36,20 +53,28 @@ export function isTeacher(
   );
 }
 
-export function safeNext(value: unknown): string {
+function safePortalNext(value: unknown, root: "/app" | "/student"): string {
   if (typeof value !== "string" || /[\\\r\n\x00-\x1f]/.test(value))
-    return "/app";
+    return root;
   try {
     const url = new URL(value, "https://focus.invalid");
     if (
       url.origin !== "https://focus.invalid" ||
-      !(url.pathname === "/app" || url.pathname.startsWith("/app/"))
+      !(url.pathname === root || url.pathname.startsWith(root + "/"))
     )
-      return "/app";
+      return root;
     // Reject encoded path characters to keep redirects unambiguous.
-    if (/%/.test(url.pathname)) return "/app";
+    if (/%/.test(url.pathname)) return root;
     return url.pathname + url.search + url.hash;
   } catch {
-    return "/app";
+    return root;
   }
+}
+
+export function safeNext(value: unknown): string {
+  return safePortalNext(value, "/app");
+}
+
+export function safeStudentNext(value: unknown): string {
+  return safePortalNext(value, "/student");
 }
