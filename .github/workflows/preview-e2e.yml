@@ -1,0 +1,111 @@
+name: FOCUS Preview E2E (real)
+
+# The real teacher path on a deployed Preview of the PR #15 branch: real
+# sign-in, real Supabase, real copy reader and model
+# (scripts/preview-e2e.mjs). It runs only when the Preview itself reports
+# ready (schema up to date, model answering) and a FICTITIOUS test teacher
+# is configured in the repository secrets FOCUS_E2E_EMAIL and
+# FOCUS_E2E_PASSWORD. It writes one clearly labelled fictitious assessment
+# to the Preview's database. The verdict is a commit status; result.json
+# (steps, timings, displayed outcomes — no name, no transcription, no
+# screenshot: this repository is public) goes to the focus-preview-e2e-results
+# branch.
+
+on:
+  deployment_status:
+
+permissions:
+  contents: write
+  statuses: write
+
+concurrency:
+  group: focus-preview-e2e-${{ github.event.deployment.sha }}
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      !contains(github.event.deployment.environment, 'Production') &&
+      github.event.deployment.ref == 'work/fiabiliser-analyse-ia'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      SHA: ${{ github.event.deployment.sha }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      FOCUS_E2E_EMAIL: ${{ secrets.FOCUS_E2E_EMAIL }}
+      FOCUS_E2E_PASSWORD: ${{ secrets.FOCUS_E2E_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - name: Is the Preview ready for a real run?
+        id: gate
+        shell: bash
+        run: |
+          status() {
+            jq -n --arg state "$1" --arg description "$2" --arg target_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              '{state: $state, context: "FOCUS Preview E2E (real)", description: $description, target_url: $target_url}' |
+              curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" -d @- > /dev/null
+          }
+          if [ -z "$FOCUS_E2E_EMAIL" ] || [ -z "$FOCUS_E2E_PASSWORD" ]; then
+            status error "Not run: no fictitious test teacher in secrets FOCUS_E2E_EMAIL / FOCUS_E2E_PASSWORD."
+            echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          health="$(curl -sS -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" "$URL/api/health" || true)"
+          if [ "$(echo "$health" | jq -r '.ready // false' 2>/dev/null)" != "true" ]; then
+            reason="$(echo "$health" | jq -r '[if .supabase.schemaUpToDate != true then "schema" else empty end, (.ai.error // empty)] | join(", ")' 2>/dev/null)"
+            status error "Not run: Preview not ready (${reason:-unreachable})."
+            echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "run=1" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.run == '1'
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Real teacher path
+        if: steps.gate.outputs.run == '1'
+        id: e2e
+        shell: bash
+        run: |
+          npm ci
+          npx playwright-core install --with-deps chromium
+          set +e
+          node scripts/preview-e2e.mjs "$URL" "$RUNNER_TEMP/e2e"
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Record the verdict
+        if: steps.gate.outputs.run == '1'
+        shell: bash
+        run: |
+          result="$RUNNER_TEMP/e2e/result.json"
+          verdict="$(jq -r '.verdict // "FAIL"' "$result" 2>/dev/null || echo FAIL)"
+          passed="$(jq '[.steps[] | select(.ok)] | length' "$result" 2>/dev/null || echo 0)"
+          failed="$(jq -r '[.steps[] | select(.ok | not) | .name] | join(", ")' "$result" 2>/dev/null)"
+          state=failure; [ "$verdict" = "PASS" ] && state=success
+          description="$verdict: $passed/6 steps${failed:+ — failed at $failed}"
+          jq -n --arg state "$state" --arg description "${description:0:139}" --arg target_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{state: $state, context: "FOCUS Preview E2E (real)", description: $description, target_url: $target_url}' |
+            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" -d @- > /dev/null
+          git config --global user.name "focus-e2e-bot"
+          git config --global user.email "focus-e2e-bot@users.noreply.github.com"
+          if git ls-remote --exit-code origin refs/heads/focus-preview-e2e-results >/dev/null; then
+            git fetch -q origin focus-preview-e2e-results
+            git worktree add -q "$RUNNER_TEMP/res" FETCH_HEAD
+            git -C "$RUNNER_TEMP/res" checkout -q -B focus-preview-e2e-results
+          else
+            git worktree add -q --detach "$RUNNER_TEMP/res" HEAD
+            git -C "$RUNNER_TEMP/res" checkout -q --orphan focus-preview-e2e-results
+            git -C "$RUNNER_TEMP/res" rm -rfq .
+          fi
+          mkdir -p "$RUNNER_TEMP/res/$SHA"
+          cp "$result" "$RUNNER_TEMP/res/$SHA/result.json" || true
+          git -C "$RUNNER_TEMP/res" add -A
+          git -C "$RUNNER_TEMP/res" commit -qm "preview e2e ${SHA:0:7}: $verdict" || true
+          git -C "$RUNNER_TEMP/res" push -q origin HEAD:refs/heads/focus-preview-e2e-results || true
+          [ "$verdict" = "PASS" ]
