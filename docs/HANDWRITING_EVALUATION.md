@@ -60,12 +60,33 @@ bruit, JPEG).
 | Ensemble | Contenu |
 | --- | --- |
 | Série de lisibilité | La même copie (Lucas, misconception (a+b)² = a²+b²) aux niveaux A propre, B moyenne, C mauvaise, D très difficile mais lisible, E avec passages détruits (tache d’encre, café, bavure) |
-| Profils | Inès (maîtrise, une erreur de calcul isolée), Hugo (méthode correcte, fractions mal comprises, 2 évaluations), Lucas (misconception persistante sur 3 évaluations dont un contexte géométrique), Chloé (réponses incomplètes, une absence de réponse), Nathan (copie niveau E, réponses illisibles) |
-| Échecs | photo floue, très sombre, tournée de 90° et 180°, coupée, copie vierge, document qui n’est pas une copie, PDF de deux pages inversées, consigne injectée dans une copie |
+| Profils | Inès (maîtrise, une erreur de calcul isolée), Hugo (méthode correcte, fractions mal comprises, 2 évaluations), Lucas (misconception persistante sur 3 évaluations dont un contexte géométrique), Chloé (réponses incomplètes, une absence de réponse), Nathan (copie niveau E, réponses illisibles), Léa (niveau C : parenthèses oubliées, « = 0 » ajouté à une expression, erreur de signe dans une méthode juste, fraction raturée puis corrigée) |
+| Échecs | photo floue, très sombre, tournée de 90° et 180°, coupée (questions 4 et 5 absentes de l’image : leur texte ne doit jamais apparaître, l’issue attendue est « preuves insuffisantes »), copie vierge, document qui n’est pas une copie, PDF de deux pages inversées, consigne injectée dans une copie |
 
 `manifest.json` donne, par copie et par question, le texte réellement écrit,
 les passages détruits (`hidden` — ne doivent jamais apparaître dans une
 transcription), ce qui est barré, les points et l’issue attendue.
+
+### Les cinq tests de la mission (A–E)
+
+`PEDAGOGICAL_TESTS` (`tests/helpers/handwriting-eval.ts`) regroupe les copies
+par test ; le rapport live donne pour chacun : lecture (CER), invention sous
+une tache ou hors de l’image, ratures recopiées, issues correctes, **erreurs
+hallucinées** (constat là où il n’y en a pas), erreurs manquées, diagnostics
+corrects (notion et type), latence médiane et maximale.
+
+| Test | Copies |
+| --- | --- |
+| A — copie parfaite | E2-S1-B, E3-S1-B |
+| B — erreurs de calcul, concept, raisonnement, notation | E1-S1-A, E1-S2-B, E2-S2-B, E2-S3-B, E1-S6-C |
+| C — écriture difficile, ratures, corrections | E1-S3-C, E1-S3-series-C, E1-S3-series-D, E1-S6-C |
+| D — méthode pertinente, erreur intermédiaire | E1-S1-A Q4, E1-S6-C Q4, E3-S3-B Q2 |
+| E — preuves insuffisantes | E1-S5-E, E1-S3-series-E, FM-cut, FM-blank |
+
+Ce sont des **images d’écriture simulée** (polices manuscrites déformées
+lettre par lettre puis « photographiées »), jamais du texte numérique, mais
+pas de vraies copies d’élèves : une validation sur de vraies copies
+consenties reste nécessaire.
 
 ## Ce qui est vérifié sans le vrai modèle
 
@@ -91,7 +112,9 @@ transcription), ce qui est barré, les points et l’issue attendue.
 
 Le 9 octobre 2026, depuis la Preview Vercel de ce projet (même clé, modèle
 `gpt-6-astra`), **chaque appel a été refusé : HTTP 429,
-`insufficient_quota` / `credit_balance_exhausted`**. Aucune transcription ni
+`insufficient_quota` / `credit_balance_exhausted`** (09:55 puis 15:17 UTC,
+pipeline corrigé ; la clé est valide et le modèle existe : seule la
+génération est refusée). Aucune transcription ni
 analyse réelle n’existe donc. Après recharge du crédit :
 
 ```bash

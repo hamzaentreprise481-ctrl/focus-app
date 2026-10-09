@@ -19,6 +19,12 @@ prouver avec le vrai modèle. Branche : `claude/finish-focus-v1`.
   et en base ; refus de tout constat sur une réponse illisible ou un passage
   marqué `[illisible]`/`[?…]` ; confiance bornée par la qualité de lecture ;
   réessais bornés des erreurs 429/5xx temporaires dans un même délai.
+- **Échecs du fournisseur classés en quatre familles** (`lib/pedagogy/provider-errors.ts`) :
+  crédit (quelqu’un doit payer), configuration (clé refusée, modèle
+  indisponible), fournisseur (saturation, panne, délai, réseau) et réponse
+  inexploitable. Chaque famille a son message pour le professeur (rien
+  n’est enregistré, qui peut agir) et une ligne de log JSON
+  `focus.ai_failure` sans aucune donnée d’élève.
 - **Copies manuscrites** : chemin, fixtures (niveaux A→E, cinq profils, cas
   d’échec) et banc réel prêt mais non exécuté — voir
   [HANDWRITING_EVALUATION.md](./HANDWRITING_EVALUATION.md).
