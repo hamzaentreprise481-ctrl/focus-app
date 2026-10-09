@@ -1,0 +1,17 @@
+{
+  "httpStatus": 200,
+  "copyId": "E1-S3-series-D",
+  "scanModel": "gpt-6-astra",
+  "analysisModel": "gpt-6-astra",
+  "analysisEffort": "low",
+  "scan": {
+    "ok": false,
+    "error": "SCAN_MODEL_TIMEOUT",
+    "latencyMs": 240001
+  },
+  "providerLog": [],
+  "wallMs": 240294,
+  "run": "measure",
+  "level": "D",
+  "kind": "legibility_series"
+}
