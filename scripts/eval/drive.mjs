@@ -42,7 +42,6 @@ function commit(message) {
   }
 }
 
-const roster = Object.entries(spec.students).map(([key, s]) => ({ key, name: s.name }));
 const runs = plan.runs ?? [];
 writeFileSync(path.join(outDir, "plan.json"), JSON.stringify(plan, null, 2));
 for (const run of runs) {
@@ -52,12 +51,9 @@ for (const run of runs) {
     if (existsSync(path.join(outDir, name))) continue;
     const file = copy.pdf ?? copy.image;
     const body = {
-      copyId: copy.id,
-      student: copy.student ?? null,
-      assessmentKey: copy.assessment,
-      questions: spec.assessments[copy.assessment].questions,
-      roster,
-      file: { kind: file.endsWith(".pdf") ? "pdf" : "jpeg", base64: readFileSync(path.join(fixtures, file)).toString("base64") },
+      copy,
+      spec,
+      fileBase64: readFileSync(path.join(fixtures, file)).toString("base64"),
       ...(run.options ?? {}),
     };
     const started = Date.now();
@@ -83,8 +79,14 @@ for (const run of runs) {
     record.level = copy.level ?? null;
     record.kind = copy.kind;
     writeFileSync(path.join(outDir, name), `${JSON.stringify(record, null, 2)}\n`);
-    console.log(`${name}: http=${record.httpStatus ?? "-"} scan=${record.scan?.ok} analysis=${record.analysis?.ok ?? "-"} ${record.wallMs}ms`);
+    console.log(`${name}: http=${record.httpStatus ?? "-"} scan=${record.scan?.ok ? "ok" : record.scan?.error} analysis=${record.analysis?.ok ?? "-"} ${record.wallMs}ms`);
     commit(`eval ${sha.slice(0, 7)} ${name}`);
+    // An exhausted credit is not temporary: stop instead of sending the rest.
+    if (record.scan?.error === "SCAN_MODEL_QUOTA" || /OPENAI_REQUEST_FAILED/.test(String(record.analysis?.error ?? "")) && record.providerLog?.some((e) => e.errorType === "insufficient_quota")) {
+      writeFileSync(path.join(outDir, "STOPPED.txt"), `Stopped after ${name}: OpenAI credit exhausted (insufficient_quota).\n`);
+      commit(`eval ${sha.slice(0, 7)} stopped: credit exhausted`);
+      process.exit(0);
+    }
   }
 }
 commit(`eval ${sha.slice(0, 7)} done`);
