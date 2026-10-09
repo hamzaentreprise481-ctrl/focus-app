@@ -633,7 +633,7 @@ test("UX: interrupted loading shows an error and retry, then restores saved evid
   await page.context().close();
 });
 
-test("sellability: honest demo contact, measurable pilot and unassigned teacher are actionable", async () => {
+test("sellability: role portals stay responsive and an unassigned teacher is actionable", async () => {
   const context = await browser.newContext({
     viewport: { width: 1366, height: 900 },
   });
@@ -643,17 +643,21 @@ test("sellability: honest demo contact, measurable pilot and unassigned teacher 
     await page.goto(origin);
     await noPageOverflow(page);
     await accessibilityCheck(page, "marketing");
-    await page.getByText("Données fictives de démonstration").waitFor();
-    const contact = await page
-      .getByRole("link", { name: /^Demander une démonstration/ })
-      .first()
-      .getAttribute("href");
-    assert.ok(contact?.startsWith("mailto:") || contact?.startsWith("https:"));
     await page
-      .getByText("Combien de temps cela fait-il gagner ?", { exact: true })
-      .click();
+      .getByRole("heading", { name: "Quel est votre rôle ?" })
+      .waitFor();
+    for (const href of [
+      "/connexion",
+      "/connexion-eleve",
+      "/connexion-direction",
+    ]) {
+      assert.ok(
+        (await page.locator(`a[href="${href}"]`).count()) >= 1,
+        `public homepage exposes ${href}`,
+      );
+    }
     await page
-      .getByText("Le gain de temps n’est pas encore mesuré.", { exact: false })
+      .getByText("Les rôles ne sont pas interchangeables.")
       .waitFor();
     if ([1366, 820, 390].includes(width)) {
       await page.evaluate(() => window.scrollTo(0, 0));
