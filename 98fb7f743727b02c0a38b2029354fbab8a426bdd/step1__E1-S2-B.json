@@ -1,0 +1,172 @@
+{
+  "httpStatus": 200,
+  "id": "E1-S2-B",
+  "kind": "profile",
+  "level": "B",
+  "options": {
+    "scanModel": "gpt-6-astra",
+    "scanEffort": "high",
+    "analysisModel": "gpt-6-astra",
+    "analysisEffort": "low",
+    "input": "pdf",
+    "analyse": true
+  },
+  "scan": {
+    "ok": true,
+    "latencyMs": 22858,
+    "attempts": 1,
+    "pageCount": 1,
+    "pages": [
+      {
+        "page": 1,
+        "orientation": 0,
+        "quality": "bonne",
+        "issues": []
+      }
+    ],
+    "warnings": [],
+    "copies": [
+      {
+        "student": "S2",
+        "studentNameRead": "Hugo Petit",
+        "identificationConfidence": 0.99,
+        "score": 16,
+        "autoImportIssue": "Points attribués à confirmer.",
+        "responses": [
+          {
+            "q": "Q1",
+            "text": "A = 3x + 12",
+            "legibility": "lisible",
+            "crossedOut": "",
+            "points": "2/2",
+            "annotation": ""
+          },
+          {
+            "q": "Q2",
+            "text": "B = x² + 10x + 25",
+            "legibility": "lisible",
+            "crossedOut": "",
+            "points": "2/2",
+            "annotation": ""
+          },
+          {
+            "q": "Q3",
+            "text": "2/3 + 1/4 = (2+1)/(3+4) = 3/7",
+            "legibility": "lisible",
+            "crossedOut": "",
+            "points": "0/2",
+            "annotation": "dénominateur commun ?"
+          },
+          {
+            "q": "Q4",
+            "text": "4x − 7 = 13 ; 4x = 20 ; x = 5",
+            "legibility": "lisible",
+            "crossedOut": "",
+            "points": "2/2",
+            "annotation": ""
+          },
+          {
+            "q": "Q5",
+            "text": "C = (x − 3)(x + 3)",
+            "legibility": "lisible",
+            "crossedOut": "",
+            "points": "2/2",
+            "annotation": ""
+          }
+        ]
+      }
+    ]
+  },
+  "analysis": {
+    "ok": true,
+    "latencyMs": 16003,
+    "tokens": 16181,
+    "status": "errors_found",
+    "insufficientReason": "",
+    "outcomes": [
+      {
+        "q": "Q1",
+        "outcome": "no_error_observed",
+        "excerpt": "A = 3x + 12",
+        "note": "Le développement est conforme au corrigé."
+      },
+      {
+        "q": "Q2",
+        "outcome": "no_error_observed",
+        "excerpt": "B = x² + 10x + 25",
+        "note": "Le développement du carré est correct."
+      },
+      {
+        "q": "Q3",
+        "outcome": "error",
+        "excerpt": "2/3 + 1/4 = (2+1)/(3+4)",
+        "note": "La réponse additionne séparément les numérateurs et les dénominateurs."
+      },
+      {
+        "q": "Q4",
+        "outcome": "no_error_observed",
+        "excerpt": "4x − 7 = 13 ; 4x = 20 ; x = 5",
+        "note": "Les transformations de l’équation et la solution obtenue sont correctes."
+      },
+      {
+        "q": "Q5",
+        "outcome": "no_error_observed",
+        "excerpt": "C = (x − 3)(x + 3)",
+        "note": "La factorisation est conforme au corrigé."
+      }
+    ],
+    "errors": [
+      {
+        "q": "Q3",
+        "nodeCode": "MATH.NUM.FRACTIONS.OPERATIONS",
+        "errorType": "concept",
+        "excerpt": "2/3 + 1/4 = (2+1)/(3+4)",
+        "difficulty": "Addition de fractions par addition séparée des numérateurs et des dénominateurs.",
+        "explanation": "Cette égalité applique une règle incorrecte d’addition des fractions. Il faut les écrire avec un même dénominateur : 8/12 + 3/12 = 11/12, et non 3/7."
+      }
+    ],
+    "rejected": []
+  },
+  "providerLog": [
+    {
+      "status": 200,
+      "ms": 22741,
+      "headers": {
+        "x-ratelimit-limit-requests": "5000",
+        "x-ratelimit-limit-tokens": "1000000",
+        "x-ratelimit-remaining-requests": "4999",
+        "x-ratelimit-remaining-tokens": "998668",
+        "x-ratelimit-reset-requests": "12ms",
+        "x-ratelimit-reset-tokens": "79ms"
+      },
+      "model": "gpt-6-astra",
+      "usage": {
+        "input": 4550,
+        "cachedInput": 0,
+        "output": 967,
+        "reasoning": 447
+      }
+    },
+    {
+      "status": 200,
+      "ms": 15902,
+      "headers": {
+        "x-ratelimit-limit-requests": "5000",
+        "x-ratelimit-limit-tokens": "1000000",
+        "x-ratelimit-remaining-requests": "4999",
+        "x-ratelimit-remaining-tokens": "999455",
+        "x-ratelimit-reset-requests": "12ms",
+        "x-ratelimit-reset-tokens": "32ms"
+      },
+      "model": "gpt-6-astra",
+      "usage": {
+        "input": 15493,
+        "cachedInput": 0,
+        "output": 688,
+        "reasoning": 0
+      }
+    }
+  ],
+  "wallMs": 39572,
+  "run": "step1"
+}

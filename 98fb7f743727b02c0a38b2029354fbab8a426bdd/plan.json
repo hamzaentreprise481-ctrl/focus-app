@@ -1,0 +1,14 @@
+{
+  "about": "STEP 1 of the paid evaluation (credit recharged 9 Oct, owner asked: one copy first, measure, then small batches). ONE representative fictitious copy: E1-S2-B (level B phone photo, 4 correct answers, 1 real fraction error) through the production reader and analysis. The driver stops if /api/health does not report the model as answering.",
+  "runs": [
+    {
+      "name": "step1",
+      "copies": [
+        "E1-S2-B"
+      ],
+      "options": {
+        "input": "pdf"
+      }
+    }
+  ]
+}
