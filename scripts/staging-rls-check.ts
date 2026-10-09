@@ -134,6 +134,7 @@ async function main() {
           p_model: "check",
           p_input_hash: "0".repeat(64),
           p_reason: "check",
+          p_question_outcomes: [],
         });
         check("teacher B cannot record an analysis on it", denied(analysis.error));
         // Teacher A cannot write AI output either: only the FOCUS server's signed envelope is accepted.
@@ -144,6 +145,7 @@ async function main() {
           p_model: "check",
           p_input_hash: "0".repeat(64),
           p_reason: "check",
+          p_question_outcomes: [],
         });
         check("teacher A cannot record an analysis by calling the persistence function", denied(forged.error));
         const unsigned = await a.supabase.rpc("focus_record_engine_analysis", {

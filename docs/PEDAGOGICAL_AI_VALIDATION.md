@@ -3,6 +3,26 @@
 Cette note sépare ce qui est prouvé par des tests simulés de ce qui reste à
 prouver avec le vrai modèle. Branche : `claude/finish-focus-v1`.
 
+## Mise à jour du 9 octobre 2026 (branche `work/fiabiliser-analyse-ia`)
+
+- **Le vrai modèle n’a toujours produit aucune analyse mesurable.** Depuis la
+  Preview Vercel (même clé, `gpt-6-astra`), chaque appel a été refusé :
+  HTTP 429 `insufficient_quota` / `credit_balance_exhausted`. Ce n’est pas une
+  limite de débit : le crédit OpenAI du compte est épuisé. FOCUS le dit
+  désormais tel quel au professeur (« quota épuisé »), ne le réessaie pas, et
+  `/api/health` le détecte par une génération minimale (et plus seulement
+  `GET /v1/models/{model}`).
+- **Nouvelles garanties testées sans le modèle** : provenance de chaque
+  réponse (saisie ou lecture d’un scan, lisibilité, vérifiée ou non) ; une
+  issue par question (`error`, `no_error_observed`, `incomplete`,
+  `no_answer`, `illegible`, `insufficient_evidence`) revérifiée en TypeScript
+  et en base ; refus de tout constat sur une réponse illisible ou un passage
+  marqué `[illisible]`/`[?…]` ; confiance bornée par la qualité de lecture ;
+  réessais bornés des erreurs 429/5xx temporaires dans un même délai.
+- **Copies manuscrites** : chemin, fixtures (niveaux A→E, cinq profils, cas
+  d’échec) et banc réel prêt mais non exécuté — voir
+  [HANDWRITING_EVALUATION.md](./HANDWRITING_EVALUATION.md).
+
 ## Ce qui est vérifié (sans le vrai modèle)
 
 - **Contrôles de sortie** (`tests/pedagogy.test.ts`) : extrait non littéral ou
@@ -37,8 +57,9 @@ prouver avec le vrai modèle. Branche : `claude/finish-focus-v1`.
   Vercel est refusé (403) et `*.vercel.app` n’est pas joignable d’ici.
 - `/api/health` (Preview et local seulement) indique le commit déployé, la
   présence des variables Supabase et OpenAI, la version du schéma de la base
-  et un accès au modèle par `GET /v1/models/{model}` ; un succès ne prouve
-  pas qu’une analyse réussit. Le workflow `FOCUS Preview verification` le lit
+  et un accès au modèle par `GET /v1/models/{model}` puis (depuis le
+  9 octobre) une génération minimale qui révèle un crédit épuisé ; un succès
+  ne prouve pas qu’une analyse réussit. Le workflow `FOCUS Preview verification` le lit
   pour chaque déploiement Vercel et n’est vert que si ce déploiement exécute
   exactement ce commit et est prêt.
 

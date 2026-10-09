@@ -1,12 +1,13 @@
 # Staging — rehearse the migrations on a real Supabase database
 
-> **7 October 2026.** The live FOCUS project currently ends at
-> `20260927100000_ai_usage_events`. The repository also contains the pending
-> migrations `20261002120000_access_integrity_hardening`,
-> `20261004090000_engine_signed_analyses`,
-> `20261007090000_active_teacher_membership`, and
-> `20261007130000_scan_import_storage`. None of those four has been applied
-> to live. Rehearse them on a real Supabase staging database before any
+> **9 October 2026.** The live FOCUS project ends at
+> `20261004090000_engine_signed_analyses` (`20261002120000` and
+> `20261004090000` are applied). The repository also contains the pending
+> migrations `20261007090000_active_teacher_membership`,
+> `20261007130000_scan_import_storage` and
+> `20261009120000_transcription_provenance_question_outcomes`. None of those
+> three has been applied to live, and the private scan bucket does not exist
+> there. Rehearse them on a real Supabase staging database before any
 > production promotion.
 
 The scan migration creates the atomic database import function and Storage RLS
@@ -59,7 +60,7 @@ returns `ce217d6976dbfcbf2f714e3143cea930` (the live fingerprint).
 supabase link --project-ref <staging-ref>
 supabase db push --dry-run     # lists the repository migrations missing on staging
 supabase db push
-supabase migration list        # must now end at 20261007130000
+supabase migration list        # must now end at 20261009120000
 ```
 
 Then install the engine signing key once in staging (SQL editor), with the
@@ -143,7 +144,11 @@ Never put `SUPABASE_SERVICE_ROLE_KEY` in Vercel or in a browser environment.
 
 ## 4. Recovery
 
-`20261002120000_access_integrity_hardening` has a tested down script:
+`20261002120000_access_integrity_hardening` and
+`20261009120000_transcription_provenance_question_outcomes` have tested down
+scripts (`supabase/rollback/`; the latter drops the provenance columns and
+the per-question outcomes, so copies imported with a reading status lose it).
+For the first:
 `psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -f
 supabase/rollback/20261002120000_access_integrity_hardening.down.sql`, then
 `supabase migration repair --status reverted 20261002120000`. It restores the

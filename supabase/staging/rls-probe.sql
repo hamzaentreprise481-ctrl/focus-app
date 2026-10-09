@@ -82,7 +82,8 @@ begin
   run1 := public.focus_persist_pedagogical_analysis(school_a, s1, a1, 'rls-probe', repeat('a', 64),
     jsonb_build_array(jsonb_build_object('questionId', q1, 'responseId', resp1, 'nodeId', node, 'errorType', 'calcul',
       'evidenceExcerpt', '3x+2', 'explanation', 'Le 3 n’est appliqué qu’au premier terme.')),
-    jsonb_build_array(jsonb_build_object('nodeId', node, 'difficulty', 'Distribuer', 'explanation', 'Explication', 'recommendedAction', 'Action')));
+    jsonb_build_array(jsonb_build_object('nodeId', node, 'difficulty', 'Distribuer', 'explanation', 'Explication', 'recommendedAction', 'Action')),
+    jsonb_build_array(jsonb_build_object('questionId', q1, 'outcome', 'error', 'excerpt', '3x+2', 'note', '')));
   execute 'set local role authenticated';
   select id into rec1 from public.pedagogical_recommendations where analysis_run_id = run1;
   perform public.focus_review_pedagogical_recommendation(rec1, 'validate', 'Note privée du professeur');
@@ -143,7 +144,7 @@ begin
   exception when others then msg := 'refused: ' || sqlerrm; end;
   r := jsonb_set(r, '{other_subject_teacher,decide_hypothesis}', to_jsonb(msg));
   begin
-    perform public.focus_persist_no_evidence(school_a, s1, a1, 'm', repeat('b', 64), 'r');
+    perform public.focus_persist_no_evidence(school_a, s1, a1, 'm', repeat('b', 64), 'r', '[]'::jsonb);
     msg := 'ALLOWED';
   exception when others then msg := 'refused: ' || sqlerrm; end;
   r := jsonb_set(r, '{other_subject_teacher,record_analysis}', to_jsonb(msg));
@@ -216,7 +217,7 @@ begin
   r := jsonb_set(r, '{maths_teacher,copy_for_student_of_other_class}', to_jsonb(msg));
   -- An "analysis" written by the teacher, not by the FOCUS engine.
   begin
-    perform public.focus_persist_pedagogical_analysis(school_a, s1, a1, 'gpt-forged', repeat('c', 64), '[]'::jsonb, '[]'::jsonb);
+    perform public.focus_persist_pedagogical_analysis(school_a, s1, a1, 'gpt-forged', repeat('c', 64), '[]'::jsonb, '[]'::jsonb, '[]'::jsonb);
     msg := 'ALLOWED';
   exception when others then msg := 'refused: ' || sqlerrm; end;
   r := jsonb_set(r, '{maths_teacher,record_forged_analysis}', to_jsonb(msg));

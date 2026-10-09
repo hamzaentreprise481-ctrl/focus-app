@@ -88,6 +88,8 @@ export interface AssessmentAnalysisState {
   analyzedAt: string | null;
   /** Evidence exists but no current analysis (never run, or superseded). */
   needsAnalysis: boolean;
+  /** Question by question, when the current analysis recorded it. */
+  questionOutcomes?: QuestionOutcomeView[];
 }
 
 export interface PedagogicalSnapshot {
@@ -131,6 +133,10 @@ export interface StudentResponseDraft {
   responseText: string;
   awardedPoints: string;
   teacherAnnotation: string;
+  /** Read-only provenance of a stored answer (absent for a new entry). */
+  source?: ResponseSource;
+  legibility?: ResponseLegibility | null;
+  transcriptionVerified?: boolean;
 }
 
 export interface StudentEvidenceView {
@@ -198,8 +204,39 @@ export type ModelAnalysisStatus =
   | "no_error_observed"
   | "insufficient_evidence";
 
+/** What FOCUS concluded about ONE question (observation, not a judgement of the student). */
+export type QuestionOutcome =
+  | "error"
+  | "no_error_observed"
+  | "incomplete"
+  | "no_answer"
+  | "illegible"
+  | "insufficient_evidence";
+
+export interface ModelQuestionOutcome {
+  questionId: string;
+  outcome: QuestionOutcome;
+  /** Literal, reliably read excerpt of the answer, or "". */
+  observedExcerpt: string;
+  /** One factual sentence about what is visible. */
+  note: string;
+}
+
 export interface ModelPedagogicalAnalysis {
   status: ModelAnalysisStatus;
   insufficientReason: string;
+  questionOutcomes?: ModelQuestionOutcome[];
   errors: ModelErrorCandidate[];
+}
+
+/** Where a stored answer comes from and how reliably it was read. */
+export type ResponseSource = "manual" | "scan";
+export type ResponseLegibility = "lisible" | "partielle" | "illisible" | "vide" | "absente";
+
+export interface QuestionOutcomeView {
+  questionId: string;
+  questionLabel: string;
+  outcome: QuestionOutcome;
+  excerpt: string;
+  note: string;
 }

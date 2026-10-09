@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createAuthClient, clearAuthCookies } from "@/lib/auth/server";
 import { loginError } from "@/lib/auth/errors";
-import { isTeacher, safeNext } from "@/lib/auth/policy";
+import { hasActiveTeacherMembership, safeNext } from "@/lib/auth/policy";
 
 export async function login(
   _previous: { error: string } | null,
@@ -34,7 +34,7 @@ export async function login(
       return {
         error: loginError(error),
       };
-    if (!isTeacher(data.user)) {
+    if (!(await hasActiveTeacherMembership(supabase, data.user))) {
       try {
         await supabase.auth.signOut({ scope: "local" });
       } finally {

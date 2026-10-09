@@ -34,7 +34,43 @@ type Fields = {
   model?: string;
   inputHash?: string;
   evidenceVersion?: string;
+  /** Default: consistent outcomes derived from the stored answers (see defaultOutcomes). */
+  questionOutcomes?: unknown[];
 } & ({ kind: "analysis"; errors: unknown[]; recommendations?: unknown[] } | { kind: "no_evidence"; reason: string });
+
+/**
+ * The outcomes the FOCUS server would send for these findings: 'error' where
+ * a finding cites the question, what the evidence alone decides elsewhere
+ * (no answer, illegible, absent from the image), 'no_error_observed' for the
+ * rest of a completed analysis and 'insufficient_evidence' for a no-evidence one.
+ */
+export async function defaultOutcomes(db: PGlite, assessmentId: string, studentId: string, errors: unknown[], kind: "analysis" | "no_evidence") {
+  const { rows } = await db.query<{ id: string; text: string | null; legibility: string | null }>(
+    `select q.id, r.response_text as text, r.legibility
+     from public.assessment_questions q
+     left join public.student_responses r on r.question_id = q.id and r.student_id = $2
+     where q.assessment_id = $1 order by q.position`,
+    [assessmentId, studentId],
+  );
+  const withError = new Set((errors as Array<{ questionId?: string }>).map((error) => error?.questionId));
+  return rows.map((row) => ({
+    questionId: row.id,
+    outcome:
+      row.legibility === "absente"
+        ? "insufficient_evidence"
+        : row.legibility === "illisible"
+          ? "illegible"
+          : !row.text?.trim()
+            ? "no_answer"
+            : withError.has(row.id)
+              ? "error"
+              : kind === "analysis"
+                ? "no_error_observed"
+                : "insufficient_evidence",
+    excerpt: "",
+    note: "",
+  }));
+}
 
 /** A signed envelope for the current evidence, unless the caller overrides any field. */
 export async function signedEnvelope(db: PGlite, fields: Fields, options: { key?: string; issuedAt?: Date } = {}) {
@@ -47,10 +83,12 @@ export async function signedEnvelope(db: PGlite, fields: Fields, options: { key?
     inputHash: fields.inputHash ?? "a".repeat(64),
     evidenceVersion: fields.evidenceVersion ?? (await evidenceVersion(db, fields.assessmentId, fields.studentId)),
   };
+  const questionOutcomes = (fields.questionOutcomes ??
+    (await defaultOutcomes(db, fields.assessmentId, fields.studentId, fields.kind === "analysis" ? fields.errors : [], fields.kind))) as EngineEnvelope["questionOutcomes"];
   const envelope: EngineEnvelope =
     fields.kind === "analysis"
-      ? { ...base, kind: "analysis", errors: fields.errors, recommendations: fields.recommendations ?? [] }
-      : { ...base, kind: "no_evidence", reason: fields.reason };
+      ? { ...base, kind: "analysis", errors: fields.errors, recommendations: fields.recommendations ?? [], questionOutcomes }
+      : { ...base, kind: "no_evidence", reason: fields.reason, questionOutcomes };
   return signEngineEnvelope(envelope, Buffer.from(options.key ?? TEST_ENGINE_KEY, "hex"), options.issuedAt);
 }
 
