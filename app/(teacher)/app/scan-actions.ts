@@ -1,8 +1,10 @@
 "use server";
 
+import { classifyProviderFailure, providerFailureMessage } from "@/lib/pedagogy/provider-errors";
 import { randomUUID } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { revalidatePath } from "next/cache";
+import { authConfig } from "@/lib/auth/config";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
 import { assessmentAccess, evidenceRows, ensureOk } from "@/lib/pedagogy/server";
 import {
@@ -16,11 +18,14 @@ import {
   type ScanReviewCopy,
   type ScanRosterStudent,
 } from "@/lib/scan-import";
+import { teacherCheckedLegibility, type ResponseLegibility, type ScanPageReport } from "@/lib/scan-import-core";
 
 type Failure = { ok: false; error: string };
 
 export type PrepareScanUploadResult =
-  | { ok: true; bucket: string; path: string; token: string }
+  /** url/key: the project's public Storage endpoint and publishable key, read
+   * at run time (the browser must not depend on build-time inlining). */
+  | { ok: true; bucket: string; path: string; token: string; url: string; key: string }
   | Failure;
 
 export type ProcessScanImportResult =
@@ -30,6 +35,10 @@ export type ProcessScanImportResult =
       review: ScanReviewCopy[];
       unassignedPages: number[];
       warnings: string[];
+      /** What the reader reported about each page (quality, orientation). */
+      pages: ScanPageReport[];
+      /** The assessment's questions, to label each transcribed answer. */
+      questions: Array<{ id: string; position: number; prompt: string }>;
     }
   | Failure;
 
@@ -88,6 +97,8 @@ async function context(assessmentId: string) {
         question.max_points === null || question.max_points === undefined
           ? null
           : Number(question.max_points),
+      // Never sent to the reader: only used to flag a "corrected" transcription.
+      correctionText: question.correction_text,
     }));
 
   return {
@@ -102,6 +113,8 @@ async function context(assessmentId: string) {
 
 function friendlyError(error: unknown): string {
   const code = error instanceof Error ? error.message : "";
+  if (code === "SUPABASE_NOT_CONFIGURED")
+    return "Le stockage des copies n’est pas configuré sur cet environnement.";
   if (code === "ASSESSMENT_NOT_EDITABLE")
     return "Seul le professeur qui a créé cette évaluation peut importer ses copies.";
   if (code === "OPENAI_API_KEY_MISSING")
@@ -111,32 +124,47 @@ function friendlyError(error: unknown): string {
   if (code === "EMPTY_ROSTER")
     return "Aucun élève n’est inscrit dans cette classe.";
   if (code === "SCAN_FILE_SIZE")
-    return "Le PDF est vide ou dépasse 50 Mo.";
-  if (code === "SCAN_MODEL_TIMEOUT")
-    return "La reconnaissance du PDF a dépassé le délai prévu. Réessayez avec un PDF plus court.";
+    return "Le fichier est vide ou dépasse 50 Mo.";
   if (code.startsWith("SCAN_MODEL_"))
-    return "La reconnaissance du PDF n’a pas abouti. Le fichier est conservé uniquement le temps du traitement ; réessayez.";
+    // Credit, configuration, provider or unusable reading: one precise sentence.
+    return providerFailureMessage(classifyProviderFailure(code), "scan");
   return "L’import des copies n’a pas abouti. Réessayez.";
 }
 
+const LEGIBILITIES = new Set<ResponseLegibility>(["lisible", "partielle", "illisible", "vide", "absente"]);
+
+/**
+ * Saves a scanned copy with its provenance. An automatic import stays an
+ * unverified machine reading; a copy the teacher confirmed in the review is
+ * verified, and only the markers the teacher left in the text count.
+ */
 async function persistCopy(
   assessmentId: string,
   copy: ScanCopyCandidate,
   questions: ScanQuestion[],
   supabase: NonNullable<Awaited<ReturnType<typeof createAuthClient>>>,
   clearScore = false,
+  teacherChecked = false,
 ) {
   if (!copy.studentId) throw new Error("MISSING_STUDENT");
   const responses = normalizedResponses(copy, questions);
   const saved = await supabase.rpc("focus_import_scanned_copy", {
     p_assessment_id: assessmentId,
     p_student_id: copy.studentId,
-    p_responses: responses.map((response) => ({
-      questionId: response.questionId,
-      responseText: response.responseText,
-      awardedPoints: response.awardedPoints,
-      teacherAnnotation: response.teacherAnnotation,
-    })),
+    p_responses: responses.map((response) => {
+      const read = LEGIBILITIES.has(response.legibility) ? response.legibility : "partielle";
+      return {
+        questionId: response.questionId,
+        responseText: response.responseText,
+        awardedPoints: response.awardedPoints,
+        teacherAnnotation: response.teacherAnnotation,
+        transcription: {
+          source: "scan",
+          legibility: teacherChecked ? teacherCheckedLegibility(read, response.responseText) : read,
+          verified: teacherChecked,
+        },
+      };
+    }),
     p_score: copy.score,
     p_clear_score: clearScore,
   });
@@ -170,7 +198,9 @@ export async function prepareScanUploadAction(
         error:
           "Le stockage temporaire des scans n’est pas encore configuré. Appliquez la migration FOCUS Scan sur l’environnement.",
       };
-    return { ok: true, bucket: SCAN_BUCKET, path, token: signed.data.token };
+    const config = authConfig();
+    if (!config) return { ok: false, error: friendlyError(new Error("SUPABASE_NOT_CONFIGURED")) };
+    return { ok: true, bucket: SCAN_BUCKET, path, token: signed.data.token, url: config.url, key: config.key };
   } catch (error) {
     console.error("FOCUS scan upload preparation failed", error instanceof Error ? error.message : error);
     return { ok: false, error: friendlyError(error) };
@@ -244,7 +274,7 @@ export async function processScanImportAction(
     let imported = 0;
 
     for (const [index, copy] of extraction.copies.entries()) {
-      let issue = scanCopyIssue(copy, rosterIds, questions);
+      let issue = scanCopyIssue(copy, rosterIds, questions, extraction.pages);
       if (pageCountMismatch)
         issue = "Le nombre de pages détecté par l’IA ne correspond pas au PDF.";
       if (copy.endPage > actualPageCount)
@@ -302,6 +332,8 @@ export async function processScanImportAction(
       review,
       unassignedPages,
       warnings,
+      pages: extraction.pages,
+      questions: questions.map(({ id, position, prompt }) => ({ id, position, prompt })),
     };
   } catch (error) {
     console.error("FOCUS scan import failed", error instanceof Error ? error.message : error);
@@ -344,12 +376,15 @@ export async function confirmScanCopyAction(
           "Une copie ou une note existe déjà pour cet élève. Confirmez explicitement son remplacement.",
       };
 
+    if (!Array.isArray(candidate.responses) || candidate.responses.length > questions.length)
+      return { ok: false, error: "Copie invalide." };
     await persistCopy(
       assessmentId,
       candidate,
       questions,
       supabase,
       overwrite && candidate.score === null,
+      true,
     );
     revalidatePath(`/app/evaluations/${assessmentId}`);
     revalidatePath("/app", "layout");

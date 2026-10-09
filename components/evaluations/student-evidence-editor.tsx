@@ -7,6 +7,7 @@ import {
   loadResponseOverview,
   loadStudentEvidence,
   saveStudentEvidence,
+  verifyScannedTranscription,
 } from "@/app/(teacher)/app/pedagogy-actions";
 import type {
   ResponseOverviewRow,
@@ -19,7 +20,9 @@ import { useUnsavedChangesWarning } from "@/components/evaluations/assessment-de
 import {
   ANALYSIS_STATUS_LABEL,
   analysisOutcomeMessage,
+  QUESTION_OUTCOME_LABEL,
 } from "@/components/students/pedagogy-labels";
+import { LEGIBILITY_LABEL } from "@/lib/scan-import-core";
 import { ClassAnalysisPanel } from "@/components/evaluations/class-analysis-panel";
 import { Feedback, SectionLoading } from "@/components/ui/feedback";
 
@@ -73,7 +76,7 @@ export function StudentEvidenceEditor({
     text: string;
     link?: boolean;
   } | null>(null);
-  const [busy, setBusy] = useState<"save" | "analyze" | null>(null);
+  const [busy, setBusy] = useState<"save" | "analyze" | "verify" | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const lock = useRef(false);
   const scrolled = useRef(false);
@@ -267,6 +270,31 @@ export function StudentEvidenceEditor({
     }
   }
 
+  async function verify() {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy("verify");
+    setMessage(null);
+    try {
+      const result = await verifyScannedTranscription(assessmentId, studentId);
+      if (!result.ok) {
+        setMessage({ tone: "error", text: result.error });
+        return;
+      }
+      await Promise.all([refreshOverview(), loadStudent(studentId)]);
+      onEvidenceSaved?.();
+      setMessage({
+        tone: "ok",
+        text: "Transcription confirmée telle quelle. Les passages marqués [illisible] restent non lus ; relancez l’analyse de cette copie.",
+      });
+    } catch {
+      setMessage({ tone: "error", text: "La vérification n’a pas pu être enregistrée. Réessayez." });
+    } finally {
+      lock.current = false;
+      setBusy(null);
+    }
+  }
+
   if (!students.length)
     return (
       <p className="text-sm text-ink-soft">
@@ -288,7 +316,7 @@ export function StudentEvidenceEditor({
         Copies des élèves
       </h2>
       <p className="mt-1 max-w-3xl text-sm leading-relaxed text-ink-soft">
-        Les copies importées par PDF apparaissent ici automatiquement. Vous
+        Les copies importées (scan ou photos) apparaissent ici automatiquement. Vous
         pouvez aussi saisir ou corriger manuellement la réponse exacte de
         l’élève, les points attribués et votre annotation. Une copie vide n’est
         jamais interprétée comme une erreur.
@@ -466,10 +494,35 @@ export function StudentEvidenceEditor({
                         </span>
                       )}
                     </div>
+                    {evidence.responses.some((item) => item.source === "scan") && (
+                      <div className="mt-3 rounded-[var(--radius-md)] border border-border bg-paper p-3 text-sm text-ink-soft">
+                        <p>
+                          Copie lue automatiquement sur un scan ou une photo.
+                          Les passages marqués <strong>[illisible]</strong>{" "}
+                          n’ont pas été lus et <strong>[?…]</strong> signale une
+                          lecture incertaine : FOCUS ne tire aucune conclusion
+                          de ces passages. Corrigez la transcription si besoin.
+                        </p>
+                        {evidence.editable &&
+                          evidence.responses.some((item) => item.source === "scan" && item.transcriptionVerified === false) && (
+                            <Button
+                              className="mt-2"
+                              variant="secondary"
+                              disabled={busy !== null || batchRunning || dirty}
+                              title={dirty ? "Enregistrez d’abord la copie" : undefined}
+                              onClick={() => void verify()}
+                            >
+                              {busy === "verify" ? "Enregistrement…" : "J’ai vérifié : la transcription est conforme à la copie"}
+                            </Button>
+                          )}
+                      </div>
+                    )}
                     <ol className="mt-3 space-y-4">
                       {evidence.questions.map((question, index) => {
                         const response = draft[index];
                         if (!response) return null;
+                        const stored = evidence.responses[index];
+                        const outcome = evidence.analysis?.questionOutcomes?.find((item) => item.questionId === question.id);
                         return (
                           <li
                             key={question.id}
@@ -503,6 +556,13 @@ export function StudentEvidenceEditor({
                             >
                               Réponse de l’élève
                             </Label>
+                            {stored?.source === "scan" && (
+                              <p className="mt-1 text-xs text-ink-soft" data-testid={`provenance-${question.position}`}>
+                                Lu sur la copie
+                                {stored.legibility ? ` · ${LEGIBILITY_LABEL[stored.legibility]}` : ""}
+                                {stored.transcriptionVerified ? " · vérifié par vous" : " · lecture non vérifiée"}
+                              </p>
+                            )}
                             <textarea
                               id={`response-${question.id}`}
                               rows={3}
@@ -553,6 +613,20 @@ export function StudentEvidenceEditor({
                                 />
                               </div>
                             </div>
+                            {outcome && !evidence.analysis?.needsAnalysis && (
+                              <p
+                                className="mt-3 rounded-[var(--radius-sm)] border border-border bg-surface px-3 py-2 text-sm"
+                                data-testid={`outcome-${question.position}`}
+                              >
+                                <span className="font-medium text-ink">
+                                  Analyse : {QUESTION_OUTCOME_LABEL[outcome.outcome]}
+                                </span>
+                                {outcome.excerpt && (
+                                  <span className="text-ink-soft"> · extrait « {outcome.excerpt} »</span>
+                                )}
+                                {outcome.note && <span className="block text-ink-soft">{outcome.note}</span>}
+                              </p>
+                            )}
                           </li>
                         );
                       })}

@@ -30,9 +30,19 @@ interface EnvelopeBase {
   evidenceVersion: string;
 }
 
+/** One entry per question (public.focus_record_engine_analysis checks coverage). */
+export interface EnvelopeQuestionOutcome {
+  questionId: string;
+  outcome: string;
+  excerpt: string;
+  note: string;
+}
+
+// questionOutcomes is required: the database accepts an envelope without it
+// only from a server older than migration 20261009120000.
 export type EngineEnvelope =
-  | (EnvelopeBase & { kind: "analysis"; errors: unknown[]; recommendations: unknown[] })
-  | (EnvelopeBase & { kind: "no_evidence"; reason: string });
+  | (EnvelopeBase & { kind: "analysis"; errors: unknown[]; recommendations: unknown[]; questionOutcomes: EnvelopeQuestionOutcome[] })
+  | (EnvelopeBase & { kind: "no_evidence"; reason: string; questionOutcomes: EnvelopeQuestionOutcome[] });
 
 /**
  * The exact text the database verifies and parses, and its HMAC-SHA256.

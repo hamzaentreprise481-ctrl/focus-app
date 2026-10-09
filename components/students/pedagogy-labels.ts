@@ -1,4 +1,4 @@
-import type { ModelAnalysisStatus, PedagogicalConfidence, RecommendationStatus } from "@/lib/pedagogy/types";
+import type { ModelAnalysisStatus, PedagogicalConfidence, QuestionOutcome, RecommendationStatus } from "@/lib/pedagogy/types";
 
 export const ANALYSIS_STATUS_LABEL: Record<ModelAnalysisStatus, string> = {
   errors_found: "erreur(s) observée(s)",
@@ -6,11 +6,24 @@ export const ANALYSIS_STATUS_LABEL: Record<ModelAnalysisStatus, string> = {
   insufficient_evidence: "preuves insuffisantes",
 };
 
-/** Confidence depends on the evidence history, never on the model alone. */
+/**
+ * Confidence depends on the evidence history and on how reliably the copy
+ * was read, never on the model alone.
+ */
 export const CONFIDENCE_LABEL: Record<PedagogicalConfidence, string> = {
-  limitee: "Confiance limitée · une seule observation",
-  moderee: "Confiance modérée · observation répétée",
+  limitee: "Confiance limitée · une seule observation, ou copie lue partiellement",
+  moderee: "Confiance modérée · observation répétée, ou copie lue automatiquement et non vérifiée",
   forte: "Confiance forte · répétée et déjà confirmée par un professeur",
+};
+
+/** What FOCUS concluded about one question: an observation, never a judgement of the student. */
+export const QUESTION_OUTCOME_LABEL: Record<QuestionOutcome, string> = {
+  error: "Erreur observée (hypothèse à examiner)",
+  no_error_observed: "Aucune erreur observée",
+  incomplete: "Réponse incomplète",
+  no_answer: "Pas de réponse",
+  illegible: "Passage manuscrit insuffisamment lisible pour conclure",
+  insufficient_evidence: "Preuves insuffisantes",
 };
 
 export const RECOMMENDATION_STATUS_LABEL: Record<RecommendationStatus, string> = {

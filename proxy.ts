@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth/config";
-import { isTeacher, safeNext } from "@/lib/auth/policy";
+import { hasActiveTeacherMembership, safeNext } from "@/lib/auth/policy";
 
 export async function proxy(request: NextRequest) {
   const config = authConfig();
@@ -43,13 +43,13 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  // getUser verifies identity with Auth and gets fresh, administrator-managed role metadata.
+  // getUser verifies identity; the canonical role/status comes from school_memberships under RLS.
   try {
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser();
-    if (protectedRoute && (error || !isTeacher(user))) return deny();
+    if (protectedRoute && (error || !(await hasActiveTeacherMembership(supabase, user)))) return deny();
   } catch {
     if (protectedRoute) return deny();
   }

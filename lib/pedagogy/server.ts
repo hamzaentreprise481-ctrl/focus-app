@@ -23,7 +23,11 @@ import type {
   NotionTimeline,
   PedagogicalConfidence,
   PedagogicalRecommendationView,
+  QuestionOutcome,
+  QuestionOutcomeView,
   RecommendationStatus,
+  ResponseLegibility,
+  ResponseSource,
   WorkQueueAssessment,
 } from "@/lib/pedagogy/types";
 
@@ -70,19 +74,25 @@ export type ResponseRow = {
   response_text: string;
   awarded_points: number | string | null;
   teacher_annotation: string | null;
+  /** Provenance (migration 20261009120000). */
+  source: ResponseSource;
+  legibility: ResponseLegibility | null;
+  transcription_verified: boolean;
 };
 export type MaterialRow = {
   assessment_id: string;
   context_text: string | null;
   instructions_text: string | null;
 };
-type RunRow = {
+export type RunRow = {
   id: string;
   assessment_id: string;
   student_id: string;
   status: "completed" | "failed" | "no_evidence";
   failure_reason: string | null;
   created_at: string;
+  /** One entry per question (migration 20261009120000); [] for older runs. */
+  question_outcomes: Array<{ questionId: string; outcome: QuestionOutcome; excerpt: string; note: string }> | null;
 };
 type RecommendationRow = {
   id: string;
@@ -265,7 +275,7 @@ export async function evidenceRows(supabase: SupabaseClient, assessmentIds: stri
     selectAllIn<ResponseRow>("Réponses élève", assessmentIds, (chunk, from, to) => {
       let query = supabase
         .from("student_responses")
-        .select("id,assessment_id,question_id,student_id,response_text,awarded_points,teacher_annotation", { count: "exact" })
+        .select("id,assessment_id,question_id,student_id,response_text,awarded_points,teacher_annotation,source,legibility,transcription_verified", { count: "exact" })
         .in("assessment_id", chunk);
       if (studentId) query = query.eq("student_id", studentId);
       return query.order("id").range(from, to);
@@ -301,7 +311,7 @@ export async function currentRuns(supabase: SupabaseClient, assessmentIds: strin
   if (!assessmentIds.length) return [] as RunRow[];
   let query = supabase
     .from("ai_analysis_runs")
-    .select("id,assessment_id,student_id,status,failure_reason,created_at")
+    .select("id,assessment_id,student_id,status,failure_reason,created_at,question_outcomes")
     .in("assessment_id", assessmentIds)
     .is("superseded_at", null)
     .order("created_at", { ascending: false });
@@ -309,6 +319,19 @@ export async function currentRuns(supabase: SupabaseClient, assessmentIds: strin
   const response = await query;
   ensureOk(response.error, "Analyses pédagogiques");
   return (response.data ?? []) as RunRow[];
+}
+
+/** The run's per-question outcomes, labelled as the teacher sees the questions. */
+export function questionOutcomeViews(run: RunRow | undefined, questions: QuestionRow[]): QuestionOutcomeView[] | undefined {
+  const outcomes = Array.isArray(run?.question_outcomes) ? run!.question_outcomes : [];
+  if (!outcomes.length) return undefined;
+  const ordered = [...questions].sort((a, b) => a.position - b.position);
+  const label = new Map(ordered.map((question, index) => [question.id, `Question ${index + 1}`]));
+  const position = new Map(ordered.map((question, index) => [question.id, index]));
+  return outcomes
+    .filter((item) => label.has(item.questionId))
+    .sort((a, b) => (position.get(a.questionId) ?? 0) - (position.get(b.questionId) ?? 0))
+    .map((item) => ({ questionId: item.questionId, questionLabel: label.get(item.questionId)!, outcome: item.outcome, excerpt: item.excerpt ?? "", note: item.note ?? "" }));
 }
 
 export function runStatus(run: RunRow | undefined, recommendationCount: number): ModelAnalysisStatus | null {
@@ -564,6 +587,7 @@ export async function studentPedagogy(
         reason: run?.failure_reason ?? null,
         analyzedAt: run?.created_at ?? null,
         needsAnalysis: answered > 0 && !run,
+        questionOutcomes: questionOutcomeViews(run, questionsByAssessment.get(assessment.id) ?? []),
       };
     });
 
@@ -593,6 +617,10 @@ export async function studentPedagogy(
     if (!question || !answeredQuestions.has(question.id)) continue;
     const run = latestRun.get(question.assessment_id);
     if (!run || run.status !== "completed") continue;
+    // With per-question outcomes, only a question actually read and found
+    // without error counts: illegible, incomplete or unconcluded ones do not.
+    const recorded = Array.isArray(run.question_outcomes) ? run.question_outcomes : [];
+    if (recorded.length && recorded.find((item) => item.questionId === question.id)?.outcome !== "no_error_observed") continue;
     const assessment = assessmentById.get(question.assessment_id)!;
     const hasError = views.some(
       (view) => view.status !== "superseded" && view.assessmentId === assessment.id && view.curriculumNodeCode === tag.code,

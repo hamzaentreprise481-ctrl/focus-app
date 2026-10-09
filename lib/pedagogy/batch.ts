@@ -8,7 +8,7 @@
 import type { ModelAnalysisStatus, ResponseOverviewRow } from "@/lib/pedagogy/types";
 
 /** Why the analysis action refused, when the reason is not about one copy. */
-export type AnalysisFailureCode = "ai_not_configured" | "rate_limited" | "not_available";
+export type AnalysisFailureCode = "ai_not_configured" | "ai_misconfigured" | "rate_limited" | "not_available" | "quota_exhausted" | "provider_busy";
 
 export type BatchItem =
   | { studentId: string; name: string; status: ModelAnalysisStatus; recommendationCount: number; reused: boolean }
@@ -31,7 +31,13 @@ export function batchStopReason(
   lastFailureCode?: AnalysisFailureCode,
 ): string | null {
   if (lastFailureCode === "ai_not_configured") return "L’IA n’est pas configurée sur ce serveur : aucune copie ne peut être analysée.";
+  if (lastFailureCode === "ai_misconfigured")
+    return "Le fournisseur d’IA refuse la configuration de ce serveur (clé ou modèle) : aucune copie ne peut être analysée. Prévenez l’administrateur de FOCUS ; les copies déjà analysées sont conservées.";
   if (lastFailureCode === "rate_limited") return "La limite horaire d’analyses est atteinte : relancez plus tard, les copies déjà analysées sont conservées.";
+  if (lastFailureCode === "quota_exhausted")
+    return "Le crédit du service d’analyse est épuisé : aucune autre copie ne peut être analysée tant qu’il n’est pas rechargé. Les copies déjà analysées sont conservées.";
+  if (lastFailureCode === "provider_busy")
+    return "Le service d’analyse est momentanément saturé : relancez dans quelques minutes, les copies déjà analysées sont conservées.";
   if (lastFailureCode === "not_available") {
     const last = items.at(-1);
     return last?.status === "failed" ? last.error : "L’analyse n’est pas disponible pour cette évaluation.";

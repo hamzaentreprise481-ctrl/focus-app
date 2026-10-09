@@ -2,7 +2,10 @@ import type {
   ModelAnalysisStatus,
   ModelErrorCandidate,
   PedagogicalConfidence,
+  QuestionOutcome,
+  ResponseLegibility,
 } from "@/lib/pedagogy/types";
+import { excerptIsReliable } from "@/lib/scan-import-core";
 
 export interface QuestionEvidenceForValidation {
   assessmentId: string;
@@ -13,6 +16,8 @@ export interface QuestionEvidenceForValidation {
   awardedPoints?: number | null;
   /** Notion codes the teacher tagged as assessed by this question. */
   assessedCodes?: string[];
+  /** How reliably the stored answer was read (scans); null/undefined for a typed answer. */
+  legibility?: ResponseLegibility | null;
 }
 
 export interface ValidatedErrorCandidate extends ModelErrorCandidate {
@@ -29,7 +34,10 @@ export type RejectionReason =
   | "teacher_full_marks"
   | "answer_matches_correction"
   | "overstated_or_non_pedagogical"
-  | "duplicate";
+  | "duplicate"
+  | "uncertain_transcription"
+  | "illegible_answer"
+  | "contradicts_outcome";
 
 export interface RejectedCandidate {
   questionId: string;
@@ -186,6 +194,17 @@ export function reviewModelErrors(
       reject("excerpt_too_short");
       continue;
     }
+    // Never a finding on what the reader could not decipher: an answer read
+    // as illegible, or an excerpt that only exists inside/through an
+    // [illisible] or uncertain [?…] passage of the transcription.
+    if (question.legibility === "illisible") {
+      reject("illegible_answer");
+      continue;
+    }
+    if (!excerptIsReliable(evidenceExcerpt, question.responseText)) {
+      reject("uncertain_transcription");
+      continue;
+    }
     // The teacher's judgement is final: full marks, or an answer identical to
     // the correction, cannot carry an error.
     if (
@@ -271,13 +290,60 @@ export function confidenceForEvidence(params: {
 }
 
 
+export interface ValidatedQuestionOutcome {
+  questionId: string;
+  outcome: QuestionOutcome;
+  /** Literal excerpt of the answer, read with certainty, or "". */
+  excerpt: string;
+  note: string;
+}
+
 export interface ValidatedModelAnalysis {
   status: ModelAnalysisStatus;
   insufficientReason: string;
   errors: ValidatedErrorCandidate[];
   /** Candidates the FOCUS checks refused, for the audit trail. */
   rejected: RejectedCandidate[];
+  /** Exactly one per question, in the questions' order. */
+  questionOutcomes: ValidatedQuestionOutcome[];
 }
+
+const OUTCOMES = new Set<QuestionOutcome>(["error", "no_error_observed", "incomplete", "no_answer", "illegible", "insufficient_evidence"]);
+
+/**
+ * What the evidence alone decides, whatever the model says: nothing written,
+ * a zone missing from the image, or an answer read as illegible.
+ */
+function evidenceOutcome(question: QuestionEvidenceForValidation): ValidatedQuestionOutcome | null {
+  const base = { questionId: question.questionId, excerpt: "" };
+  if (question.legibility === "absente")
+    return { ...base, outcome: "insufficient_evidence", note: "La zone de cette question n’apparaît pas sur l’image transmise." };
+  if (question.legibility === "illisible")
+    return { ...base, outcome: "illegible", note: "Passage manuscrit insuffisamment lisible pour conclure." };
+  if (!question.responseText.trim()) return { ...base, outcome: "no_answer", note: "Aucune réponse écrite." };
+  return null;
+}
+
+/**
+ * When the evidence alone decides every question (nothing written, illegible
+ * or absent from the image), no model is called: these are the outcomes.
+ */
+export function evidenceOnlyOutcomes(questions: QuestionEvidenceForValidation[]): ValidatedQuestionOutcome[] | null {
+  const decided = questions.map(evidenceOutcome);
+  return decided.every((item) => item !== null) ? (decided as ValidatedQuestionOutcome[]) : null;
+}
+
+function cleanNote(value: unknown) {
+  const note = clean(value, 300);
+  return OVERSTATED.test(note) || NON_PEDAGOGICAL.test(note) ? "" : note;
+}
+
+const OUTCOME_SUMMARY: Partial<Record<QuestionOutcome, string>> = {
+  incomplete: "réponse incomplète",
+  no_answer: "sans réponse",
+  illegible: "passage illisible",
+  insufficient_evidence: "preuves insuffisantes",
+};
 
 export function validateModelAnalysis(
   raw: unknown,
@@ -285,11 +351,15 @@ export function validateModelAnalysis(
   nodesByCode: Map<string, string>,
   options: ValidationOptions = {},
 ): ValidatedModelAnalysis {
-  const insufficient = (insufficientReason: string, rejected: RejectedCandidate[] = []) => ({
+  const labelOf = new Map(questions.map((question, index) => [question.questionId, `Q${index + 1}`]));
+  const fallbackOutcomes = (note: string) =>
+    questions.map((question) => evidenceOutcome(question) ?? { questionId: question.questionId, outcome: "insufficient_evidence" as const, excerpt: "", note });
+  const insufficient = (insufficientReason: string, rejected: RejectedCandidate[] = [], questionOutcomes = fallbackOutcomes(insufficientReason)) => ({
     status: "insufficient_evidence" as const,
     insufficientReason,
     errors: [],
     rejected,
+    questionOutcomes,
   });
   if (!questions.some((question) => question.responseText.trim()))
     return insufficient("Aucune réponse exploitable n’est fournie.");
@@ -311,26 +381,101 @@ export function validateModelAnalysis(
   // finding (an answer may try to make the model judge the student here).
   const rawReason = clean(value.insufficientReason, 500);
   const reason = OVERSTATED.test(rawReason) || NON_PEDAGOGICAL.test(rawReason) ? "" : rawReason;
-  const { validated, rejected } = reviewModelErrors(raw, questions, nodesByCode, options);
-
-  if (status === "insufficient_evidence")
-    return insufficient(
-      reason || "Les éléments fournis ne permettent pas d’établir une erreur précise.",
-      rejected,
-    );
+  const reviewed = reviewModelErrors(raw, questions, nodesByCode, options);
+  const rejected = [...reviewed.rejected];
 
   // A "no error" verdict that still lists errors contradicts itself: neither
   // a clean bill nor a diagnosis can be drawn from it.
-  if (status === "no_error_observed")
-    return (value.errors as unknown[]).length
-      ? insufficient("La sortie du moteur est incohérente (aucune erreur annoncée, mais des erreurs listées).", rejected)
-      : { status, insufficientReason: "", errors: [], rejected };
+  if (status === "no_error_observed" && (value.errors as unknown[]).length)
+    return insufficient("La sortie du moteur est incohérente (aucune erreur annoncée, mais des erreurs listées).", rejected);
 
-  if (!validated.length)
-    return insufficient(
-      "Le moteur a signalé une erreur, mais aucune preuve vérifiable n’a passé les contrôles FOCUS.",
-      rejected,
-    );
+  // The model's outcome per question (one per known question, first wins).
+  const modelOutcomes = new Map<string, { outcome: QuestionOutcome; excerpt: string; note: string }>();
+  if (Array.isArray(value.questionOutcomes))
+    for (const item of value.questionOutcomes as unknown[]) {
+      if (!item || typeof item !== "object") continue;
+      const entry = item as Record<string, unknown>;
+      const questionId = clean(entry.questionId, 80);
+      const outcome = clean(entry.outcome, 40) as QuestionOutcome;
+      if (!labelOf.has(questionId) || !OUTCOMES.has(outcome) || modelOutcomes.has(questionId)) continue;
+      modelOutcomes.set(questionId, {
+        outcome,
+        excerpt: typeof entry.observedExcerpt === "string" ? entry.observedExcerpt.slice(0, 300) : "",
+        note: cleanNote(entry.note),
+      });
+    }
+  const legacy = !Array.isArray(value.questionOutcomes);
 
-  return { status, insufficientReason: "", errors: validated, rejected };
+  let errors = reviewed.validated;
+  if (status === "insufficient_evidence") {
+    // The model declared it could not conclude: no finding is kept.
+    for (const error of errors) rejected.push({ questionId: error.questionId, nodeCode: error.nodeCode, reason: "contradicts_outcome" });
+    errors = [];
+  }
+
+  const questionOutcomes: ValidatedQuestionOutcome[] = questions.map((question) => {
+    const decided = evidenceOutcome(question);
+    const questionErrors = errors.filter((error) => error.questionId === question.questionId);
+    if (decided) {
+      for (const error of questionErrors) rejected.push({ questionId: error.questionId, nodeCode: error.nodeCode, reason: "contradicts_outcome" });
+      errors = errors.filter((error) => error.questionId !== question.questionId);
+      return decided;
+    }
+    const model = modelOutcomes.get(question.questionId);
+    const excerpt =
+      model?.excerpt && meaningfulExcerpt(model.excerpt, question.responseText) && excerptIsReliable(model.excerpt, question.responseText)
+        ? model.excerpt
+        : "";
+    if (questionErrors.length) {
+      // A finding needs the model's own outcome for the question to agree:
+      // "no error", "no answer" or "illegible" next to an error is a contradiction.
+      if (!legacy && model && ["no_error_observed", "no_answer", "illegible"].includes(model.outcome)) {
+        for (const error of questionErrors) rejected.push({ questionId: error.questionId, nodeCode: error.nodeCode, reason: "contradicts_outcome" });
+        errors = errors.filter((error) => error.questionId !== question.questionId);
+        return {
+          questionId: question.questionId,
+          outcome: model.outcome === "illegible" ? "illegible" : "insufficient_evidence",
+          excerpt: "",
+          note: "Sortie du moteur contradictoire pour cette question : aucune conclusion retenue.",
+        };
+      }
+      return { questionId: question.questionId, outcome: "error", excerpt: questionErrors[0].evidenceExcerpt, note: model?.note ?? "" };
+    }
+    if (legacy)
+      return status === "no_error_observed"
+        ? { questionId: question.questionId, outcome: "no_error_observed", excerpt: "", note: "" }
+        : { questionId: question.questionId, outcome: "insufficient_evidence", excerpt: "", note: "" };
+    if (!model)
+      return { questionId: question.questionId, outcome: "insufficient_evidence", excerpt: "", note: "Le moteur n’a pas statué sur cette question." };
+    if (model.outcome === "error")
+      return {
+        questionId: question.questionId,
+        outcome: "insufficient_evidence",
+        excerpt: "",
+        note: "Une erreur a été proposée mais sa preuve n’a pas passé les contrôles FOCUS.",
+      };
+    // An outcome that needs a text it does not have stays insufficient.
+    if (model.outcome === "no_answer")
+      return { questionId: question.questionId, outcome: "insufficient_evidence", excerpt, note: "Une réponse est écrite alors que le moteur n’en a pas vu." };
+    return { questionId: question.questionId, outcome: model.outcome, excerpt, note: model.note };
+  });
+
+  if (errors.length) return { status: "errors_found", insufficientReason: "", errors, rejected, questionOutcomes };
+  // No error: a clean bill only if every written answer was read and judged
+  // without error; unanswered questions are reported, they do not block it.
+  const blocking = questionOutcomes.filter((item) => item.outcome !== "no_error_observed" && item.outcome !== "no_answer");
+  if (!blocking.length && status !== "insufficient_evidence" && questionOutcomes.some((item) => item.outcome === "no_error_observed"))
+    return { status: "no_error_observed", insufficientReason: "", errors: [], rejected, questionOutcomes };
+  const summary = blocking
+    .map((item) => `${labelOf.get(item.questionId)} : ${OUTCOME_SUMMARY[item.outcome] ?? "à confirmer"}`)
+    .join(" ; ");
+  const reasonText =
+    status === "errors_found"
+      ? `Le moteur a signalé une erreur, mais aucune preuve vérifiable n’a passé les contrôles FOCUS.${summary ? ` (${summary}).` : ""}`
+      : status === "insufficient_evidence"
+        ? reason || "Les éléments fournis ne permettent pas d’établir une erreur précise."
+        : summary
+          ? `Aucune erreur démontrée — ${summary}.`
+          : "Les éléments fournis ne permettent pas d’établir une erreur précise.";
+  return insufficient(reasonText, rejected, questionOutcomes);
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import styles from "./page.module.css";
+
 export default function MarketingLayout({
   children,
 }: {
@@ -16,10 +17,11 @@ export default function MarketingLayout({
             <span className={styles.mark}>F</span>FOCUS
           </Link>
           <nav aria-label="Navigation du site">
-            <Link href="/#fonctionnement">Fonctionnement</Link>
-            <Link href="/#confiance">Confiance</Link>
-            <Link href="/#pilote">Pilote</Link>
-            <Link href="/#faq">Questions fréquentes</Link>
+            <Link href="/decouvrir">Découvrir</Link>
+            <Link href="/fonctionnement">Fonctionnement</Link>
+            <Link href="/confiance">Confiance</Link>
+            <Link href="/abonnements">Abonnements</Link>
+            <Link href="/questions">Questions</Link>
           </nav>
           <Link href="/connexion" className={styles.smallButton}>
             Espace professeur

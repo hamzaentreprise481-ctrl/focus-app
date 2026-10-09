@@ -13,7 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { aggregate, scoreCase } from "../lib/pedagogy/benchmark";
+import { aggregate, releaseGateFailures, scoreCase } from "../lib/pedagogy/benchmark";
 import { pedagogicalReasoningEffort, requestPedagogicalAnalysisWithUsage, type ReasoningEffort } from "../lib/pedagogy/openai-client";
 import { PEDAGOGY_BENCHMARK } from "../tests/fixtures/pedagogy-benchmark";
 import { loadProductionCurriculum, questionIdsOf, referenceOutput, runCase, type ModelCall } from "../tests/helpers/benchmark-runner";
@@ -30,7 +30,7 @@ async function main() {
     console.error("BLOCKED: OPENAI_API_KEY is not available in this environment. Nothing was sent; no result is claimed.");
     process.exit(2);
   }
-  const model = reference ? "reference-ideal" : option("model") || process.env.FOCUS_AI_MODEL || "gpt-5.6-terra";
+  const model = reference ? "reference-ideal" : option("model") || process.env.FOCUS_AI_MODEL || "gpt-6-astra";
   const effort: ReasoningEffort = pedagogicalReasoningEffort(option("effort") ?? process.env.FOCUS_AI_REASONING_EFFORT);
   const only = option("cases")?.split(",");
   const cases = only ? PEDAGOGY_BENCHMARK.filter((item) => only.includes(item.id)) : PEDAGOGY_BENCHMARK;
@@ -78,6 +78,14 @@ async function main() {
   writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(metrics, null, 2));
   console.log(`Report: ${path.relative(process.cwd(), file)}`);
+  if (process.argv.includes("--release-gate")) {
+    const gateFailures = releaseGateFailures(metrics);
+    if (gateFailures.length) {
+      console.error(`RELEASE GATE FAILED: ${gateFailures.join("; ")}`);
+      process.exit(3);
+    }
+    console.log("RELEASE GATE PASSED");
+  }
 }
 
 main().catch((error) => {

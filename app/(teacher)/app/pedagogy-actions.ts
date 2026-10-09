@@ -4,13 +4,14 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createAuthClient, requireTeacher } from "@/lib/auth/server";
 import { toAiCurriculum } from "@/lib/curriculum/graph";
-import { validateModelAnalysis } from "@/lib/pedagogy/analysis";
+import { evidenceOnlyOutcomes, validateModelAnalysis, type ValidatedQuestionOutcome } from "@/lib/pedagogy/analysis";
 import {
   analyzePedagogicalEvidence,
   pedagogicalAiConfigured,
   pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
 import { ModelCallError, pedagogicalAiHourlyLimit, pedagogicalReasoningEffort, type ModelUsage } from "@/lib/pedagogy/openai-client";
+import { classifyProviderFailure, providerFailureLog, providerFailureMessage } from "@/lib/pedagogy/provider-errors";
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
 import { engineSigningKey, signEngineEnvelope, type EngineEnvelope } from "@/lib/pedagogy/engine-signature";
 import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
@@ -19,6 +20,7 @@ import type { AnalysisFailureCode } from "@/lib/pedagogy/batch";
 import {
   AccessError,
   assessmentAccess,
+  questionOutcomeViews,
   assessmentReview,
   catalogueErrorsByCode,
   currentRuns,
@@ -310,6 +312,7 @@ export async function loadStudentEvidence(
             responseText: row?.response_text ?? "",
             awardedPoints: row?.awarded_points === null || row?.awarded_points === undefined ? "" : String(Number(row.awarded_points)),
             teacherAnnotation: row?.teacher_annotation ?? "",
+            ...(row ? { source: row.source ?? "manual", legibility: row.legibility ?? null, transcriptionVerified: row.transcription_verified !== false } : {}),
           };
         }),
         analysis: {
@@ -322,6 +325,7 @@ export async function loadStudentEvidence(
           reason: state.run?.failure_reason ?? null,
           analyzedAt: state.run?.created_at ?? null,
           needsAnalysis: answered > 0 && !state.run,
+          questionOutcomes: questionOutcomeViews(state.run, questions),
         },
       },
     };
@@ -373,6 +377,38 @@ export async function saveStudentEvidence(
     revalidatePath(`/app/evaluations/${assessmentId}`);
     revalidatePath(`/app/eleves/${studentId}`);
     return { ok: true, ...(data as { changed: boolean; supersededAnalyses: number }) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/**
+ * The teacher confirms that the automatic reading of a scanned copy is right
+ * as it is ([illisible] passages stay unread). The analysis of that copy is
+ * replaced, since the evidence it rests on changed status.
+ */
+export async function verifyScannedTranscription(
+  assessmentId: string,
+  studentId: string,
+): Promise<{ ok: true; verified: number } | Failure> {
+  if (!UUID_RE.test(assessmentId) || !UUID_RE.test(studentId)) return { ok: false, error: "Copie invalide." };
+  try {
+    const { supabase } = await session();
+    const { data, error } = await supabase.rpc("focus_verify_transcription", { p_assessment_id: assessmentId, p_student_id: studentId });
+    if (error) {
+      console.error("FOCUS transcription verification failed", { code: error.code });
+      return {
+        ok: false,
+        error: isSchemaOutdated(error)
+          ? SCHEMA_OUTDATED_MESSAGE
+          : error.code === "42501"
+            ? "Vous n’avez pas les droits nécessaires pour modifier cette copie."
+            : "La vérification n’a pas pu être enregistrée.",
+      };
+    }
+    revalidatePath(`/app/evaluations/${assessmentId}`);
+    revalidatePath(`/app/eleves/${studentId}`);
+    return { ok: true, verified: Number(data ?? 0) };
   } catch (error) {
     return failure(error);
   }
@@ -564,6 +600,11 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
             awardedPoints: toNumber(response?.awarded_points),
             teacherAnnotation: response?.teacher_annotation ?? null,
             assessedNotions: tagsByQuestion.get(question.id) ?? [],
+            // Where the answer comes from and how reliably it was read: the
+            // model must not build on a machine reading as on typed text.
+            transcription: response
+              ? { source: response.source ?? "manual", verified: response.transcription_verified !== false, legibility: response.legibility ?? null }
+              : { source: "manual", verified: true, legibility: null },
           };
         }),
         curriculum: aiCurriculum,
@@ -644,16 +685,30 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       console.error("FOCUS analysis not recorded", { code: error.code, message: error.message });
       return { ok: false as const, failure: recordFailure(error) };
     };
-    const persistNoEvidence = async (reason: string, usedModel: string) => {
-      const recorded = await record({ ...envelopeBase, kind: "no_evidence", model: usedModel, reason });
+    const persistNoEvidence = async (reason: string, usedModel: string, questionOutcomes: ValidatedQuestionOutcome[]) => {
+      const recorded = await record({ ...envelopeBase, kind: "no_evidence", model: usedModel, reason, questionOutcomes });
       if (!recorded.ok) throw new RecordRefused(recorded.failure);
       return recorded.runId;
     };
 
-    if (!aiInput.questions.some((question) => question.responseText.trim())) {
-      // No answer: the model is not called at all.
-      const reason = "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
-      const runId = await persistNoEvidence(reason, model);
+    const validationInput = aiInput.questions.map((question) => ({
+      assessmentId: assessment.id,
+      questionId: question.questionId,
+      responseText: question.responseText,
+      correctionText: question.correctionText,
+      maxPoints: question.maxPoints,
+      awardedPoints: question.awardedPoints,
+      assessedCodes: question.assessedNotions,
+      legibility: question.transcription.legibility,
+    }));
+    const decidedByEvidence = evidenceOnlyOutcomes(validationInput);
+    if (decidedByEvidence) {
+      // Nothing written, illegible or absent from the image for every
+      // question: the model is not called at all.
+      const reason = aiInput.questions.some((question) => question.responseText.trim())
+        ? "Passages manuscrits insuffisamment lisibles pour conclure : aucune réponse exploitable."
+        : "Aucune réponse exploitable de l’élève n’est enregistrée pour cette évaluation.";
+      const runId = await persistNoEvidence(reason, model, decidedByEvidence);
       await recordUsage(supabase, { assessmentId: assessment.id, runId, model, outcome: "insufficient_evidence", modelCalled: false });
       revalidatePath(`/app/eleves/${studentId}`);
       return {
@@ -695,7 +750,19 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
           code: "ai_not_configured",
           error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée.",
         };
-      console.error("FOCUS pedagogical AI request failed", message);
+      const providerCode = error instanceof ModelCallError ? error.providerCode : null;
+      // Credit, configuration, provider or unusable answer: never confused,
+      // logged as one JSON line without any student data.
+      const failure = classifyProviderFailure(message, providerCode);
+      console.error(
+        providerFailureLog("analysis", failure, {
+          code: message,
+          providerCode,
+          model,
+          attempts: error instanceof ModelCallError ? error.attempts : null,
+          latencyMs: error instanceof ModelCallError ? error.latencyMs : null,
+        }),
+      );
       await recordUsage(supabase, {
         assessmentId: assessment.id,
         runId: null,
@@ -704,24 +771,22 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
         modelCalled: true,
         latencyMs: error instanceof ModelCallError ? error.latencyMs : null,
       });
-      if (message === "OPENAI_TIMEOUT")
-        return { ok: false, error: "Le service d’analyse n’a pas répondu à temps. Aucune recommandation n’a été enregistrée ; réessayez." };
-      return { ok: false, error: "L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard." };
+      const code =
+        failure.kind === "quota_exhausted"
+          ? "quota_exhausted"
+          : failure.kind === "rate_limited"
+            ? "provider_busy"
+            : failure.family === "configuration"
+              ? "ai_misconfigured"
+              : undefined;
+      return { ok: false, ...(code ? { code } : {}), error: providerFailureMessage(failure, "analysis") } as const;
     }
 
     // Only notions of the class's programme may carry a recommendation;
     // prior-level prerequisites are context for the model, not targets.
     const validated = validateModelAnalysis(
       modelResult.analysis,
-      aiInput.questions.map((question) => ({
-        assessmentId: assessment.id,
-        questionId: question.questionId,
-        responseText: question.responseText,
-        correctionText: question.correctionText,
-        maxPoints: question.maxPoints,
-        awardedPoints: question.awardedPoints,
-        assessedCodes: question.assessedNotions,
-      })),
+      validationInput,
       graph.mappableNotionIdsByCode,
       { relatedCodes: relatedCodesFor(graph), catalogueCodes },
     );
@@ -730,7 +795,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
 
     const called = { model: modelResult.model, modelCalled: true, latencyMs: modelResult.latencyMs, usage: modelResult.usage, rejectedCandidates: validated.rejected.length };
     if (validated.status === "insufficient_evidence") {
-      const runId = await persistNoEvidence(validated.insufficientReason, modelResult.model);
+      const runId = await persistNoEvidence(validated.insufficientReason, modelResult.model, validated.questionOutcomes);
       await recordUsage(supabase, { assessmentId: assessment.id, runId, outcome: "insufficient_evidence", ...called });
       revalidatePath(`/app/eleves/${studentId}`);
       return {
@@ -757,6 +822,7 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
       model: modelResult.model,
       errors: payload.errors,
       recommendations: payload.recommendations,
+      questionOutcomes: validated.questionOutcomes,
     });
     if (!recorded.ok) {
       await recordUsage(supabase, { assessmentId: assessment.id, runId: null, outcome: "persistence_error", ...called });

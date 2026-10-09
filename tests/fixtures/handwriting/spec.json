@@ -1,0 +1,167 @@
+{
+  "about": "Fictitious handwritten copies for FOCUS. Every name, answer and mark below is invented. Markup in lines: ^2 superscript; [[a/b]] stacked fraction; ~~t~~ crossed out by the student (not part of the answer); ##t## scribbled over by the student (not part of the answer); !!t!! written by the student then destroyed on the image (ink blot, smudge, heavy blur): it is present in the ground truth only as hidden text and must never be transcribed.",
+  "assessments": {
+    "E1": {
+      "title": "Évaluation 1 — Calcul littéral et fractions",
+      "date": "2026-09-14",
+      "questions": [
+        { "key": "Q1", "label": "1)", "prompt": "Développer A = 3(x + 4).", "correction": "A = 3x + 12", "maxPoints": 2, "notions": ["MATH.ALG.DISTRIBUTIVITE"] },
+        { "key": "Q2", "label": "2)", "prompt": "Développer B = (x + 5)².", "correction": "B = x² + 10x + 25", "maxPoints": 2, "notions": ["MATH.ALG.IDENTITES"] },
+        { "key": "Q3", "label": "3)", "prompt": "Calculer 2/3 + 1/4 et donner le résultat sous forme irréductible.", "correction": "2/3 + 1/4 = 8/12 + 3/12 = 11/12", "maxPoints": 2, "notions": ["MATH.NUM.FRACTIONS.OPERATIONS"] },
+        { "key": "Q4", "label": "4)", "prompt": "Résoudre l'équation 4x − 7 = 13.", "correction": "4x = 20 donc x = 5", "maxPoints": 2, "notions": ["MATH.ALG.EQUATION_PREMIER_DEGRE"] },
+        { "key": "Q5", "label": "5)", "prompt": "Factoriser C = x² − 9.", "correction": "C = (x − 3)(x + 3)", "maxPoints": 2, "notions": ["MATH.ALG.FACTORISATION_SIMPLE", "MATH.ALG.IDENTITES"] }
+      ]
+    },
+    "E2": {
+      "title": "Évaluation 2 — Identités et équations",
+      "date": "2026-09-28",
+      "questions": [
+        { "key": "Q1", "label": "1)", "prompt": "Développer D = (2x + 1)².", "correction": "D = 4x² + 4x + 1", "maxPoints": 3, "notions": ["MATH.ALG.IDENTITES"] },
+        { "key": "Q2", "label": "2)", "prompt": "Résoudre 3(x − 2) = 9.", "correction": "3x − 6 = 9 ; 3x = 15 ; x = 5", "maxPoints": 3, "notions": ["MATH.ALG.EQUATION_PREMIER_DEGRE", "MATH.ALG.DISTRIBUTIVITE"] },
+        { "key": "Q3", "label": "3)", "prompt": "Calculer 5/6 − 1/3 (résultat irréductible).", "correction": "5/6 − 2/6 = 3/6 = 1/2", "maxPoints": 2, "notions": ["MATH.NUM.FRACTIONS.OPERATIONS"] },
+        { "key": "Q4", "label": "4)", "prompt": "Résoudre x² = 16.", "correction": "x = 4 ou x = −4", "maxPoints": 2, "notions": ["MATH.ALG.CARRE_EQUATION"] }
+      ]
+    },
+    "E3": {
+      "title": "Évaluation 3 — Problème : aire d'un carré",
+      "date": "2026-10-05",
+      "questions": [
+        { "key": "Q1", "label": "1)", "prompt": "Un carré a pour côté (x + 3) cm. Exprimer son aire A(x) sous forme développée.", "correction": "A(x) = (x + 3)² = x² + 6x + 9", "maxPoints": 3, "notions": ["MATH.ALG.IDENTITES"] },
+        { "key": "Q2", "label": "2)", "prompt": "Calculer l'aire du carré pour x = 2.", "correction": "A(2) = 5² = 25 cm²", "maxPoints": 2, "notions": ["MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"] },
+        { "key": "Q3", "label": "3)", "prompt": "Le périmètre du carré est 4(x + 3). Pour quelle valeur de x vaut-il 28 cm ?", "correction": "4x + 12 = 28 donc 4x = 16 donc x = 4", "maxPoints": 3, "notions": ["MATH.ALG.EQUATION_PREMIER_DEGRE", "MATH.ALG.DISTRIBUTIVITE"] }
+      ]
+    }
+  },
+  "students": {
+    "S1": { "name": "Inès Morel", "profile": "Bonne maîtrise générale, une erreur de calcul isolée." },
+    "S2": { "name": "Hugo Petit", "profile": "Bonne méthode, mauvaise compréhension des opérations sur les fractions." },
+    "S3": { "name": "Lucas Bernard", "profile": "Misconception persistante (a + b)² = a² + b², dans plusieurs contextes." },
+    "S4": { "name": "Chloé Lambert", "profile": "Réponses partielles, raisonnements incomplets, une absence de réponse." },
+    "S5": { "name": "Nathan Roux", "profile": "Copie difficilement lisible ; certaines réponses impossibles à interpréter." },
+    "S6": { "name": "Léa Garnier", "profile": "Bonnes méthodes mais écriture mathématique fautive (parenthèses, « = 0 » ajouté), une erreur de signe, une rature corrigée." }
+  },
+  "copies": [
+    {
+      "id": "E1-S1-A", "assessment": "E1", "student": "S1", "level": "A", "seed": 101, "score": "17/20",
+      "answers": {
+        "Q1": { "lines": ["A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["B = x^2 + 2 × x × 5 + 25", "B = x^2 + 10x + 25"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q3": { "lines": ["[[2/3]] + [[1/4]] = [[8/12]] + [[3/12]] = [[11/12]]"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q4": { "lines": ["4x = 13 + 7", "4x = 20", "x = 20 ÷ 4 = 4"], "points": "1", "annotation": "calcul !", "expect": { "outcome": "error", "errorTypes": ["calcul"], "notions": ["MATH.ALG.EQUATION_PREMIER_DEGRE", "MATH.ALG.EQUATIONS", "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"], "evidenceAnyOf": ["20 ÷ 4 = 4", "x = 20 ÷ 4 = 4", "20÷4=4", "20 / 4 = 4", "20/4 = 4", "20 : 4 = 4"] } },
+        "Q5": { "lines": ["C = x^2 − 3^2 = (x − 3)(x + 3)"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } }
+      }
+    },
+    {
+      "id": "E2-S1-B", "assessment": "E2", "student": "S1", "level": "B", "seed": 102, "score": "20/20",
+      "answers": {
+        "Q1": { "lines": ["D = (2x)^2 + 2 × 2x × 1 + 1^2", "D = 4x^2 + 4x + 1"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["3x − 6 = 9", "3x = 15", "x = 5"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q3": { "lines": ["[[5/6]] − [[2/6]] = [[3/6]] = [[1/2]]"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q4": { "lines": ["x = 4 ou x = −4"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } }
+      }
+    },
+    {
+      "id": "E3-S1-B", "assessment": "E3", "student": "S1", "level": "B", "seed": 103, "score": "20/20",
+      "answers": {
+        "Q1": { "lines": ["A(x) = (x + 3)^2", "A(x) = x^2 + 6x + 9"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["A(2) = 2^2 + 6 × 2 + 9 = 25", "L'aire vaut 25 cm^2"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q3": { "lines": ["4x + 12 = 28", "4x = 16 donc x = 4"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } }
+      }
+    },
+    {
+      "id": "E1-S2-B", "assessment": "E1", "student": "S2", "level": "B", "seed": 201, "score": "16/20",
+      "answers": {
+        "Q1": { "lines": ["A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["B = x^2 + 10x + 25"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q3": { "lines": ["[[2/3]] + [[1/4]] = [[2 + 1/3 + 4]] = [[3/7]]"], "points": "0", "annotation": "dénominateur commun ?", "expect": { "outcome": "error", "errorTypes": ["concept", "methode", "calcul"], "notions": ["MATH.NUM.FRACTIONS.OPERATIONS"], "evidenceAnyOf": ["3/7", "2+1/3+4", "2 + 1/3 + 4"] } },
+        "Q4": { "lines": ["4x − 7 = 13", "4x = 20", "x = 5"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q5": { "lines": ["C = (x − 3)(x + 3)"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } }
+      }
+    },
+    {
+      "id": "E2-S2-B", "assessment": "E2", "student": "S2", "level": "B", "seed": 202, "score": "16/20",
+      "answers": {
+        "Q1": { "lines": ["D = 4x^2 + 4x + 1"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["3x − 6 = 9", "3x = 15", "x = 5"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q3": { "lines": ["[[5/6]] − [[1/3]] = [[5 − 1/6 − 3]] = [[4/3]]"], "points": "0", "annotation": "", "expect": { "outcome": "error", "errorTypes": ["concept", "methode", "calcul"], "notions": ["MATH.NUM.FRACTIONS.OPERATIONS"], "evidenceAnyOf": ["4/3", "5-1/6-3", "5 − 1/6 − 3", "5 - 1/6 - 3"] } },
+        "Q4": { "lines": ["x = 4 ou x = −4"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } }
+      }
+    },
+    {
+      "id": "E1-S3-C", "assessment": "E1", "student": "S3", "level": "C", "seed": 301, "score": "11/20", "legibilitySeries": true,
+      "answers": {
+        "Q1": { "lines": ["A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["B = ~~x^2 + 5^2~~", "B = x^2 + 25"], "points": "0", "annotation": "(a+b)^2 ?", "crossedOut": ["x² + 5²"], "expect": { "outcome": "error", "errorTypes": ["concept", "methode"], "notions": ["MATH.ALG.IDENTITES", "MATH.ALG.DISTRIBUTIVITE"], "evidenceAnyOf": ["x² + 25", "x^2 + 25", "x²+25", "B = x² + 25"] } },
+        "Q3": { "lines": ["[[2/3]] + [[1/4]] = [[8/12]] + [[3/12]] = [[11/12]]"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q4": { "lines": ["4x = 13 + 7 = 20", "x = 5"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q5": { "lines": ["C = (x − 3)^2"], "points": "0", "annotation": "", "expect": { "outcome": "error", "errorTypes": ["concept", "methode"], "notions": ["MATH.ALG.FACTORISATION_SIMPLE", "MATH.ALG.IDENTITES"], "evidenceAnyOf": ["(x − 3)²", "(x-3)²", "(x − 3)^2", "(x-3)^2", "C = (x − 3)²"] } }
+      }
+    },
+    {
+      "id": "E2-S3-B", "assessment": "E2", "student": "S3", "level": "B", "seed": 302, "score": "12/20",
+      "answers": {
+        "Q1": { "lines": ["D = (2x)^2 + 1^2", "D = 4x^2 + 1"], "points": "0", "annotation": "", "expect": { "outcome": "error", "errorTypes": ["concept", "methode"], "notions": ["MATH.ALG.IDENTITES", "MATH.ALG.DISTRIBUTIVITE"], "evidenceAnyOf": ["4x² + 1", "4x^2 + 1", "(2x)² + 1²", "D = 4x² + 1"] } },
+        "Q2": { "lines": ["3x − 6 = 9", "3x = 15", "x = 5"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q3": { "lines": ["[[5/6]] − [[2/6]] = [[3/6]] = [[1/2]]"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q4": { "lines": ["x = 4"], "points": "1", "annotation": "et −4 ?", "expect": { "outcome": ["incomplete", "error"], "errorTypes": ["concept", "raisonnement", "methode"], "notions": ["MATH.ALG.CARRE_EQUATION", "MATH.ALG.RACINES"] } }
+      }
+    },
+    {
+      "id": "E3-S3-B", "assessment": "E3", "student": "S3", "level": "B", "seed": 303, "score": "9/20",
+      "answers": {
+        "Q1": { "lines": ["A(x) = (x + 3)^2 = x^2 + 9"], "points": "0", "annotation": "", "expect": { "outcome": "error", "errorTypes": ["concept", "methode"], "notions": ["MATH.ALG.IDENTITES", "MATH.ALG.DISTRIBUTIVITE"], "evidenceAnyOf": ["x² + 9", "x^2 + 9", "= x² + 9", "(x + 3)² = x² + 9"] } },
+        "Q2": { "lines": ["A(2) = 4 + 9 = 13", "13 cm^2"], "points": "1", "annotation": "", "expect": { "outcome": ["error", "no_error"], "errorTypes": ["concept", "methode", "calcul", "raisonnement"], "notions": ["MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE", "MATH.ALG.IDENTITES"] } },
+        "Q3": { "lines": ["4x + 12 = 28", "4x = 16", "x = 4"], "points": "3", "annotation": "", "expect": { "outcome": "no_error" } }
+      }
+    },
+    {
+      "id": "E1-S4-B", "assessment": "E1", "student": "S4", "level": "B", "seed": 401, "score": "7/20",
+      "answers": {
+        "Q1": { "lines": ["A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["B = (x + 5)(x + 5) ="], "points": "0,5", "annotation": "à finir", "expect": { "outcome": "incomplete" } },
+        "Q3": { "lines": ["[[2/3]] + [[1/4]] = [[8/12]] +"], "points": "0,5", "annotation": "", "expect": { "outcome": "incomplete" } },
+        "Q4": { "lines": ["4x − 7 = 13", "4x = 20"], "points": "1", "annotation": "conclure", "expect": { "outcome": "incomplete" } },
+        "Q5": { "lines": [], "points": "0", "annotation": "", "expect": { "outcome": "no_answer" } }
+      }
+    },
+    {
+      "id": "E1-S5-E", "assessment": "E1", "student": "S5", "level": "E", "seed": 501, "score": "8/20",
+      "answers": {
+        "Q1": { "lines": ["A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error", "legibility": "lisible_or_partial" } },
+        "Q2": { "lines": ["B = x^2 + !!10x!! + 25"], "points": "1", "annotation": "", "hidden": ["10x"], "expect": { "outcome": ["illegible", "insufficient_evidence", "no_error"], "legibility": "partial" } },
+        "Q3": { "lines": ["!![[2/3]] + [[1/4]] = [[3/7]]!!"], "points": "0", "annotation": "", "hidden": ["3/7"], "expect": { "outcome": ["illegible", "insufficient_evidence"], "legibility": "illegible" } },
+        "Q4": { "lines": ["4x = 20", "x = 5"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q5": { "lines": ["!!C = (x − 9)(x + 9)!!"], "points": "0", "annotation": "", "hidden": ["(x − 9)(x + 9)", "x-9", "x+9"], "expect": { "outcome": ["illegible", "insufficient_evidence"], "legibility": "illegible" } }
+      }
+    },
+    {
+      "id": "E1-S6-C", "assessment": "E1", "student": "S6", "level": "C", "seed": 611, "score": "15/20",
+      "answers": {
+        "Q1": { "lines": ["A = 3 × x + 3 × 4", "A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["B = x + 5 × x + 5", "B = x^2 + 10x + 25"], "points": "1,5", "annotation": "parenthèses !", "expect": { "outcome": ["error", "no_error"], "errorTypes": ["representation", "communication", "methode"], "notions": ["MATH.ALG.IDENTITES", "MATH.ALG.DISTRIBUTIVITE", "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"], "evidenceAnyOf": ["x + 5 × x + 5", "B = x + 5 × x + 5", "x+5×x+5"] } },
+        "Q3": { "lines": ["~~[[2/3]] + [[1/4]] = [[3/7]]~~", "[[2/3]] + [[1/4]] = [[8/12]] + [[3/12]] = [[11/12]]"], "points": "2", "annotation": "", "crossedOut": ["3/7"], "expect": { "outcome": "no_error" } },
+        "Q4": { "lines": ["4x = 13 − 7", "4x = 6", "x = [[6/4]] = [[3/2]]"], "points": "0,5", "annotation": "", "expect": { "outcome": "error", "errorTypes": ["calcul", "methode", "concept"], "notions": ["MATH.ALG.EQUATION_PREMIER_DEGRE", "MATH.ALG.EQUATIONS", "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"], "evidenceAnyOf": ["4x = 13 − 7", "4x = 13 - 7", "4x=13-7", "4x = 6"] } },
+        "Q5": { "lines": ["C = (x − 3)(x + 3) = 0"], "points": "1,5", "annotation": "= 0 ?", "expect": { "outcome": ["error", "no_error"], "errorTypes": ["representation", "communication", "raisonnement", "concept"], "notions": ["MATH.ALG.FACTORISATION_SIMPLE", "MATH.ALG.IDENTITES", "MATH.ALG.EQUATIONS"], "evidenceAnyOf": ["(x − 3)(x + 3) = 0", "(x-3)(x+3) = 0", "(x − 3)(x + 3)=0"] } }
+      }
+    }
+  ],
+  "legibilitySeries": {
+    "source": "E1-S3-C",
+    "levels": ["A", "B", "C", "D", "E"],
+    "levelE": {
+      "Q2": { "lines": ["B = ~~x^2 + 5^2~~", "B = x^2 + !!25!!"], "hidden": ["25"], "expect": { "outcome": ["illegible", "insufficient_evidence", "error"], "legibility": "partial" } },
+      "Q5": { "lines": ["!!C = (x − 3)^2!!"], "hidden": ["(x − 3)", "(x-3)"], "expect": { "outcome": ["illegible", "insufficient_evidence"], "legibility": "illegible" } }
+    }
+  },
+  "failureModes": [
+    { "id": "FM-blur", "source": "E1-S1-A", "transform": "blur_heavy", "expect": "quality_refused_or_illegible" },
+    { "id": "FM-rotated-90", "source": "E1-S2-B", "transform": "rotate_90", "expect": "readable_after_orientation" },
+    { "id": "FM-rotated-180", "source": "E1-S2-B", "transform": "rotate_180", "expect": "readable_after_orientation" },
+    { "id": "FM-dark", "source": "E1-S1-A", "transform": "very_dark", "expect": "quality_refused_or_illegible" },
+    { "id": "FM-cut", "source": "E1-S2-B", "transform": "cut_bottom", "cutAt": 0.34, "missing": ["Q4", "Q5"], "expect": "missing_questions_not_invented" },
+    { "id": "FM-blank", "source": "E1-S4-B", "transform": "blank_copy", "expect": "all_no_answer" },
+    { "id": "FM-not-a-copy", "source": null, "transform": "not_a_copy", "expect": "refused_not_a_copy" },
+    { "id": "FM-multipage-reversed", "source": "E1-S3-C", "transform": "two_pages_reversed", "expect": "pages_ordered_or_flagged" },
+    { "id": "FM-injection", "source": "E1-S2-B", "transform": "prompt_injection", "expect": "injection_ignored" }
+  ]
+}

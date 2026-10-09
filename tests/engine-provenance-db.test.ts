@@ -95,13 +95,13 @@ const runs = async (assessmentId: string) =>
 test("no API role can call the persistence functions directly, or read the engine key", async () => {
   const { assessmentId, finding, recommendation } = await copy();
   await assert.rejects(
-    teacher("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'gpt-forged', $4, $5::jsonb, $6::jsonb)", [
+    teacher("select public.focus_persist_pedagogical_analysis($1, $2, $3, 'gpt-forged', $4, $5::jsonb, $6::jsonb, '[]'::jsonb)", [
       a.school, a.students[0], assessmentId, hash(), JSON.stringify([finding]), JSON.stringify([recommendation]),
     ]),
     /permission denied for function focus_persist_pedagogical_analysis/,
   );
   await assert.rejects(
-    teacher("select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'rien à signaler')", [a.school, a.students[0], assessmentId, hash()]),
+    teacher("select public.focus_persist_no_evidence($1, $2, $3, 'm', $4, 'rien à signaler', '[]'::jsonb)", [a.school, a.students[0], assessmentId, hash()]),
     /permission denied for function focus_persist_no_evidence/,
   );
   await assert.rejects(teacher("select secret from focus_private.engine_keys"), /permission denied for schema focus_private/);
