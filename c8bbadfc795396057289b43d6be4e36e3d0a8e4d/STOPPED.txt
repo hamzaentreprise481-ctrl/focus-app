@@ -1,1 +1,1 @@
-Stopped after fixed-pdf__E1-S1-A.json: OpenAI credit exhausted (insufficient_quota).
+Stopped after fixed-pdf__E2-S1-B.json: OpenAI credit exhausted (insufficient_quota).
