@@ -275,7 +275,6 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
     set.add(row.id);
     competenciesBySubject.set(row.subject_id, set);
   }
-  const competencyById = new Map(competencies.map((row) => [row.id, row]));
   const linksByAssessment = new Map<string, Set<string>>();
   for (const row of assessmentLinks) {
     const set = linksByAssessment.get(row.assessment_id) ?? new Set<string>();

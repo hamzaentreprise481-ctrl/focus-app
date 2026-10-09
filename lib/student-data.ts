@@ -56,6 +56,8 @@ export type StudentCompetencyProgress = {
 };
 
 export type StudentAssessmentDetail = StudentAssessment & {
+  /** Levels the teacher entered for this assessment (explicit, never inferred). */
+  competencies: Array<{ name: string; level: MasteryLevel }>;
   responses: Array<{
     id: string;
     responseText: string;
@@ -337,6 +339,8 @@ export async function loadStudentAssessmentDetail(
   assessmentId: string,
 ): Promise<StudentAssessmentDetail | null> {
   const student = await requireStudent();
+  // A malformed id is never sent to the database: it simply does not exist.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assessmentId)) return null;
   const supabase = await createAuthClient();
   if (!supabase) throw new Error("Supabase n’est pas configuré.");
 
@@ -408,6 +412,27 @@ export async function loadStudentAssessmentDetail(
       ? "graded"
       : "pending";
 
+  let competencies: StudentAssessmentDetail["competencies"] = [];
+  if (result?.id) {
+    const levelResponse = await supabase
+      .from("competency_results")
+      .select("competency_id,mastery_level")
+      .eq("assessment_result_id", result.id);
+    ensureOk(levelResponse.error, "vos compétences");
+    const levels = (levelResponse.data ?? []) as Array<{ competency_id: string; mastery_level: MasteryLevel }>;
+    if (levels.length) {
+      const nameResponse = await supabase
+        .from("competencies")
+        .select("id,name")
+        .in("id", [...new Set(levels.map((row) => row.competency_id))]);
+      ensureOk(nameResponse.error, "les compétences");
+      const names = new Map(((nameResponse.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
+      competencies = levels
+        .map((row) => ({ name: names.get(row.competency_id) ?? "Compétence", level: row.mastery_level }))
+        .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    }
+  }
+
   return {
     id: assessment.id,
     title: assessment.title,
@@ -419,6 +444,7 @@ export async function loadStudentAssessmentDetail(
     important: assessment.important === true,
     resultId: result?.id ?? null,
     updatedAt: result?.updated_at ?? null,
+    competencies,
     responses: responses.map((row) => ({
       id: row.id,
       responseText: row.response_text,
