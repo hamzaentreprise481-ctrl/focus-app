@@ -26,8 +26,7 @@ jobs:
   e2e:
     if: >-
       github.event.deployment_status.state == 'success' &&
-      !contains(github.event.deployment.environment, 'Production') &&
-      github.event.deployment.ref == 'work/fiabiliser-analyse-ia'
+      !contains(github.event.deployment.environment, 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -51,11 +50,17 @@ jobs:
               curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" -d @- > /dev/null
           }
+          health="$(curl -sS -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" "$URL/api/health" || true)"
+          # Vercel sends the commit SHA as the deployment ref: the branch comes
+          # from the deployment itself. Only this PR's branch writes test data.
+          if [ "$(echo "$health" | jq -r '.gitRef // ""' 2>/dev/null)" != "work/fiabiliser-analyse-ia" ]; then
+            echo "Not the PR #15 branch: nothing to do."
+            echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           if [ -z "$FOCUS_E2E_EMAIL" ] || [ -z "$FOCUS_E2E_PASSWORD" ]; then
             status error "Not run: no fictitious test teacher in secrets FOCUS_E2E_EMAIL / FOCUS_E2E_PASSWORD."
             echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          health="$(curl -sS -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" "$URL/api/health" || true)"
           if [ "$(echo "$health" | jq -r '.ready // false' 2>/dev/null)" != "true" ]; then
             reason="$(echo "$health" | jq -r '[if .supabase.schemaUpToDate != true then "schema" else empty end, (.ai.error // empty)] | join(", ")' 2>/dev/null)"
             status error "Not run: Preview not ready (${reason:-unreachable})."
