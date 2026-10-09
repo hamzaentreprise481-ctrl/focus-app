@@ -1,7 +1,8 @@
 import type { ModelPedagogicalAnalysis } from "./types";
 import { PEDAGOGICAL_OUTPUT_SCHEMA, PEDAGOGICAL_SYSTEM_PROMPT } from "./prompt";
 
-function outputText(payload: unknown): string {
+/** The concatenated output_text parts of a Responses API payload. */
+export function outputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as { output?: unknown[] };
   if (!Array.isArray(response.output)) return "";
@@ -64,11 +65,18 @@ export interface ModelUsage {
   totalTokens: number | null;
 }
 
-/** A failed model call keeps its latency; the message is a FOCUS code only. */
+/**
+ * A failed model call keeps its latency; the message is a FOCUS code only.
+ * providerCode is the provider's machine error code (e.g. "insufficient_quota",
+ * "rate_limit_exceeded") when it sent one — never its message, which may echo
+ * student text.
+ */
 export class ModelCallError extends Error {
   constructor(
     public readonly code: string,
     public readonly latencyMs: number,
+    public readonly providerCode: string | null = null,
+    public readonly attempts = 1,
   ) {
     super(code);
   }
@@ -94,6 +102,87 @@ export function usageFrom(payload: unknown): ModelUsage {
  */
 export const MODEL_TIMEOUT_MS = 90_000;
 
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+async function providerErrorCode(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error?: { code?: unknown; type?: unknown } };
+    // An exhausted credit comes as type "insufficient_quota" (code
+    // "insufficient_quota" or "credit_balance_exhausted"): one FOCUS code.
+    if (body?.error?.type === "insufficient_quota" || body?.error?.code === "credit_balance_exhausted") return "insufficient_quota";
+    const code = body?.error?.code ?? body?.error?.type;
+    return typeof code === "string" && /^[a-z0-9_.-]{1,64}$/i.test(code) ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One POST to the Responses API with bounded retries: 429 and 5xx are retried
+ * (Retry-After honoured, at most 15 s per wait) while the shared deadline
+ * allows; an exhausted quota is never retried. Every attempt shares one
+ * deadline, so retries never extend the teacher's request. Used by the
+ * pedagogical analysis and by the scan transcription.
+ */
+export async function callResponsesApi(
+  body: Record<string, unknown>,
+  options: { apiKey: string; fetchImpl?: typeof fetch; baseUrl?: string; timeoutMs: number; maxAttempts?: number },
+): Promise<{ payload: unknown; latencyMs: number; attempts: number }> {
+  const started = Date.now();
+  const deadline = started + options.timeoutMs;
+  const maxAttempts = Math.max(1, Math.min(options.maxAttempts ?? 3, 4));
+  const serialized = JSON.stringify(body);
+  let attempt = 0;
+  const fail = (code: string, providerCode: string | null = null): never => {
+    throw new ModelCallError(code, Date.now() - started, providerCode, attempt);
+  };
+  const retryDelayMs = (response: Response) => {
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter) {
+      const seconds = Number(retryAfter);
+      if (Number.isFinite(seconds) && seconds >= 0) return Math.min(Math.round(seconds * 1000), 15_000);
+      const date = Date.parse(retryAfter);
+      if (Number.isFinite(date)) return Math.min(Math.max(0, date - Date.now()), 15_000);
+    }
+    return Math.min(2_000 * attempt, 6_000);
+  };
+
+  let response: Response | undefined;
+  while (attempt < maxAttempts) {
+    attempt++;
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) fail("OPENAI_TIMEOUT");
+    try {
+      response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
+        method: "POST",
+        signal: AbortSignal.timeout(remainingMs),
+        headers: { Authorization: `Bearer ${options.apiKey}`, "Content-Type": "application/json" },
+        body: serialized,
+      });
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
+    }
+    if (response!.ok) break;
+    const status = response!.status;
+    const retryable = RETRYABLE_STATUS.has(status);
+    const code = retryable || status >= 400 ? await providerErrorCode(response!.clone()) : null;
+    // An exhausted quota is not temporary: retrying only delays the answer.
+    if (!retryable || code === "insufficient_quota" || attempt >= maxAttempts)
+      fail(`OPENAI_REQUEST_FAILED:${status}`, code);
+    const delayMs = Math.min(retryDelayMs(response!), Math.max(0, deadline - Date.now() - 1));
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response!.json();
+  } catch {
+    fail("OPENAI_INVALID_OUTPUT");
+  }
+  return { payload, latencyMs: Date.now() - started, attempts: attempt };
+}
+
 // Shared by the server action and the opt-in live campaign. Never log the
 // provider's error body: it may echo text from a student's response.
 export async function requestPedagogicalAnalysisWithUsage(
@@ -110,88 +199,29 @@ export async function requestPedagogicalAnalysisWithUsage(
   },
 ): Promise<{ analysis: ModelPedagogicalAnalysis; usage: ModelUsage; latencyMs: number }> {
   const started = Date.now();
-  const timeoutMs = options.timeoutMs ?? MODEL_TIMEOUT_MS;
-  const deadline = started + timeoutMs;
-  const maxAttempts = Math.max(1, Math.min(options.maxAttempts ?? 3, 3));
+  const { payload } = await callResponsesApi(
+    {
+      model: options.model,
+      reasoning: { effort: options.reasoningEffort ?? "low" },
+      input: [
+        { role: "system", content: [{ type: "input_text", text: PEDAGOGICAL_SYSTEM_PROMPT }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(input) }] },
+      ],
+      text: {
+        format: { type: "json_schema", name: "focus_pedagogical_analysis", strict: true, schema: PEDAGOGICAL_OUTPUT_SCHEMA },
+      },
+    },
+    {
+      apiKey: options.apiKey,
+      fetchImpl: options.fetchImpl,
+      baseUrl: options.baseUrl,
+      timeoutMs: options.timeoutMs ?? MODEL_TIMEOUT_MS,
+      maxAttempts: options.maxAttempts ?? 3,
+    },
+  );
   const fail = (code: string): never => {
     throw new ModelCallError(code, Date.now() - started);
   };
-  const retryableStatus = (status: number) => status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-  const retryDelayMs = (response: Response, attempt: number) => {
-    const retryAfter = response.headers.get("retry-after");
-    if (retryAfter) {
-      const seconds = Number(retryAfter);
-      if (Number.isFinite(seconds) && seconds >= 0) return Math.min(Math.round(seconds * 1000), 15_000);
-      const date = Date.parse(retryAfter);
-      if (Number.isFinite(date)) return Math.min(Math.max(0, date - Date.now()), 15_000);
-    }
-    return Math.min(2_000 * attempt, 6_000);
-  };
-
-  const body = JSON.stringify({
-    model: options.model,
-    reasoning: { effort: options.reasoningEffort ?? "low" },
-    input: [
-      {
-        role: "system",
-        content: [{ type: "input_text", text: PEDAGOGICAL_SYSTEM_PROMPT }],
-      },
-      {
-        role: "user",
-        content: [{ type: "input_text", text: JSON.stringify(input) }],
-      },
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "focus_pedagogical_analysis",
-        strict: true,
-        schema: PEDAGOGICAL_OUTPUT_SCHEMA,
-      },
-    },
-  });
-
-  const fetchWithRetries = async (): Promise<Response> => {
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const remainingMs = deadline - Date.now();
-      if (remainingMs <= 0) return fail("OPENAI_TIMEOUT");
-
-      let current: Response;
-      try {
-        current = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? openAiBaseUrl()}/responses`, {
-          method: "POST",
-          // All attempts share one deadline; retries can never extend the teacher request indefinitely.
-          signal: AbortSignal.timeout(remainingMs),
-          headers: {
-            Authorization: `Bearer ${options.apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body,
-        });
-      } catch (error) {
-        const name = error instanceof Error ? error.name : "";
-        return fail(name === "TimeoutError" || name === "AbortError" ? "OPENAI_TIMEOUT" : "OPENAI_NETWORK_ERROR");
-      }
-
-      if (current.ok) return current;
-      if (!retryableStatus(current.status) || attempt === maxAttempts)
-        return fail(`OPENAI_REQUEST_FAILED:${current.status}`);
-
-      const delayMs = Math.min(retryDelayMs(current, attempt), Math.max(0, deadline - Date.now() - 1));
-      if (delayMs < 0) return fail("OPENAI_TIMEOUT");
-      if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-    return fail("OPENAI_REQUEST_FAILED:0");
-  };
-
-  const response = await fetchWithRetries();
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    fail("OPENAI_INVALID_OUTPUT");
-  }
   const text = outputText(payload);
   if (!text) fail("OPENAI_EMPTY_OUTPUT");
   let analysis: ModelPedagogicalAnalysis;

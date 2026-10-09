@@ -3,6 +3,7 @@ import "server-only";
 import type { AiCurriculumNode } from "@/lib/curriculum/graph";
 import { engineSigningKey } from "@/lib/pedagogy/engine-signature";
 import {
+  callResponsesApi,
   ModelCallError,
   openAiBaseUrl,
   pedagogicalReasoningEffort,
@@ -88,6 +89,29 @@ export async function probePedagogicalAiConnection(): Promise<{
               ? "OPENAI_MODEL_UNAVAILABLE"
               : "OPENAI_API_UNAVAILABLE",
       };
+    // Listing the model costs nothing and proves nothing about the account's
+    // credit: a minimal generation does (a few tokens). An exhausted credit
+    // made every analysis fail while this check still said "ok".
+    try {
+      await callResponsesApi(
+        { model, input: "Réponds : OK", reasoning: { effort: "low" }, max_output_tokens: 64, store: false },
+        { apiKey, timeoutMs: 20_000, maxAttempts: 1 },
+      );
+    } catch (error) {
+      const code = error instanceof ModelCallError ? error : null;
+      return {
+        configured: true,
+        ok: false,
+        model,
+        apiStatus: Number(code?.code.match(/:(\d+)$/)?.[1] ?? 0) || null,
+        error:
+          code?.providerCode === "insufficient_quota"
+            ? "OPENAI_QUOTA_EXHAUSTED"
+            : code?.code === "OPENAI_REQUEST_FAILED:429"
+              ? "OPENAI_RATE_LIMITED"
+              : "OPENAI_GENERATION_FAILED",
+      };
+    }
     return {
       configured: true,
       ok: true,
