@@ -41,7 +41,7 @@ before(async () => {
     if (attempt > 120) throw new Error(`next start did not answer:\n${output}`);
     await delay(250);
   }
-  browser = await chromium.launch({ executablePath: process.env.FOCUS_CHROMIUM ?? "/opt/pw-browsers/chromium" });
+  browser = await chromium.launch(process.env.FOCUS_E2E_CHROMIUM ? { executablePath: process.env.FOCUS_E2E_CHROMIUM } : {});
 });
 
 after(async () => {
