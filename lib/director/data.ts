@@ -9,6 +9,7 @@ import {
   daysBetween,
   percent,
   programmePace,
+  todayInFrance,
   type PaceResult,
 } from "@/lib/director/metrics";
 
@@ -121,6 +122,12 @@ export interface DirectorWorkspace {
   school: { id: string; name: string };
   /** Other schools where this account is also direction (not shown). */
   otherSchools: number;
+  /**
+   * False while no lesson exists in the school: teachers cannot declare
+   * lessons yet (write access to lessons is closed in the current schema),
+   * so "programme enseigné" is unavailable rather than late.
+   */
+  lessonsDeclared: boolean;
   year: { name: string; startsAt: string; endsAt: string } | null;
   today: string;
   totals: { students: number; teachers: number; classes: number; assessments: number; lessons: number };
@@ -137,11 +144,6 @@ export interface DirectorWorkspace {
     official: { total: number; evaluated: number };
     documented: { expected: number; entered: number };
   };
-}
-
-/** Today's date in France (the school's calendar), as YYYY-MM-DD. */
-export function todayInFrance(now = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(now);
 }
 
 function fullName(profile: { first_name: string | null; last_name: string | null } | undefined, fallback: string) {
@@ -177,7 +179,7 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
   const schoolId = adminSchools[0].school_id;
   const today = todayInFrance();
 
-  const [school, years, memberships, classes, subjects, assignments, enrollments, assessments, lessons, competencies, sources, ownProfile] =
+  const [school, years, memberships, classes, subjects, assignments, enrollments, assessments, allLessons, competencies, sources, ownProfile] =
     await Promise.all([
       supabase.from("schools").select("id,name").eq("id", schoolId).maybeSingle(),
       supabase
@@ -230,6 +232,8 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
   ensureOk(ownProfile.error, "Votre profil");
   if (!school.data) throw new Error("Établissement introuvable.");
 
+  // Only lessons that already took place count as taught.
+  const lessons = allLessons.filter((row) => row.date <= today);
   const assessmentIds = assessments.map((row) => row.id);
   const lessonIds = lessons.map((row) => row.id);
   const subjectCodes = new Set(subjects.map((row) => row.code).filter((code): code is string => !!code));
@@ -427,7 +431,7 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
         classId: row.classId,
         href,
       });
-    if (row.lessons === 0 && row.referential.total > 0)
+    if (lessons.length > 0 && row.lessons === 0 && row.referential.total > 0)
       alerts.push({
         kind: "no_lessons",
         family: "data",
@@ -519,7 +523,7 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
       missing: {
         assessmentsWithoutResults: ownPast.filter((row) => row.entered === 0).length,
         assessmentsUnlinked: ownPast.filter((row) => !row.linkedToProgramme).length,
-        rowsWithoutLessons: ownRows.filter((row) => row.lessons === 0).length,
+        rowsWithoutLessons: lessons.length > 0 ? ownRows.filter((row) => row.lessons === 0).length : 0,
       },
     };
   }).sort((a, b) => collator.compare(a.name, b.name));
@@ -529,6 +533,7 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
     directorName: fullName(ownProfile.data ?? undefined, director.email?.split("@")[0] || "Direction"),
     school: { id: schoolId, name: (school.data as { name: string }).name.trim() || "Établissement" },
     otherSchools: adminSchools.length - 1,
+    lessonsDeclared: lessons.length > 0,
     year,
     today,
     totals: {

@@ -2,6 +2,7 @@ import { requireDirector } from "@/lib/auth/server";
 import { loadDirectorWorkspace } from "@/lib/director/data";
 import {
   EmptyNote,
+  LessonsUnavailableNote,
   PageIntro,
   ProgrammeRowCard,
 } from "@/components/director/indicators";
@@ -21,6 +22,7 @@ export default async function DirectorProgrammePage() {
         leçon déclarée traitée ne signifie pas que les élèves maîtrisent la
         notion.
       </PageIntro>
+      {!workspace.lessonsDeclared && <LessonsUnavailableNote />}
       <section className="rounded-xl border border-border bg-white p-5 text-sm leading-6 text-ink-soft">
         <h2 className="font-semibold text-ink">Risque de retard : méthode de calcul</h2>
         <p className="mt-1">

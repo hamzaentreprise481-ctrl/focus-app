@@ -4,6 +4,7 @@ import { requireDirector } from "@/lib/auth/server";
 import { loadDirectorWorkspace } from "@/lib/director/data";
 import {
   EmptyNote,
+  LessonsUnavailableNote,
   formatDate,
   Measure,
   PageIntro,
@@ -56,6 +57,11 @@ export default async function DirectorHomePage() {
 
       <section aria-labelledby="programme-global">
         <SectionTitle title="Avancement du programme" href="/director/programme" linkLabel="Détail par classe" />
+        {!workspace.lessonsDeclared && (
+          <div className="mb-4">
+            <LessonsUnavailableNote />
+          </div>
+        )}
         <div className="grid gap-5 rounded-xl border border-border bg-white p-5 sm:p-6 lg:grid-cols-3">
           <h3 id="programme-global" className="sr-only">
             Avancement global

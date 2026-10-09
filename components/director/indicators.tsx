@@ -234,3 +234,16 @@ export function ProgrammeRowCard({
     </article>
   );
 }
+
+/** Shown while no lesson exists: the taught programme is unavailable, not late. */
+export function LessonsUnavailableNote() {
+  return (
+    <p role="note" className="rounded-lg bg-brand-soft p-4 text-sm leading-6 text-brand-ink">
+      Programme enseigné : non disponible pour l’instant. Les professeurs ne
+      peuvent pas encore déclarer leurs séances dans FOCUS (évolution de la
+      base préparée, en attente de validation). Le programme évalué et les
+      compétences documentées restent mesurés ; le risque de retard sera
+      calculé dès que des séances seront déclarées.
+    </p>
+  );
+}

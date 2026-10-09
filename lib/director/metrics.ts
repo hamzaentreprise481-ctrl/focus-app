@@ -10,6 +10,11 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Today's date in France (the school's calendar), as YYYY-MM-DD. */
+export function todayInFrance(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(now);
+}
+
 /** Rounded percentage, or null when there is nothing to measure. */
 export function percent(part: number, total: number): number | null {
   if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return null;
