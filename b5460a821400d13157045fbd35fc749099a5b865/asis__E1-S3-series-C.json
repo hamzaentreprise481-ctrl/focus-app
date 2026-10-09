@@ -1,0 +1,27 @@
+{
+  "httpStatus": 200,
+  "copyId": "E1-S3-series-C",
+  "scanModel": "gpt-6-astra",
+  "analysisModel": "gpt-6-astra",
+  "analysisEffort": "low",
+  "scan": {
+    "ok": false,
+    "error": "SCAN_MODEL_HTTP_429",
+    "latencyMs": 1323
+  },
+  "providerLog": [
+    {
+      "status": 429,
+      "ms": 1252,
+      "attempt": 0,
+      "headers": {},
+      "errorCode": "credit_balance_exhausted",
+      "errorType": "insufficient_quota",
+      "errorParam": null
+    }
+  ],
+  "wallMs": 1795,
+  "run": "asis",
+  "level": "C",
+  "kind": "legibility_series"
+}
