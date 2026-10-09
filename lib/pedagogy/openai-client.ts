@@ -183,6 +183,29 @@ export async function callResponsesApi(
   return { payload, latencyMs: Date.now() - started, attempts: attempt };
 }
 
+/**
+ * The evidence as two JSON parts: first what is the SAME for every copy of a
+ * class (its programme and catalogue, ~13 000 tokens), then the copy
+ * (assessment, questions, answers). Identical leading tokens let the provider
+ * reuse its prompt cache from one copy to the next (cached input is billed
+ * about ten times less); the model reads the same two objects either way.
+ */
+export function analysisContentParts(input: unknown) {
+  if (input && typeof input === "object" && "curriculum" in input) {
+    const { curriculum, ...copy } = input as { curriculum: unknown } & Record<string, unknown>;
+    return [
+      { type: "input_text", text: JSON.stringify({ curriculum }) },
+      { type: "input_text", text: JSON.stringify(copy) },
+    ];
+  }
+  return [{ type: "input_text", text: JSON.stringify(input) }];
+}
+
+/** The analysis input a request carries, whatever its parts (tests and stand-ins). */
+export function analysisInputFromRequest(body: { input: Array<{ content: Array<{ text?: string }> }> }) {
+  return Object.assign({}, ...body.input[1].content.map((part) => JSON.parse(part.text ?? "{}")));
+}
+
 // Shared by the server action and the opt-in live campaign. Never log the
 // provider's error body: it may echo text from a student's response.
 export async function requestPedagogicalAnalysisWithUsage(
@@ -205,7 +228,7 @@ export async function requestPedagogicalAnalysisWithUsage(
       reasoning: { effort: options.reasoningEffort ?? "low" },
       input: [
         { role: "system", content: [{ type: "input_text", text: PEDAGOGICAL_SYSTEM_PROMPT }] },
-        { role: "user", content: [{ type: "input_text", text: JSON.stringify(input) }] },
+        { role: "user", content: analysisContentParts(input) },
       ],
       text: {
         format: { type: "json_schema", name: "focus_pedagogical_analysis", strict: true, schema: PEDAGOGICAL_OUTPUT_SCHEMA },

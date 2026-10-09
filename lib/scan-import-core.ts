@@ -170,6 +170,25 @@ function comparable(value: string) {
 }
 
 /**
+ * Points as the teacher wrote them in the margin, reduced to the number
+ * FOCUS stores. Teachers write "2/2", "1,5 / 2", "0,5 pt": a literal reader
+ * transcribes them so, and an unparsed value silently disabled every check
+ * that needs the points (full marks, "transcription equal to the correction")
+ * and hid them from the analysis (measured on the real model, 9 Oct 2026).
+ * "a/b" is read as a only when b is the question's maximum; anything else is
+ * returned unchanged, so it stays "to confirm" — never guessed.
+ */
+export function normalizeAwardedPoints(raw: string, maxPoints: number | null): string {
+  const text = raw.trim().replace(/\s*(?:points?|pts?)\.?$/i, "").replace(/½/g, ",5").trim();
+  const number = (value: string) => Number(value.replace(",", "."));
+  const plain = text.match(/^\d+(?:[.,]\d+)?$/);
+  if (plain) return text.replace(",", ".");
+  const ratio = text.match(/^(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)$/);
+  if (ratio && maxPoints !== null && number(ratio[2]) === maxPoints) return ratio[1].replace(",", ".");
+  return raw.trim();
+}
+
+/**
  * A transcription equal to the correction on a question the teacher did not
  * give full marks to is suspicious: the reader may have "corrected" the
  * student. It is never auto-imported.

@@ -91,6 +91,15 @@ privé, taille max 50 Mo, type `application/pdf`.
 5. Advisors Supabase (sécurité, performance) : rien de nouveau.
 6. Relancer la vérification de la Preview : `schemaUpToDate: true`. Elle ne
    sera **VERIFIED** que lorsque le crédit OpenAI sera rechargé.
+7. Parcours réel sur la Preview (`.github/workflows/preview-e2e.yml`,
+   `scripts/preview-e2e.mjs`) : connexion d’un professeur **fictif** →
+   évaluation → sujet et corrigé → import d’une photo manuscrite fictive par
+   le vrai lecteur → analyse par le vrai modèle → décision → fiche élève. Il
+   ne s’exécute que si la Preview est prête et si les secrets
+   `FOCUS_E2E_EMAIL` / `FOCUS_E2E_PASSWORD` (compte professeur de test)
+   existent ; sinon le statut « FOCUS Preview E2E (real) » dit pourquoi il
+   n’a pas tourné. Répété en local avec un lecteur et un modèle scriptés :
+   6 étapes sur 6.
 
 ## 5. Retour arrière
 

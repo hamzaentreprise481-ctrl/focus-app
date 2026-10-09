@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { transcribeScan, extractionSchema, SCAN_INSTRUCTIONS } from "../lib/scan-transcription";
-import type { ScanQuestion } from "../lib/scan-import-core";
+import { normalizeAwardedPoints, scanCopyIssue, type ScanQuestion } from "../lib/scan-import-core";
 
 const roster = [
   { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Lucas Bernard" },
@@ -156,4 +156,36 @@ test("a stuck or unreachable reader fails cleanly within the time budget", async
   await assert.rejects(transcribeScan(new Uint8Array([1]), roster, questions, options(offline)), /SCAN_MODEL_NETWORK/);
   const empty = provider([{ body: "" }]);
   await assert.rejects(transcribeScan(new Uint8Array([1]), roster, questions, options(empty.fetchImpl)), /SCAN_MODEL_INVALID_OUTPUT|SCAN_MODEL_EMPTY/);
+});
+
+test("points written as the teacher writes them (\"2/2\", \"1,5 pt\") reach the checks as numbers, never guessed", async () => {
+  // Measured on the real model (9 Oct 2026): a literal reader returns "2/2"
+  // and "0/2"; unparsed, they disabled the full-marks and "equal to the
+  // correction" checks and hid the points from the analysis.
+  assert.equal(normalizeAwardedPoints("2/2", 2), "2");
+  assert.equal(normalizeAwardedPoints("1,5 / 2", 2), "1.5");
+  assert.equal(normalizeAwardedPoints("0/2", 2), "0");
+  assert.equal(normalizeAwardedPoints("0,5 pt", 2), "0.5");
+  assert.equal(normalizeAwardedPoints("2 pts", 2), "2");
+  assert.equal(normalizeAwardedPoints("1½", 2), "1.5");
+  assert.equal(normalizeAwardedPoints("", 2), "");
+  // Another scale than the question's maximum, or no maximum: left as written, to confirm.
+  assert.equal(normalizeAwardedPoints("3/4", 2), "3/4");
+  assert.equal(normalizeAwardedPoints("16/20", 2), "16/20");
+  assert.equal(normalizeAwardedPoints("2/2", null), "2/2");
+  assert.equal(normalizeAwardedPoints("bien", 2), "bien");
+
+  const { fetchImpl } = provider([
+    {
+      body: reading({}, [
+        { questionKey: "Q01", status: "ecrite", responseText: "B = x² + 10x + 25", crossedOut: "", awardedPoints: "2/2", teacherAnnotation: "" },
+        { questionKey: "Q02", status: "ecrite", responseText: "(x − 3)(x + 3)", crossedOut: "", awardedPoints: "0/2", teacherAnnotation: "" },
+      ]),
+    },
+  ]);
+  const withCorrection = questions.map((q, index) => ({ ...q, correctionText: index === 1 ? "(x − 3)(x + 3)" : q.correctionText }));
+  const result = await transcribeScan(new Uint8Array([1]), roster, withCorrection, options(fetchImpl));
+  assert.deepEqual(result.copies[0].responses.map((r) => r.awardedPoints), ["2", "0"]);
+  // The points are usable again: an answer equal to the correction with 0/2 is caught.
+  assert.match(scanCopyIssue(result.copies[0], new Set(roster.map((s) => s.id)), withCorrection, result.pages) ?? "", /identique au corrigé/);
 });

@@ -18,6 +18,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { fixtureUuid, LOCAL_TEACHER, OTHER_TEACHER, startLocalStack, type LocalStack } from "../helpers/local-stack";
+import { analysisInputFromRequest } from "../../lib/pedagogy/openai-client";
 
 const APP_PORT = 3400;
 const origin = `http://127.0.0.1:${APP_PORT}`;
@@ -133,7 +134,7 @@ test("a teacher creates an assessment, enters the subject and copies, analyses t
   // The model sees only what the evidence version covers (Codex review on
   // #8): the assessment's title is not sent.
   for (const call of stack.model.calls as Array<{ input: Array<{ content: Array<{ text: string }> }> }>)
-    assert.deepEqual(Object.keys(JSON.parse(call.input[1].content[0].text).assessment).sort(), ["contextText", "id", "instructionsText"]);
+    assert.deepEqual(Object.keys(analysisInputFromRequest(call).assessment).sort(), ["contextText", "id", "instructionsText"]);
   await page.getByText("Toutes les copies enregistrées ont une analyse à jour.").waitFor();
   await shot(page, "1-class-analysed");
 

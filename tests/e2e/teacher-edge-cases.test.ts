@@ -18,6 +18,7 @@ import {
   startLocalStack,
   type LocalStack,
 } from "../helpers/local-stack";
+import { analysisInputFromRequest } from "../../lib/pedagogy/openai-client";
 
 const APP_PORT = 3410;
 const origin = `http://127.0.0.1:${APP_PORT}`;
@@ -126,7 +127,7 @@ test("a double click analyses the whole class; refused, insufficient and failed 
   // (HTTP 500) is retried by the client — the SAME request, 3 attempts at
   // most within one deadline — and is then reported as a failure.
   // Only the evidence sent (the system prompt itself names the [illisible] marker).
-  const made = stack.model.calls.slice(calls).map((call) => (call as { input: Array<{ content: Array<{ text: string }> }> }).input[1].content[0].text);
+  const made = stack.model.calls.slice(calls).map((call) => JSON.stringify(analysisInputFromRequest(call as never)));
   assert.equal(made.length, 6, "4 copies, the failing one attempted 3 times");
   // Each request carries one student's copy only (Baptiste's answer is the
   // correction, present in every request, so it marks nobody).

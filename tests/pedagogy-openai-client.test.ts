@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { requestPedagogicalAnalysis } from "../lib/pedagogy/openai-client";
+import { analysisContentParts, analysisInputFromRequest, requestPedagogicalAnalysis } from "../lib/pedagogy/openai-client";
 import { PEDAGOGY_CAMPAIGN_CASES } from "./fixtures/pedagogy-campaign";
 
 test("the model client sends the structured request built by the teacher action", async () => {
@@ -36,7 +36,7 @@ test("the model client sends the structured request built by the teacher action"
   const body = JSON.parse(String(request?.init.body));
   assert.equal(body.model, "fictional-model");
   assert.equal(body.text.format.type, "json_schema");
-  assert.deepEqual(JSON.parse(body.input[1].content[0].text), campaignCase.input);
+  assert.deepEqual(analysisInputFromRequest(body), campaignCase.input);
 });
 
 test("provider failures never expose the response body or the student's answer", async () => {
@@ -212,4 +212,16 @@ test("non-retryable provider errors fail immediately", async () => {
     /OPENAI_REQUEST_FAILED:401/,
   );
   assert.equal(calls, 1);
+});
+
+test("the class programme comes first and identical for every copy, so the provider can cache it", () => {
+  const curriculum = { level: "Seconde", notions: Array.from({ length: 50 }, (_, i) => ({ code: `MATH.N${i}`, title: `Notion ${i}` })) };
+  const copy = (answer: string) => ({ assessment: { id: "a", contextText: null, instructionsText: null }, questions: [{ questionId: "q", responseText: answer }], curriculum });
+  const first = analysisContentParts(copy("2x + 3"));
+  const second = analysisContentParts(copy("2x + 6"));
+  assert.equal(first.length, 2);
+  assert.equal(first[0].text, second[0].text, "same leading part for two students of the class");
+  assert.notEqual(first[1].text, second[1].text);
+  assert.doesNotMatch(first[0].text, /2x \+ 3/, "no student answer in the shared part");
+  assert.deepEqual(analysisInputFromRequest({ input: [{ content: [] }, { content: first }] }), copy("2x + 3"));
 });

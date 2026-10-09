@@ -7,6 +7,7 @@ import { callResponsesApi, ModelCallError, openAiBaseUrl, outputText, type Reaso
 import { classifyProviderFailure, providerFailureLog } from "./pedagogy/provider-errors";
 import {
   legibilityOf,
+  normalizeAwardedPoints,
   MAX_SCAN_BYTES,
   MAX_SCAN_IMAGE_BYTES,
   MAX_SCAN_IMAGES,
@@ -249,6 +250,7 @@ export async function transcribeScan(
   const questionRows = questions.map((question, index) => ({ key: keyOf("Q", index, 2), ...question }));
   const studentIdByKey = new Map(studentRows.map((student) => [student.key, student.id]));
   const questionIdByKey = new Map(questionRows.map((question) => [question.key, question.id]));
+  const maxPointsByKey = new Map(questionRows.map((question) => [question.key, question.maxPoints]));
   const instructions = [
     SCAN_INSTRUCTIONS,
     "",
@@ -330,7 +332,8 @@ export async function transcribeScan(
         {
           questionId,
           responseText,
-          awardedPoints: item.awardedPoints,
+          // "2/2", "1,5 pt" → "2", "1.5" (only against the question's maximum).
+          awardedPoints: normalizeAwardedPoints(item.awardedPoints, maxPointsByKey.get(item.questionKey) ?? null),
           teacherAnnotation: item.teacherAnnotation,
           // Computed by FOCUS from the status AND the markers: a status
           // "ecrite" with an [illisible] inside is still partial.
