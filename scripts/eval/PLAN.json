@@ -1,14 +1,4 @@
 {
-  "about": "STEP 1 of the paid evaluation (credit recharged 9 Oct, owner asked: one copy first, measure, then small batches). ONE representative fictitious copy: E1-S2-B (level B phone photo, 4 correct answers, 1 real fraction error) through the production reader and analysis. The driver stops if /api/health does not report the model as answering.",
-  "runs": [
-    {
-      "name": "step1",
-      "copies": [
-        "E1-S2-B"
-      ],
-      "options": {
-        "input": "pdf"
-      }
-    }
-  ]
+  "about": "HOLD: no paid call until the owner's environment is ready (migrations, bucket) and the real teacher path has run. Step 1 (one copy, E1-S2-B) is done on 98fb7f7. Step 2 will be one copy per mission test A–E.",
+  "runs": []
 }
