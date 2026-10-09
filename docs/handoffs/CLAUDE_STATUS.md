@@ -1,8 +1,39 @@
 # CLAUDE_STATUS — FOCUS Teacher V1 (technique)
 
 Fichier tenu par Claude (CTO / lead engineer technique). Ne pas modifier
-`docs/handoffs/WORK_STATUS.md` (GPT Work). Dernière mise à jour : 7 octobre 2026,
-code au commit `1513e12` (branche `ccr-38fbcf41-7sndhr`, PR #10).
+`docs/handoffs/WORK_STATUS.md` (GPT Work). Dernière mise à jour : octobre 2026,
+mission « Student / Direction » ci-dessous ; la section suivante (Teacher V1)
+date du 7 octobre (branche `ccr-38fbcf41-7sndhr`, PR #10).
+
+## Mission Student / Direction (branche `work/student-director-portals`)
+
+| | |
+| --- | --- |
+| Base | `work/student-v0` (`3b5f3bf`, PR #16), qui contient toute la ligne Teacher (`work/fiabiliser-analyse-ia`). |
+| PR #17 (`work/portals-v0`) | Travail parallèle (portail, Director sur `admin`, tuteur IA, écran « Séances »). Lu et audité, **non modifié**. Repris : la logique de connexion/garde Direction (citée dans le commit). Non repris : invitations d’élèves via `SUPABASE_SECRET_KEY` (clé secrète côté serveur, hors mission), programme mesuré sur les 8 compétences de l’établissement, modèle `gpt-6-luna` jamais validé ici, écran « Séances » — il ne peut pas fonctionner : `authenticated` n’a que SELECT sur `lessons`/`lesson_competencies` (fermé par `20261002120000`, vérifié sur le live). |
+| Base live | Lecture seule uniquement : tête `20261004090000`, 1 établissement, 1 classe, 31 élèves, 3 professeurs, 1 admin, 5 évaluations, 0 résultat, 0 séance. Aucune écriture, aucune migration appliquée. |
+
+Ajouts : portail public (3 espaces, présentation Teacher déplacée vers
+`/enseignants`) ; connexion et garde Direction sur le rôle `admin` (aucune
+migration) ; Student complété (niveaux de compétence par évaluation, garde
+sur chaque page, UUID vérifié) ; **Assistant FOCUS** (`/student/assistant`) ;
+**FOCUS Direction** en lecture seule (7 pages, calculs déterministes
+`lib/director/metrics.ts`) ; script d’administration du compte élève/direction
+de démonstration (non exécuté : seul le live existe, et il faut la clé
+`service_role`) ; proposition `supabase/proposals/20261010090000_teacher_lesson_declarations.sql`
+(fonction auditée de déclaration de séances, non appliquée).
+
+Preuves (local) : tests RLS Student/Direction sur PGlite **sur toutes les
+migrations ET sur la tête live** (`tests/portals-rls-db.test.ts`), seed de
+démonstration rejoué en `service_role` puis relu sous RLS
+(`tests/demo-portals-seed.test.ts`), proposition de séances testée sur les deux
+têtes, E2E Chromium des trois espaces (`tests/e2e/portals.test.ts`, modèle
+**scripté**), gardes statiques (aucune écriture Student/Direction).
+
+Non prouvé : **Assistant FOCUS NON PROUVÉ SUR MODÈLE RÉEL** (aucune clé
+OpenAI dans l’environnement) ; Preview non vérifiable (401, secret de
+contournement absent) ; aucun compte élève/direction réel ou de démonstration
+sur le live.
 
 ## Branche canonique
 
