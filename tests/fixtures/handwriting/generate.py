@@ -116,6 +116,16 @@ def render_glyph(ch: str, hand: Hand, rng: random.Random, scale: float = 1.0):
     path = hand.fonts[1] if len(hand.fonts) > 1 and rng.random() < hand.alt_rate else hand.fonts[0]
     px = max(8, int(hand.size_mm * MM * scale * (1 + rng.gauss(0, hand.scale_sd))))
     f = font(path, px)
+    # A font without the glyph draws nothing (× in several handwriting fonts):
+    # the image would silently lose a character the ground truth keeps. Try the
+    # hand's other fonts, then write × as a small x, as students do.
+    if ch.strip() and f.getmask(ch).getbbox() is None:
+        others = [font(p, px) for p in hand.fonts if p != path]
+        found = next((g for g in others if g.getmask(ch).getbbox() is not None), None)
+        if found is not None:
+            f = found
+        elif ch == "×":
+            ch, f = "x", font(path, max(8, int(px * 0.7)))
     ascent, descent = f.getmetrics()
     advance = f.getlength(ch)
     pad = int(px * 0.5)
@@ -517,8 +527,15 @@ def main():
             a = np.asarray(img, np.float32) * 0.16 + np.random.default_rng(7).normal(0, 4, (img.size[1], img.size[0], 3))
             out = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
         elif fm["transform"] == "cut_bottom":
-            out = img.crop((0, 0, img.size[0], int(img.size[1] * 0.52)))
-            extra["note"] = "Bottom of the page missing: the last questions are not on the image."
+            out = img.crop((0, 0, img.size[0], int(img.size[1] * fm.get("cutAt", 0.52))))
+            # The questions below the cut are not on the image: their text is
+            # ground truth that must never be transcribed, and nothing can be
+            # concluded on them.
+            for q in gt:
+                if q["key"] in fm.get("missing", []):
+                    q.update({"hidden": [q["text"]] if q["text"] else [], "text": "", "crossedOut": [], "points": None, "annotation": "",
+                              "expect": {"outcome": "insufficient_evidence", "legibility": "absent"}})
+            extra["note"] = "Bottom of the page missing: " + (", ".join(fm.get("missing", [])) or "no question") + " not on the image."
         elif fm["transform"] == "blank_copy":
             rng2 = random.Random(4242)
             blank = {k: {**v, "lines": [], "points": None, "annotation": "", "expect": {"outcome": "no_answer"}} for k, v in src_copy["answers"].items()}

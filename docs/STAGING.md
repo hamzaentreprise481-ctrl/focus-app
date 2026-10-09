@@ -9,6 +9,12 @@
 > three has been applied to live, and the private scan bucket does not exist
 > there. Rehearse them on a real Supabase staging database before any
 > production promotion.
+>
+> The free plan offers no branch and no third project, so the 9 October
+> rehearsal ran on a replica proven identical to live
+> (`tests/live-upgrade-rehearsal.test.ts`, `scripts/schema-fingerprint-total.sql`,
+> `supabase/staging/data-checksums.sql`). The exact plan, checks and
+> rollback for the live project are in `docs/LIVE_MIGRATION_PLAN.md`.
 
 The scan migration creates the atomic database import function and Storage RLS
 policies. The private `focus-scan-imports` bucket itself is an environment

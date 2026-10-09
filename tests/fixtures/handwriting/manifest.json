@@ -745,6 +745,128 @@
       "kind": "profile"
     },
     {
+      "id": "E1-S6-C",
+      "assessment": "E1",
+      "student": "S6",
+      "studentName": "Léa Garnier",
+      "level": "C",
+      "score": "15/20",
+      "image": "images/E1-S6-C.jpg",
+      "questions": [
+        {
+          "key": "Q1",
+          "text": "A = 3 × x + 3 × 4 ; A = 3x + 12",
+          "hidden": [],
+          "crossedOut": [],
+          "points": "2",
+          "annotation": "",
+          "expect": {
+            "outcome": "no_error"
+          }
+        },
+        {
+          "key": "Q2",
+          "text": "B = x + 5 × x + 5 ; B = x² + 10x + 25",
+          "hidden": [],
+          "crossedOut": [],
+          "points": "1,5",
+          "annotation": "parenthèses !",
+          "expect": {
+            "outcome": [
+              "error",
+              "no_error"
+            ],
+            "errorTypes": [
+              "representation",
+              "communication",
+              "methode"
+            ],
+            "notions": [
+              "MATH.ALG.IDENTITES",
+              "MATH.ALG.DISTRIBUTIVITE",
+              "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"
+            ],
+            "evidenceAnyOf": [
+              "x + 5 × x + 5",
+              "B = x + 5 × x + 5",
+              "x+5×x+5"
+            ]
+          }
+        },
+        {
+          "key": "Q3",
+          "text": " ; 2/3 + 1/4 = 8/12 + 3/12 = 11/12",
+          "hidden": [],
+          "crossedOut": [
+            "3/7"
+          ],
+          "points": "2",
+          "annotation": "",
+          "expect": {
+            "outcome": "no_error"
+          }
+        },
+        {
+          "key": "Q4",
+          "text": "4x = 13 − 7 ; 4x = 6 ; x = 6/4 = 3/2",
+          "hidden": [],
+          "crossedOut": [],
+          "points": "0,5",
+          "annotation": "",
+          "expect": {
+            "outcome": "error",
+            "errorTypes": [
+              "calcul",
+              "methode",
+              "concept"
+            ],
+            "notions": [
+              "MATH.ALG.EQUATION_PREMIER_DEGRE",
+              "MATH.ALG.EQUATIONS",
+              "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"
+            ],
+            "evidenceAnyOf": [
+              "4x = 13 − 7",
+              "4x = 13 - 7",
+              "4x=13-7",
+              "4x = 6"
+            ]
+          }
+        },
+        {
+          "key": "Q5",
+          "text": "C = (x − 3)(x + 3) = 0",
+          "hidden": [],
+          "crossedOut": [],
+          "points": "1,5",
+          "annotation": "= 0 ?",
+          "expect": {
+            "outcome": [
+              "error",
+              "no_error"
+            ],
+            "errorTypes": [
+              "representation",
+              "communication",
+              "raisonnement",
+              "concept"
+            ],
+            "notions": [
+              "MATH.ALG.FACTORISATION_SIMPLE",
+              "MATH.ALG.IDENTITES",
+              "MATH.ALG.EQUATIONS"
+            ],
+            "evidenceAnyOf": [
+              "(x − 3)(x + 3) = 0",
+              "(x-3)(x+3) = 0",
+              "(x − 3)(x + 3)=0"
+            ]
+          }
+        }
+      ],
+      "kind": "profile"
+    },
+    {
       "id": "E1-S3-series-A",
       "assessment": "E1",
       "student": "S3",
@@ -1614,24 +1736,30 @@
         },
         {
           "key": "Q4",
-          "text": "4x − 7 = 13 ; 4x = 20 ; x = 5",
-          "hidden": [],
+          "text": "",
+          "hidden": [
+            "4x − 7 = 13 ; 4x = 20 ; x = 5"
+          ],
           "crossedOut": [],
-          "points": "2",
+          "points": null,
           "annotation": "",
           "expect": {
-            "outcome": "no_error"
+            "outcome": "insufficient_evidence",
+            "legibility": "absent"
           }
         },
         {
           "key": "Q5",
-          "text": "C = (x − 3)(x + 3)",
-          "hidden": [],
+          "text": "",
+          "hidden": [
+            "C = (x − 3)(x + 3)"
+          ],
           "crossedOut": [],
-          "points": "2",
+          "points": null,
           "annotation": "",
           "expect": {
-            "outcome": "no_error"
+            "outcome": "insufficient_evidence",
+            "legibility": "absent"
           }
         }
       ],
@@ -1639,7 +1767,7 @@
       "transform": "cut_bottom",
       "expect": "missing_questions_not_invented",
       "source": "E1-S2-B",
-      "note": "Bottom of the page missing: the last questions are not on the image."
+      "note": "Bottom of the page missing: Q4, Q5 not on the image."
     },
     {
       "id": "FM-blank",

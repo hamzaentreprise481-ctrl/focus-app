@@ -17,6 +17,7 @@ import { pedagogicalReasoningEffort, type ReasoningEffort } from "../lib/pedagog
 import { loadProductionCurriculum } from "../tests/helpers/benchmark-runner";
 import {
   aggregateHandwriting,
+  aggregatePedagogicalTests,
   loadManifest,
   loadSpec,
   runHandwritingCopy,
@@ -78,13 +79,13 @@ async function main() {
   }
 
   const scores = records.filter((record) => byId.has(record.id)).map((record) => scoreHandwritingRecord(record as never, byId.get(record.id)!));
-  const report = { generatedAt: new Date().toISOString(), ...settings, byLevel: aggregateHandwriting(scores), scores, records };
+  const report = { generatedAt: new Date().toISOString(), ...settings, byTest: aggregatePedagogicalTests(scores), byLevel: aggregateHandwriting(scores), scores, records };
   const directory = path.join(process.cwd(), "benchmark-results");
   mkdirSync(directory, { recursive: true });
   const label = scoreDir ? "scored" : `${String(settings.scanModel).replace(/[^a-zA-Z0-9.-]/g, "_")}-${settings.input}`;
   const file = path.join(directory, `handwriting-${label}-${report.generatedAt.replace(/[:.]/g, "-")}.json`);
   writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(JSON.stringify(report.byLevel, null, 2));
+  console.log(JSON.stringify({ byTest: report.byTest, byLevel: report.byLevel }, null, 2));
   console.log(`Report: ${path.relative(process.cwd(), file)}`);
 }
 

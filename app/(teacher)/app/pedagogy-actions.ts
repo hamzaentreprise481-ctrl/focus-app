@@ -11,6 +11,7 @@ import {
   pedagogicalAiModel,
 } from "@/lib/pedagogy/openai";
 import { ModelCallError, pedagogicalAiHourlyLimit, pedagogicalReasoningEffort, type ModelUsage } from "@/lib/pedagogy/openai-client";
+import { classifyProviderFailure, providerFailureLog, providerFailureMessage } from "@/lib/pedagogy/provider-errors";
 import { buildAnalysisPersistence } from "@/lib/pedagogy/pipeline";
 import { engineSigningKey, signEngineEnvelope, type EngineEnvelope } from "@/lib/pedagogy/engine-signature";
 import { isSchemaOutdated, SCHEMA_OUTDATED_MESSAGE, SchemaOutdatedError } from "@/lib/supabase-errors";
@@ -750,7 +751,18 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
           error: "L’IA n’est pas encore configurée sur ce serveur (clé d’API absente). Aucune analyse n’a été enregistrée.",
         };
       const providerCode = error instanceof ModelCallError ? error.providerCode : null;
-      console.error("FOCUS pedagogical AI request failed", message, providerCode ?? "");
+      // Credit, configuration, provider or unusable answer: never confused,
+      // logged as one JSON line without any student data.
+      const failure = classifyProviderFailure(message, providerCode);
+      console.error(
+        providerFailureLog("analysis", failure, {
+          code: message,
+          providerCode,
+          model,
+          attempts: error instanceof ModelCallError ? error.attempts : null,
+          latencyMs: error instanceof ModelCallError ? error.latencyMs : null,
+        }),
+      );
       await recordUsage(supabase, {
         assessmentId: assessment.id,
         runId: null,
@@ -759,22 +771,15 @@ export async function generatePedagogicalAnalysis(studentId: string, assessmentI
         modelCalled: true,
         latencyMs: error instanceof ModelCallError ? error.latencyMs : null,
       });
-      if (message === "OPENAI_TIMEOUT")
-        return { ok: false, error: "Le service d’analyse n’a pas répondu à temps. Aucune recommandation n’a été enregistrée ; réessayez." };
-      // An exhausted credit is not temporary: say so, and stop a class batch.
-      if (providerCode === "insufficient_quota" || providerCode === "credit_balance_exhausted")
-        return {
-          ok: false,
-          code: "quota_exhausted",
-          error: "Le crédit du service d’analyse (OpenAI) est épuisé : l’analyse ne peut pas aboutir tant qu’il n’est pas rechargé. Rien n’a été enregistré.",
-        };
-      if (message === "OPENAI_REQUEST_FAILED:429")
-        return {
-          ok: false,
-          code: "provider_busy",
-          error: "Le service d’analyse est momentanément saturé. Rien n’a été enregistré ; réessayez dans quelques minutes.",
-        };
-      return { ok: false, error: "L’analyse IA a échoué. Aucune recommandation n’a été enregistrée ; réessayez plus tard." };
+      const code =
+        failure.kind === "quota_exhausted"
+          ? "quota_exhausted"
+          : failure.kind === "rate_limited"
+            ? "provider_busy"
+            : failure.family === "configuration"
+              ? "ai_misconfigured"
+              : undefined;
+      return { ok: false, ...(code ? { code } : {}), error: providerFailureMessage(failure, "analysis") } as const;
     }
 
     // Only notions of the class's programme may carry a recommendation;

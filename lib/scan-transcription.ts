@@ -4,6 +4,7 @@
 // lib/scan-import.ts binds it to the server environment.
 
 import { callResponsesApi, ModelCallError, openAiBaseUrl, outputText, type ReasoningEffort } from "@/lib/pedagogy/openai-client";
+import { classifyProviderFailure, providerFailureLog } from "./pedagogy/provider-errors";
 import {
   legibilityOf,
   MAX_SCAN_BYTES,
@@ -282,7 +283,16 @@ export async function transcribeScan(
     payload = result.payload;
     attempts = result.attempts;
   } catch (error) {
-    console.error(JSON.stringify({ event: "focus.scan_import", model, error: codeOf(error), providerCode: error instanceof ModelCallError ? error.providerCode : null, latencyMs: Date.now() - started }));
+    const providerCode = error instanceof ModelCallError ? error.providerCode : null;
+    console.error(
+      providerFailureLog("scan", classifyProviderFailure(codeOf(error), providerCode), {
+        code: codeOf(error),
+        providerCode,
+        model,
+        attempts: error instanceof ModelCallError ? error.attempts : null,
+        latencyMs: Date.now() - started,
+      }),
+    );
     throw new Error(codeOf(error));
   }
   const text = outputText(payload);

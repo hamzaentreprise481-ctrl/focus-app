@@ -7,7 +7,8 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
-import { installEngineKey, RECORD_SQL, signedEnvelope } from "./helpers/engine";
+import { evidenceVersion, installEngineKey, RECORD_SQL, signedEnvelope, TEST_ENGINE_KEY } from "./helpers/engine";
+import { signEngineEnvelope, type EngineEnvelope } from "../lib/pedagogy/engine-signature";
 import { createMigratedDatabase, seedSchoolFixture, type SchoolFixtureIds } from "./helpers/pg";
 
 let db: PGlite;
@@ -255,4 +256,45 @@ test("the same scanned copy imported twice (double click, retried request) chang
   const superseded = (await db.query<{ s: string | null }>("select superseded_at as s from public.ai_analysis_runs where id = $1", [run])).rows[0].s;
   assert.equal(superseded, null, "the current analysis stands");
   assert.equal((await rows(e.id)).length, 1);
+});
+
+test("an analysis signed by the previous FOCUS server (no per-question outcomes) is still recorded during the switch-over", async () => {
+  // Production runs code older than this migration until it is promoted: its
+  // envelopes have no questionOutcomes key. They are recorded as before
+  // (no outcomes), with every other check; an envelope that HAS the key is
+  // checked strictly, so the new server cannot skip it.
+  const e = await assessment([
+    { prompt: "Développer (x+5)²", correction: "x²+10x+25", code: "MATH.ALG.IDENTITES" },
+    { prompt: "Factoriser x²−9", correction: "(x−3)(x+3)", code: "MATH.ALG.IDENTITES" },
+  ]);
+  await save(e.id, [
+    { questionId: e.questions[0], responseText: "B = x² + 25", awardedPoints: "0" },
+    { questionId: e.questions[1], responseText: "(x−3)(x+3)", awardedPoints: "2" },
+  ]);
+  const errors = [finding(e.questions[0], await responseId(e.questions[0]), "x² + 25")];
+  const recommendations = [{ nodeId: node, difficulty: "Développer le carré d’une somme", explanation: "Le double produit est absent.", recommendedAction: "Faire calculer (a+b)(a+b) terme à terme." }];
+  const legacy = async (fields: Record<string, unknown>) => {
+    const envelope = {
+      teacherId: a.teacher, schoolId: a.school, studentId: a.students[0], assessmentId: e.id, model: "legacy-model",
+      inputHash: hash(), evidenceVersion: await evidenceVersion(db, e.id, a.students[0]), ...fields,
+    } as unknown as EngineEnvelope;
+    const signed = signEngineEnvelope(envelope, Buffer.from(TEST_ENGINE_KEY, "hex"));
+    return (await teacher<{ run: string }>(RECORD_SQL, [signed.p_envelope, signed.p_signature]))[0].run;
+  };
+
+  // The new server's envelope with the key present but empty, and findings: refused.
+  await assert.rejects(record(e.id, errors, { questionOutcomes: [] }), /question outcomes are missing/);
+
+  const run = await legacy({ kind: "analysis", errors, recommendations });
+  const stored = (await db.query<{ status: string; outcomes: unknown[]; findings: number }>(
+    `select r.status, r.question_outcomes as outcomes, (select count(*)::int from public.error_observations o where o.analysis_run_id = r.id) as findings
+     from public.ai_analysis_runs r where r.id = $1`,
+    [run],
+  )).rows[0];
+  assert.deepEqual(stored, { status: "completed", outcomes: [], findings: 1 });
+  // Still no finding on an excerpt that is not in the answer, even from the old server.
+  await assert.rejects(legacy({ kind: "analysis", errors: [finding(e.questions[0], await responseId(e.questions[0]), "x² + 10x")], recommendations }));
+  // The old server's "insufficient evidence" is recorded too.
+  const noEvidence = await legacy({ kind: "no_evidence", reason: "Réponse trop courte." });
+  assert.equal((await db.query<{ status: string }>("select status from public.ai_analysis_runs where id = $1", [noEvidence])).rows[0].status, "no_evidence");
 });

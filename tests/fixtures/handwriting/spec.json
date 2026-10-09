@@ -37,7 +37,8 @@
     "S2": { "name": "Hugo Petit", "profile": "Bonne méthode, mauvaise compréhension des opérations sur les fractions." },
     "S3": { "name": "Lucas Bernard", "profile": "Misconception persistante (a + b)² = a² + b², dans plusieurs contextes." },
     "S4": { "name": "Chloé Lambert", "profile": "Réponses partielles, raisonnements incomplets, une absence de réponse." },
-    "S5": { "name": "Nathan Roux", "profile": "Copie difficilement lisible ; certaines réponses impossibles à interpréter." }
+    "S5": { "name": "Nathan Roux", "profile": "Copie difficilement lisible ; certaines réponses impossibles à interpréter." },
+    "S6": { "name": "Léa Garnier", "profile": "Bonnes méthodes mais écriture mathématique fautive (parenthèses, « = 0 » ajouté), une erreur de signe, une rature corrigée." }
   },
   "copies": [
     {
@@ -132,6 +133,16 @@
         "Q4": { "lines": ["4x = 20", "x = 5"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
         "Q5": { "lines": ["!!C = (x − 9)(x + 9)!!"], "points": "0", "annotation": "", "hidden": ["(x − 9)(x + 9)", "x-9", "x+9"], "expect": { "outcome": ["illegible", "insufficient_evidence"], "legibility": "illegible" } }
       }
+    },
+    {
+      "id": "E1-S6-C", "assessment": "E1", "student": "S6", "level": "C", "seed": 611, "score": "15/20",
+      "answers": {
+        "Q1": { "lines": ["A = 3 × x + 3 × 4", "A = 3x + 12"], "points": "2", "annotation": "", "expect": { "outcome": "no_error" } },
+        "Q2": { "lines": ["B = x + 5 × x + 5", "B = x^2 + 10x + 25"], "points": "1,5", "annotation": "parenthèses !", "expect": { "outcome": ["error", "no_error"], "errorTypes": ["representation", "communication", "methode"], "notions": ["MATH.ALG.IDENTITES", "MATH.ALG.DISTRIBUTIVITE", "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"], "evidenceAnyOf": ["x + 5 × x + 5", "B = x + 5 × x + 5", "x+5×x+5"] } },
+        "Q3": { "lines": ["~~[[2/3]] + [[1/4]] = [[3/7]]~~", "[[2/3]] + [[1/4]] = [[8/12]] + [[3/12]] = [[11/12]]"], "points": "2", "annotation": "", "crossedOut": ["3/7"], "expect": { "outcome": "no_error" } },
+        "Q4": { "lines": ["4x = 13 − 7", "4x = 6", "x = [[6/4]] = [[3/2]]"], "points": "0,5", "annotation": "", "expect": { "outcome": "error", "errorTypes": ["calcul", "methode", "concept"], "notions": ["MATH.ALG.EQUATION_PREMIER_DEGRE", "MATH.ALG.EQUATIONS", "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"], "evidenceAnyOf": ["4x = 13 − 7", "4x = 13 - 7", "4x=13-7", "4x = 6"] } },
+        "Q5": { "lines": ["C = (x − 3)(x + 3) = 0"], "points": "1,5", "annotation": "= 0 ?", "expect": { "outcome": ["error", "no_error"], "errorTypes": ["representation", "communication", "raisonnement", "concept"], "notions": ["MATH.ALG.FACTORISATION_SIMPLE", "MATH.ALG.IDENTITES", "MATH.ALG.EQUATIONS"], "evidenceAnyOf": ["(x − 3)(x + 3) = 0", "(x-3)(x+3) = 0", "(x − 3)(x + 3)=0"] } }
+      }
     }
   ],
   "legibilitySeries": {
@@ -147,7 +158,7 @@
     { "id": "FM-rotated-90", "source": "E1-S2-B", "transform": "rotate_90", "expect": "readable_after_orientation" },
     { "id": "FM-rotated-180", "source": "E1-S2-B", "transform": "rotate_180", "expect": "readable_after_orientation" },
     { "id": "FM-dark", "source": "E1-S1-A", "transform": "very_dark", "expect": "quality_refused_or_illegible" },
-    { "id": "FM-cut", "source": "E1-S2-B", "transform": "cut_bottom", "expect": "missing_questions_not_invented" },
+    { "id": "FM-cut", "source": "E1-S2-B", "transform": "cut_bottom", "cutAt": 0.34, "missing": ["Q4", "Q5"], "expect": "missing_questions_not_invented" },
     { "id": "FM-blank", "source": "E1-S4-B", "transform": "blank_copy", "expect": "all_no_answer" },
     { "id": "FM-not-a-copy", "source": null, "transform": "not_a_copy", "expect": "refused_not_a_copy" },
     { "id": "FM-multipage-reversed", "source": "E1-S3-C", "transform": "two_pages_reversed", "expect": "pages_ordered_or_flagged" },

@@ -688,15 +688,21 @@ begin
     raise exception 'evidence changed since the analysis read it' using errcode = '40001';
   end if;
 
+  -- questionOutcomes: an envelope that carries the key is checked strictly
+  -- (coverage, 'error' exactly where a finding is, what the evidence alone
+  -- decides). An envelope WITHOUT the key was signed by a FOCUS server older
+  -- than this migration (still deployed while the new code is promoted): it
+  -- is recorded as before, without per-question outcomes. Every other check
+  -- (excerpt, notion, unread passages, evidence version) still applies.
   if v_kind = 'analysis' then
     return public.focus_persist_pedagogical_analysis(
       v_school, v_student, v_assessment, v_env->>'model', v_env->>'inputHash',
       coalesce(v_env->'errors', '[]'::jsonb), coalesce(v_env->'recommendations', '[]'::jsonb),
-      coalesce(v_env->'questionOutcomes', '[]'::jsonb));
+      v_env->'questionOutcomes');
   end if;
   return public.focus_persist_no_evidence(
     v_school, v_student, v_assessment, v_env->>'model', v_env->>'inputHash', v_env->>'reason',
-    coalesce(v_env->'questionOutcomes', '[]'::jsonb));
+    v_env->'questionOutcomes');
 end;
 $$;
 revoke all on function public.focus_record_engine_analysis(text, text) from public, anon;
