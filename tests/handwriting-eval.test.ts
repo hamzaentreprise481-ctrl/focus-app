@@ -10,7 +10,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import {
   aggregateHandwriting,
+  aggregatePedagogicalTests,
   HANDWRITING_DIR,
+  PEDAGOGICAL_TESTS,
   levenshtein,
   loadManifest,
   loadSpec,
@@ -59,9 +61,10 @@ test("the fixtures exist and every copy has a ground truth for every question", 
     if (copy.kind !== "failure_mode" || copy.questions.length)
       assert.deepEqual(copy.questions.map((q) => q.key), spec.assessments[copy.assessment].questions.map((q) => q.key), copy.id);
   }
-  // Levels A to E of the same copy, the five profiles and three assessments of one student.
+  // Levels A to E of the same copy, the profiles (five, plus S6: notation
+  // errors and a self-correction) and three assessments of one student.
   assert.deepEqual(manifest.copies.filter((c) => c.kind === "legibility_series").map((c) => c.level), ["A", "B", "C", "D", "E"]);
-  assert.deepEqual([...new Set(graded.map((c) => c.student))].sort(), ["S1", "S2", "S3", "S4", "S5"]);
+  assert.deepEqual([...new Set(graded.map((c) => c.student))].sort(), ["S1", "S2", "S3", "S4", "S5", "S6"]);
   assert.deepEqual(graded.filter((c) => c.student === "S3" && c.kind === "profile").map((c) => c.assessment).sort(), ["E1", "E2", "E3"]);
 });
 
@@ -94,6 +97,39 @@ test("a reader that invents what was destroyed or keeps crossed-out work is caug
       if (truth.crossedOut.length) assert.ok(q.crossedLeaks.length > 0, `${copy.id} ${q.key} crossed-out work not detected`);
     }
   }
+});
+
+test("the five mission tests A–E: an ideal analysis is perfect, an alarmist one is caught as hallucinating", () => {
+  const withQuestions = manifest.copies.filter((copy) => copy.questions.length);
+  const ids = new Set(withQuestions.map((copy) => copy.id));
+  for (const definition of Object.values(PEDAGOGICAL_TESTS))
+    for (const id of definition.copies) assert.ok(ids.has(id), `${id} is a fixture with a ground truth`);
+  const errorsFor = (copy: ManifestCopy, all: boolean) =>
+    copy.questions
+      .filter((q) => (all ? q.text.trim() : !Array.isArray(q.expect.outcome) && q.expect.outcome === "error"))
+      .map((q) => ({ q: q.key, nodeCode: q.expect.notions?.[0] ?? "MATH.ALG.IDENTITES", errorType: q.expect.errorTypes?.[0] ?? "concept" }));
+  const ideal = aggregatePedagogicalTests(
+    withQuestions.map((copy) => {
+      const base = record(copy, (q) => q.text);
+      return scoreHandwritingRecord({ ...base, analysis: { ...base.analysis, errors: errorsFor(copy, false) } } as never, copy);
+    }),
+  );
+  for (const [test, result] of Object.entries(ideal)) {
+    assert.equal(result.copiesRead, result.copies, test);
+    assert.equal(result.hallucinatedErrors, 0, test);
+    assert.equal(result.missedErrors, 0, test);
+    assert.equal(result.inventedUnderDestroyedOrAbsent, 0, test);
+    assert.equal(result.outcomesCorrect, result.outcomes, test);
+    assert.equal(result.diagnosesCorrect, result.diagnosesChecked, test);
+  }
+  assert.ok(ideal.B.diagnosesChecked >= 5 && ideal.D.diagnosesChecked >= 2, JSON.stringify(ideal.D));
+  const alarmist = aggregatePedagogicalTests(
+    withQuestions.map((copy) => {
+      const base = record(copy, (q) => q.text);
+      return scoreHandwritingRecord({ ...base, analysis: { ...base.analysis, errors: errorsFor(copy, true) } } as never, copy);
+    }),
+  );
+  assert.ok(alarmist.A.hallucinatedErrors >= 5, "errors asserted on a perfect copy are counted as hallucinations");
 });
 
 test("scoring normalises notation, not content", () => {

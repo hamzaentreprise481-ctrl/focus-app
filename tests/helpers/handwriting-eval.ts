@@ -231,8 +231,8 @@ export function levenshtein(a: string, b: string) {
   return row[b.length];
 }
 
-type ScanRecord = { ok: boolean; copies?: Array<{ student: string | null; responses: Array<{ q: string; text: string; legibility: string; crossedOut: string }> }> };
-type AnalysisRecord = { ok: boolean; outcomes?: Array<{ q: string; outcome: string }>; errors?: Array<{ q: string; nodeCode: string; errorType: string }> };
+type ScanRecord = { ok: boolean; latencyMs?: number; copies?: Array<{ student: string | null; responses: Array<{ q: string; text: string; legibility: string; crossedOut: string }> }> };
+type AnalysisRecord = { ok: boolean; latencyMs?: number; outcomes?: Array<{ q: string; outcome: string }>; errors?: Array<{ q: string; nodeCode: string; errorType: string }> };
 
 export function scoreHandwritingRecord(record: { id: string; scan?: ScanRecord; analysis?: AnalysisRecord }, copy: ManifestCopy) {
   const scan = record.scan;
@@ -270,9 +270,66 @@ export function scoreHandwritingRecord(record: { id: string; scan?: ScanRecord; 
         finding && q.expect.notions
           ? q.expect.notions.includes(finding.nodeCode) && (!q.expect.errorTypes || q.expect.errorTypes.includes(finding.errorType))
           : null,
+      // An error asserted where the ground truth has none: a hallucinated diagnosis.
+      falseFinding: record.analysis?.ok ? Boolean(finding) && !expected.includes("error") : null,
+      // A real error (the only acceptable outcome) that the analysis did not report.
+      missedError: record.analysis?.ok ? expected.length === 1 && expected[0] === "error" && outcome !== "error" : null,
     };
   });
-  return { id: copy.id, level: copy.level ?? null, kind: copy.kind, scanOk: true, studentFound: read?.student === copy.student, questions };
+  const latencyMs = (scan.latencyMs ?? 0) + (record.analysis?.latencyMs ?? 0);
+  return { id: copy.id, level: copy.level ?? null, kind: copy.kind, scanOk: true, studentFound: read?.student === copy.student, latencyMs, questions };
+}
+
+/**
+ * The five tests of the 9 October mission, on the fictitious fixtures (images
+ * of simulated handwriting, never typed text):
+ * A perfect copy · B errors (calculation, reasoning, notation) · C difficult
+ * handwriting with crossings-out and corrections · D right method, wrong
+ * intermediate step · E insufficient evidence (destroyed, absent, blank).
+ */
+export const PEDAGOGICAL_TESTS: Record<string, { label: string; copies: string[]; questions?: Record<string, string[]> }> = {
+  A: { label: "Copie parfaite", copies: ["E2-S1-B", "E3-S1-B"] },
+  B: { label: "Copie avec erreurs (calcul, concept, raisonnement, notation)", copies: ["E1-S1-A", "E1-S2-B", "E2-S2-B", "E2-S3-B", "E1-S6-C"] },
+  C: { label: "Écriture difficile : ratures, corrections, chiffres ambigus", copies: ["E1-S3-C", "E1-S3-series-C", "E1-S3-series-D", "E1-S6-C"] },
+  D: { label: "Méthode pertinente, erreur intermédiaire", copies: ["E1-S1-A", "E1-S6-C", "E3-S3-B"], questions: { "E1-S1-A": ["Q4"], "E1-S6-C": ["Q4"], "E3-S3-B": ["Q2"] } },
+  E: { label: "Preuves insuffisantes", copies: ["E1-S5-E", "E1-S3-series-E", "FM-cut", "FM-blank"] },
+};
+
+export function aggregatePedagogicalTests(scores: ReturnType<typeof scoreHandwritingRecord>[]) {
+  const byId = new Map(scores.map((score) => [score.id, score]));
+  return Object.fromEntries(
+    Object.entries(PEDAGOGICAL_TESTS).map(([test, definition]) => {
+      const present = definition.copies.map((id) => byId.get(id)).filter((score): score is NonNullable<typeof score> => Boolean(score));
+      const read = present.filter((score) => "questions" in score && score.questions);
+      const questions = read.flatMap((score) =>
+        ("questions" in score && score.questions ? score.questions : []).filter((q) => !definition.questions?.[score.id] || definition.questions[score.id].includes(q.key)),
+      );
+      const visible = questions.filter((q) => !q.hiddenPresent);
+      const analysed = questions.filter((q) => q.outcomeOk !== null);
+      const findings = questions.filter((q) => q.findingOk !== null);
+      const latencies = read.map((score) => ("latencyMs" in score ? score.latencyMs ?? 0 : 0)).sort((a, b) => a - b);
+      return [
+        test,
+        {
+          label: definition.label,
+          copies: definition.copies.length,
+          copiesRun: present.length,
+          copiesRead: read.length,
+          meanCer: visible.length ? Number((visible.reduce((sum, q) => sum + q.cer, 0) / visible.length).toFixed(3)) : null,
+          inventedUnderDestroyedOrAbsent: questions.filter((q) => q.hiddenLeaks.length).length,
+          crossedOutKept: questions.reduce((sum, q) => sum + q.crossedLeaks.length, 0),
+          outcomes: analysed.length,
+          outcomesCorrect: analysed.filter((q) => q.outcomeOk).length,
+          hallucinatedErrors: questions.filter((q) => q.falseFinding).length,
+          missedErrors: questions.filter((q) => q.missedError).length,
+          diagnosesChecked: findings.length,
+          diagnosesCorrect: findings.filter((q) => q.findingOk).length,
+          medianLatencyMs: latencies.length ? latencies[Math.floor(latencies.length / 2)] : null,
+          maxLatencyMs: latencies.length ? latencies[latencies.length - 1] : null,
+        },
+      ];
+    }),
+  );
 }
 
 export function aggregateHandwriting(scores: ReturnType<typeof scoreHandwritingRecord>[]) {
