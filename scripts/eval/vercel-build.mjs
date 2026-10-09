@@ -61,7 +61,7 @@ console.log(`[focus-eval] probe written (key present: ${probe.hasOpenAiKey})`);
 
 if (key && existsSync("scripts/eval/run-live-eval.ts")) {
   try {
-    execSync("node --import tsx scripts/eval/run-live-eval.ts", { stdio: "inherit", timeout: 35 * 60_000 });
+    execSync("node --conditions=react-server --import tsx scripts/eval/run-live-eval.ts", { stdio: "inherit", timeout: 35 * 60_000 });
   } catch (error) {
     writeFileSync(
       `${out}/harness-error.json`,
