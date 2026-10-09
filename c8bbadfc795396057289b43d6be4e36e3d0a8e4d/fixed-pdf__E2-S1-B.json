@@ -1,0 +1,30 @@
+{
+  "httpStatus": 200,
+  "id": "E2-S1-B",
+  "kind": "profile",
+  "level": "B",
+  "options": {
+    "scanModel": "gpt-6-astra",
+    "scanEffort": "high",
+    "analysisModel": "gpt-6-astra",
+    "analysisEffort": "low",
+    "input": "pdf",
+    "analyse": true
+  },
+  "scan": {
+    "ok": false,
+    "error": "SCAN_MODEL_QUOTA",
+    "latencyMs": 1148
+  },
+  "providerLog": [
+    {
+      "status": 429,
+      "ms": 1077,
+      "headers": {},
+      "errorCode": "credit_balance_exhausted",
+      "errorType": "insufficient_quota"
+    }
+  ],
+  "wallMs": 3153,
+  "run": "fixed-pdf"
+}
