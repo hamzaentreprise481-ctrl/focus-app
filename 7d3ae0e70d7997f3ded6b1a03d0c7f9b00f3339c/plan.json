@@ -1,0 +1,25 @@
+{
+  "about": "FIXED pipeline (work/fiabiliser-analyse-ia): the production reader and analysis via runHandwritingCopy, on every fictitious handwritten copy. 'pdf' = what the browser sends (photos assembled into a PDF); 'images' = the same photos sent as images, on the legibility series only, to compare. No harness-level retry: the production client's own bounded retries are measured. Stops at the first exhausted-credit answer.",
+  "runs": [
+    {
+      "name": "fixed-pdf",
+      "copies": "all",
+      "options": {
+        "input": "pdf"
+      }
+    },
+    {
+      "name": "fixed-images",
+      "copies": [
+        "E1-S3-series-A",
+        "E1-S3-series-B",
+        "E1-S3-series-C",
+        "E1-S3-series-D",
+        "E1-S3-series-E"
+      ],
+      "options": {
+        "input": "images"
+      }
+    }
+  ]
+}
