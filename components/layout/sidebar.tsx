@@ -6,23 +6,28 @@ import {
   Users,
   GraduationCap,
   ClipboardCheck,
+  BookOpenCheck,
   Settings,
   LogOut,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { logout } from "@/app/(auth)/connexion/actions";
+
 const NAV_ITEMS = [
   { href: "/app", label: "Accueil", icon: LayoutGrid },
   { href: "/app/classes", label: "Classes", icon: Users },
   { href: "/app/eleves", label: "Élèves", icon: GraduationCap },
   { href: "/app/evaluations", label: "Évaluations", icon: ClipboardCheck },
+  { href: "/app/seances", label: "Séances", icon: BookOpenCheck },
 ];
+
 export function Sidebar({ teacherName }: { teacherName: string }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/app"
       ? pathname === href
       : pathname === href || pathname.startsWith(href + "/");
+
   return (
     <aside className="teacher-sidebar">
       <Link
