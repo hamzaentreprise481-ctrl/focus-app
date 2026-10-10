@@ -245,6 +245,11 @@ test("the direction sees its own school's aggregates and nothing of another scho
     for (const marker of [PORTAL_MARKERS.commentA, PORTAL_MARKERS.answerA, people().studentA.name])
       assert.ok(!html.includes(marker), `${target} shows ${marker}`);
   }
+  // School-wide totals are cumulated per class × subject and say so: two
+  // classes of the same level must not read as a programme twice as long.
+  await page.goto(`${origin}/director`);
+  await page.getByText(/^Cumul sur 2 couples classe × matière/).waitFor();
+  assert.match(await page.content(), /notions \(cumul\)/);
   // The declared lessons feed the taught programme (3 référentiel competencies).
   await page.goto(`${origin}/director/programme`);
   await page.getByText(/^3 \/ \d+ compétences/).first().waitFor();

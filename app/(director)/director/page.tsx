@@ -72,11 +72,11 @@ export default async function DirectorHomePage() {
               label="Référentiel déclaré traité"
               part={overall.referential.taught}
               total={overall.referential.total}
-              unit="compétences"
+              unit="compétences (cumul)"
             />
             <p className="text-xs text-muted">
               Restant : {Math.max(0, overall.referential.total - overall.referential.taught)} compétences
-              du référentiel, toutes classes confondues.
+              (cumul).
             </p>
           </div>
           <div className="space-y-2">
@@ -85,13 +85,13 @@ export default async function DirectorHomePage() {
               label="Notions du programme officiel"
               part={overall.official.evaluated}
               total={overall.official.total}
-              unit="notions"
+              unit="notions (cumul)"
             />
             <Measure
               label="Référentiel évalué"
               part={overall.referential.evaluated}
               total={overall.referential.total}
-              unit="compétences"
+              unit="compétences (cumul)"
             />
           </div>
           <div className="space-y-2">
@@ -108,6 +108,12 @@ export default async function DirectorHomePage() {
             </p>
           </div>
         </div>
+        <p className="mt-2 text-xs leading-5 text-muted">
+          Cumul sur {rows.length} couple{rows.length > 1 ? "s" : ""} classe ×
+          matière : une notion ou une compétence compte une fois par classe et
+          par matière (deux classes de Seconde comptent deux fois le programme
+          de Seconde). Le détail par classe est dans Programme.
+        </p>
       </section>
 
       <section aria-labelledby="vigilance">
