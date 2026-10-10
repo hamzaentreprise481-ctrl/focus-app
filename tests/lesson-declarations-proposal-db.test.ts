@@ -1,7 +1,9 @@
 // The lesson-declaration PROPOSAL (supabase/proposals, not a migration),
 // applied on the real schema in PGlite on top of every migration and of the
-// live head: who can declare a lesson, what is refused, what the direction
-// then reads, and that its rollback leaves nothing behind.
+// live head: who can declare a lesson (own school, class, subject and the
+// class's school year), what is refused (another class, subject or school,
+// another teacher's name or lesson, students, the direction), what the
+// direction then reads, and that its rollback leaves nothing behind.
 
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
@@ -111,6 +113,40 @@ for (const upTo of [undefined, LIVE_HEAD])
       }
       const leaked = await db.query<{ n: number }>("select count(*)::int as n from public.lessons where summary = 'Incohérent'");
       assert.equal(leaked.rows[0].n, 0);
+    });
+
+    test("a lesson is always declared in the caller's own name, and nobody rewrites another teacher's lesson", async () => {
+      // The function takes no teacher argument: the declared teacher is always
+      // auth.uid().
+      const args = await db.query<{ args: string }>("select pg_get_function_identity_arguments('public.focus_declare_lesson'::regproc) as args");
+      assert.doesNotMatch(args.rows[0].args, /teacher/);
+      // A co-teacher of the same class and subject declares under their own name.
+      const coTeacher = await one("insert into auth.users default values returning id");
+      await db.query("insert into public.school_memberships(school_id, user_id, role) values ($1, $2, 'teacher')", [ids.school, coTeacher]);
+      await db.query("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [ids.school, coTeacher, ids.classA, ids.math]);
+      const [{ id }] = await as<{ id: string }>(coTeacher, CALL, [ids.classA, ids.math, "2026-09-16", "Séance du collègue", [ids.comp1]]);
+      const owner = await db.query<{ teacher_id: string }>("select teacher_id from public.lessons where id = $1", [id]);
+      assert.equal(owner.rows[0].teacher_id, coTeacher);
+      // The first teacher cannot change, delete or re-tag it: table writes stay closed.
+      for (const [sql, params] of [
+        ["update public.lessons set summary = 'Usurpée', teacher_id = $2 where id = $1", [id, ids.teacher]],
+        ["delete from public.lessons where id = $1", [id]],
+        ["insert into public.lesson_competencies(lesson_id, competency_id) values ($1, $2)", [id, ids.comp2]],
+      ] as const)
+        await assert.rejects(as(ids.teacher, sql, [...params]), /permission denied/);
+      const after = await db.query<{ summary: string; teacher_id: string }>("select summary, teacher_id from public.lessons where id = $1", [id]);
+      assert.deepEqual(after.rows[0], { summary: "Séance du collègue", teacher_id: coTeacher });
+    });
+
+    test("only dates inside the class's own school year are accepted, including a past year", async () => {
+      // A class of the previous school year (ended 4 July 2026), still assigned.
+      const pastYear = await one("insert into public.academic_years(school_id, name, starts_at, ends_at, active) values ($1, '2025-2026', '2025-09-01', '2026-07-04', false) returning id", [ids.school]);
+      const pastClass = await one("insert into public.classes(school_id, academic_year_id, name, level) values ($1, $2, '2nde A 2025', 'Seconde') returning id", [ids.school, pastYear]);
+      await db.query("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [ids.school, ids.teacher, pastClass, ids.math]);
+      const [{ id }] = await as<{ id: string }>(ids.teacher, CALL, [pastClass, ids.math, "2026-03-10", "Séance de l'an dernier", [ids.comp1]]);
+      assert.ok(id);
+      await assert.rejects(as(ids.teacher, CALL, [pastClass, ids.math, "2026-09-15", "Après la fin de l'année", [ids.comp1]]), /within the class school year/);
+      await assert.rejects(as(ids.teacher, CALL, [pastClass, ids.math, "2025-08-31", "Avant le début de l'année", [ids.comp1]]), /within the class school year/);
     });
 
     test("the rollback removes the function", async () => {
