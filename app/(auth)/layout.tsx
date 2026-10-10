@@ -5,13 +5,13 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+    <div className="min-h-screen bg-[#f4f6fa]">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 sm:py-7">
         <Link
           href="/"
           className="flex items-center gap-2 font-semibold text-brand"
         >
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-ink text-white shadow-sm">
             F
           </span>{" "}
           FOCUS
@@ -22,7 +22,7 @@ export default function AuthLayout({
       </header>
       <main
         id="main-content"
-        className="mx-auto max-w-md px-5 pb-16 pt-10 sm:pt-16"
+        className="mx-auto max-w-lg px-5 pb-16 pt-8 sm:pt-12"
       >
         {children}
       </main>
