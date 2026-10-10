@@ -179,12 +179,12 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
   const schoolId = adminSchools[0].school_id;
   const today = todayInFrance();
 
-  const [school, years, memberships, classes, subjects, assignments, enrollments, assessments, allLessons, competencies, sources, ownProfile] =
+  const [school, years, memberships, allClasses, subjects, allAssignments, allEnrollments, allAssessments, allLessons, competencies, sources, ownProfile] =
     await Promise.all([
       supabase.from("schools").select("id,name").eq("id", schoolId).maybeSingle(),
       supabase
         .from("academic_years")
-        .select("name,starts_at,ends_at,active")
+        .select("id,name,starts_at,ends_at,active")
         .eq("school_id", schoolId)
         .order("starts_at", { ascending: false }),
       selectAll<Membership>("Les membres de l’établissement", (from, to) =>
@@ -232,8 +232,19 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
   ensureOk(ownProfile.error, "Votre profil");
   if (!school.data) throw new Error("Établissement introuvable.");
 
-  // Only lessons that already took place count as taught.
-  const lessons = allLessons.filter((row) => row.date <= today);
+  // Everything is measured within the active school year: its classes, and
+  // assessments and lessons dated inside it (lessons not after today). Past
+  // years' classes, results and alerts never leak into this year's figures.
+  const yearRows = (years.data ?? []) as Array<{ id: string; name: string; starts_at: string; ends_at: string; active: boolean }>;
+  const activeYear = yearRows.find((row) => row.active) ?? yearRows[0] ?? null;
+  const year = activeYear ? { name: activeYear.name, startsAt: activeYear.starts_at, endsAt: activeYear.ends_at } : null;
+  const classes = activeYear ? allClasses.filter((row) => row.academic_year_id === activeYear.id) : allClasses;
+  const yearClassIds = new Set(classes.map((row) => row.id));
+  const inYear = (date: string) => !year || (date >= year.startsAt && date <= year.endsAt);
+  const assignments = allAssignments.filter((row) => yearClassIds.has(row.class_id));
+  const enrollments = allEnrollments.filter((row) => yearClassIds.has(row.class_id));
+  const assessments = allAssessments.filter((row) => yearClassIds.has(row.class_id) && inYear(row.date));
+  const lessons = allLessons.filter((row) => yearClassIds.has(row.class_id) && inYear(row.date) && row.date <= today);
   const assessmentIds = assessments.map((row) => row.id);
   const lessonIds = lessons.map((row) => row.id);
   const subjectCodes = new Set(subjects.map((row) => row.code).filter((code): code is string => !!code));
@@ -273,10 +284,6 @@ export const loadDirectorWorkspace = cache(async (): Promise<DirectorWorkspace> 
   ]);
 
   // --- Indexes -----------------------------------------------------------
-  const yearRows = (years.data ?? []) as Array<{ name: string; starts_at: string; ends_at: string; active: boolean }>;
-  const activeYear = yearRows.find((row) => row.active) ?? yearRows[0] ?? null;
-  const year = activeYear ? { name: activeYear.name, startsAt: activeYear.starts_at, endsAt: activeYear.ends_at } : null;
-
   const classById = new Map(classes.map((row) => [row.id, row]));
   const subjectById = new Map(subjects.map((row) => [row.id, row]));
   const profileById = new Map(profiles.map((row) => [row.id, row]));
@@ -565,7 +572,8 @@ export async function loadClassCompetencyDistribution(classId: string): Promise<
   if (!supabase) throw new Error("Supabase n’est pas configuré.");
   const classAssessments = await selectAll<{ id: string }>("Les évaluations de la classe", (from, to) =>
     supabase.from("assessments").select("id", { count: "exact" })
-      .eq("school_id", workspace.school.id).eq("class_id", classId).lte("date", workspace.today).order("id").range(from, to));
+      .eq("school_id", workspace.school.id).eq("class_id", classId).lte("date", workspace.today)
+      .gte("date", workspace.year?.startsAt ?? "0001-01-01").order("id").range(from, to));
   const results = await selectAllIn<{ id: string }>("Les résultats", classAssessments.map((row) => row.id), (chunk, from, to) =>
     supabase.from("assessment_results").select("id", { count: "exact" }).in("assessment_id", chunk).order("id").range(from, to));
   const levels = await selectAllIn<CompetencyResult>("Les niveaux de compétence", results.map((row) => row.id), (chunk, from, to) =>

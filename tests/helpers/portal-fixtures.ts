@@ -40,6 +40,8 @@ export const PORTAL_MARKERS = {
   schoolB: "Collège Victor Hugo (fictif)",
   assessmentB: "Contrôle confidentiel du collège B",
   commentC: "Commentaire fictif réservé à Inès, collège B",
+  pastClass: "2nde 4 (2025-2026, fictive)",
+  pastAssessment: "Contrôle de l’an dernier (fictif)",
 };
 
 export async function seedPortalFixtures(db: PGlite, uuid: Uuid, ids: Ids): Promise<{ people: PortalPeople; accounts: LocalAccount[] }> {
@@ -99,6 +101,17 @@ export async function seedPortalFixtures(db: PGlite, uuid: Uuid, ids: Ids): Prom
     ).rows[0].id;
     await exec("insert into public.lesson_competencies(lesson_id, competency_id) values ($1, $2)", [lesson, competencies[index]]);
   }
+
+  // A previous school year of school A: its class, assignment and assessment
+  // must never count in the Direction's figures for the current year.
+  const pastYear = uuid("year:a-past");
+  const pastClass = uuid("class:a-past");
+  await exec("insert into public.academic_years(id, school_id, name, starts_at, ends_at, active) values ($1, $2, '2025-2026', '2025-09-01', '2026-07-04', false)", [pastYear, ids.school]);
+  await exec("insert into public.classes(id, school_id, academic_year_id, name, level) values ($1, $2, $3, $4, 'Seconde')", [pastClass, ids.school, pastYear, PORTAL_MARKERS.pastClass]);
+  await exec("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [ids.school, teacher, pastClass, ids.subject]);
+  await exec("insert into public.assessments(school_id, class_id, subject_id, teacher_id, title, date) values ($1, $2, $3, $4, $5, '2026-03-10')", [
+    ids.school, pastClass, ids.subject, teacher, PORTAL_MARKERS.pastAssessment,
+  ]);
 
   // School B, entirely separate.
   const schoolB = uuid("school:b");

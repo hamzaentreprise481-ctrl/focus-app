@@ -241,6 +241,9 @@ test("the direction sees its own school's aggregates and nothing of another scho
     const html = await page.content();
     for (const marker of [PORTAL_MARKERS.schoolB, PORTAL_MARKERS.assessmentB, PORTAL_MARKERS.commentC, "Hélène Garnier", "Inès Morel", "3e B (fictive)"])
       assert.ok(!html.includes(marker), `${target} shows ${marker}`);
+    // A previous school year's class and assessment never count this year.
+    for (const marker of [PORTAL_MARKERS.pastClass, PORTAL_MARKERS.pastAssessment])
+      assert.ok(!html.includes(marker), `${target} shows last year's ${marker}`);
     // Aggregates only: no student name, no individual grade comment.
     for (const marker of [PORTAL_MARKERS.commentA, PORTAL_MARKERS.answerA, people().studentA.name])
       assert.ok(!html.includes(marker), `${target} shows ${marker}`);
@@ -261,6 +264,9 @@ test("the direction sees its own school's aggregates and nothing of another scho
   const classB = fixtureUuid("class:b");
   const response = await page.goto(`${origin}/director/classes/${classB}`);
   assert.equal(response?.status(), 404);
+  // Last year's class of the same school is not part of this year's workspace.
+  const pastClass = await page.goto(`${origin}/director/classes/${fixtureUuid("class:a-past")}`);
+  assert.equal(pastClass?.status(), 404);
   assert.deepEqual(errors, []);
   await page.context().close();
 
