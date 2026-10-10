@@ -42,7 +42,7 @@ export function Stat({
   hint?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-5">
+    <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
       <p className="text-sm text-ink-soft">{label}</p>
       <p className="mt-2 text-3xl font-semibold tabular-nums">{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
@@ -163,7 +163,7 @@ export function SectionTitle({
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       {href && (
         <Link href={href} className="text-sm font-medium text-brand">
           {linkLabel ?? "Tout voir"} →
