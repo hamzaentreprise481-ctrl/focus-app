@@ -1,21 +1,22 @@
 // Administrator tool: create the fictitious FOCUS demonstration school with
-// a demo STUDENT account and a demo DIRECTION account, so the Student and
-// Direction spaces can be tried on a deployment. Run from an administrator's
-// shell only; the service-role key must never be set in Vercel, the
-// application or git.
+// a demo STUDENT account and, on request, a demo DIRECTION login, so the
+// Student and Direction spaces can be tried on a deployment. Run from an
+// administrator's shell only; the service-role key must never be set in
+// Vercel, the application or git.
 //
 //   SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… \
-//   node --import tsx scripts/admin-create-demo-portals.ts --project-ref <ref> [--commit]
+//   node --import tsx scripts/admin-create-demo-portals.ts --project-ref <ref> [--with-direction-login] [--commit]
 //
 // Without --commit: read-only — checks the project and that the demo school
 // does not exist yet, then prints the plan. With --commit: creates, in a NEW
 // school "Établissement de démonstration FOCUS (fictif)", four confirmed
 // auth users on the reserved .invalid domain (no e-mail is ever sent; only
-// the student and the direction get a usable password, printed once), and
-// their fictitious class, results, answers, teacher comments, competency
-// levels and declared lessons. It only inserts; it never touches another
-// school, user or row. To remove it later, delete that school and the four
-// users (app_metadata.focus_demo = true) from the Supabase dashboard.
+// the student — and the direction with --with-direction-login — get a usable
+// password, printed once), and their fictitious class, results, answers,
+// teacher comments, competency levels and declared lessons. It only inserts;
+// it never touches another school, user or row. To remove it later, delete
+// that school and the four users (app_metadata.focus_demo = true) from the
+// Supabase dashboard.
 //
 // Prefer a staging project. On the live project, run it only once the owner
 // has decided that a demo account may exist there (see the PR).
@@ -29,15 +30,19 @@ function parseArgs(argv: string[]) {
     const index = argv.indexOf(name);
     return index >= 0 ? argv[index + 1] : undefined;
   };
-  return { projectRef: value("--project-ref"), commit: argv.includes("--commit") };
+  return {
+    projectRef: value("--project-ref"),
+    commit: argv.includes("--commit"),
+    directionLogin: argv.includes("--with-direction-login"),
+  };
 }
 
 async function main() {
-  const { projectRef, commit } = parseArgs(process.argv.slice(2));
+  const { projectRef, commit, directionLogin } = parseArgs(process.argv.slice(2));
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!projectRef || !url || !key) {
-    console.error("Usage: SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… admin-create-demo-portals.ts --project-ref <ref> [--commit]");
+    console.error("Usage: SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… admin-create-demo-portals.ts --project-ref <ref> [--with-direction-login] [--commit]");
     process.exit(2);
   }
   // The project named on the command line must be the one the URL points to.
@@ -74,7 +79,12 @@ async function main() {
     },
   };
 
-  const plan = demoPlan(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date()));
+  const plan = demoPlan(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date()), { directionLogin });
+  if (directionLogin)
+    console.warn(
+      "WARNING: until supabase/proposals/20261010100000_direction_read_only_official_data.sql is applied, the demo\n" +
+        "direction can write the demo school's data through the API and make itself a teacher there (AI analyses).",
+    );
   const existing = await writer.select<{ id: string }>("schools", "id", { name: plan.school });
   console.log(`Plan (${commit ? "COMMIT" : "dry run"}) on project ${projectRef}:`);
   console.log(`  new school "${plan.school}", class "${plan.className}" (${plan.classLevel}), year ${plan.year.name}`);

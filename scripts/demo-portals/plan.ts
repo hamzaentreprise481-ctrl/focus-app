@@ -63,7 +63,13 @@ export function schoolYear(today: string) {
   return { name: `${start}-${start + 1}`, startsAt: `${start}-09-01`, endsAt: `${start + 1}-07-04` };
 }
 
-export function demoPlan(today: string): DemoPlan {
+/**
+ * `directionLogin` (off by default) gives the demo direction a usable
+ * password. Until the Direction read-only proposal is applied, the admin role
+ * keeps direct database writes on its school (here the demo school only),
+ * including promoting itself to teacher there, which opens the AI analyses.
+ */
+export function demoPlan(today: string, { directionLogin = false }: { directionLogin?: boolean } = {}): DemoPlan {
   const year = schoolYear(today);
   // Assessment and lesson dates: spread over the weeks already elapsed.
   const date = (days: number) => {
@@ -88,7 +94,7 @@ export function demoPlan(today: string): DemoPlan {
       person("studentA", "eleve.demo", "Camille", "Démo (élève fictive)", "student", true),
       person("studentB", "eleve.b.demo", "Sacha", "Démo (élève fictif)", "student", false),
       person("teacher", "professeur.demo", "Professeur", "Démo (fictif)", "teacher", false),
-      person("director", "direction.demo", "Direction", "Démo (fictive)", "admin", true),
+      person("director", "direction.demo", "Direction", "Démo (fictive)", "admin", directionLogin),
     ],
     competencies: ["Calcul littéral", "Équations du premier degré", "Fonctions affines", "Puissances"],
     assessments: [

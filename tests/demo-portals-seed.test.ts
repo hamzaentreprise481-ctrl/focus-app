@@ -14,8 +14,9 @@ import { seedDemoPortals, type DemoWriter } from "../scripts/demo-portals/seed";
 const LIVE_HEAD = "20261004090000_engine_signed_analyses.sql";
 const TODAY = "2026-10-12";
 
-test("the demonstration plan is fictitious and only two accounts can log in", () => {
-  const plan = demoPlan(TODAY);
+test("the demonstration plan is fictitious and only the student logs in unless the direction login is asked for", () => {
+  assert.deepEqual(demoPlan(TODAY).people.filter((person) => person.login).map((person) => person.role), ["student"]);
+  const plan = demoPlan(TODAY, { directionLogin: true });
   assert.equal(plan.school, DEMO_SCHOOL_NAME);
   assert.match(plan.school, /\(fictif\)/);
   assert.ok(plan.people.every((person) => person.email.endsWith(`@${DEMO_EMAIL_DOMAIN}`) && /\.invalid$/.test(person.email)));
@@ -24,7 +25,7 @@ test("the demonstration plan is fictitious and only two accounts can log in", ()
   // Every date is in the current school year and not in the future.
   for (const date of [...plan.assessments.map((row) => row.date), ...plan.lessons.map((row) => row.date)])
     assert.ok(date >= plan.year.startsAt && date <= TODAY, date);
-  assert.deepEqual(demoPlan(TODAY), demoPlan(TODAY));
+  assert.deepEqual(demoPlan(TODAY, { directionLogin: true }), demoPlan(TODAY, { directionLogin: true }));
 });
 
 for (const upTo of [undefined, LIVE_HEAD])
@@ -99,14 +100,14 @@ for (const upTo of [undefined, LIVE_HEAD])
       // A pre-existing school that must stay untouched.
       const other = await seedSchoolFixture(db);
       otherSchoolBefore = await fingerprint(other.school);
-      result = await seedDemoPortals(writer(), demoPlan(TODAY));
+      result = await seedDemoPortals(writer(), demoPlan(TODAY, { directionLogin: true }));
       (result as unknown as { otherSchool: string }).otherSchool = other.school;
     });
     after(async () => {
       await db.close();
     });
 
-    test("only the student and the direction get a login, with a strong one-time password", () => {
+    test("with --with-direction-login, only the student and the direction get a login, with a strong one-time password", () => {
       assert.deepEqual(result.logins.map((login) => [login.space, login.path]), [
         ["Student", "/connexion-eleve"],
         ["Direction", "/connexion-direction"],
@@ -148,7 +149,7 @@ for (const upTo of [undefined, LIVE_HEAD])
       const other = (result as unknown as { otherSchool: string }).otherSchool;
       assert.equal(await fingerprint(other), otherSchoolBefore);
       const before = await fingerprint(result.schoolId);
-      await assert.rejects(seedDemoPortals(writer(), demoPlan(TODAY)), /already exists: nothing was written/);
+      await assert.rejects(seedDemoPortals(writer(), demoPlan(TODAY, { directionLogin: true })), /already exists: nothing was written/);
       assert.equal(await fingerprint(result.schoolId), before);
       const schools = await db.query<{ n: number }>("select count(*)::int as n from public.schools where name = $1", [DEMO_SCHOOL_NAME]);
       assert.equal(schools.rows[0].n, 1);
