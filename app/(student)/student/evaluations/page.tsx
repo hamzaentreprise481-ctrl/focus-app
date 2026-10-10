@@ -1,3 +1,4 @@
+import { requireStudent } from "@/lib/auth/server";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { loadStudentAssessments } from "@/lib/student-data";
@@ -11,6 +12,7 @@ function formatDate(value: string) {
 }
 
 export default async function StudentAssessmentsPage() {
+  await requireStudent();
   const assessments = await loadStudentAssessments();
 
   return (

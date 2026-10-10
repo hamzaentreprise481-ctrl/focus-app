@@ -759,3 +759,108 @@
     min-height: auto;
   }
 }
+
+/* Portal (public home): a short presentation, then one card per space. */
+.portalHero {
+  padding-block: 64px 48px;
+  border-bottom: 1px solid var(--color-border);
+}
+.portalHero h1 {
+  margin-top: 16px;
+  font-size: clamp(30px, 3.2vw, 42px);
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.portalPoints {
+  margin-top: 24px;
+  display: grid;
+  gap: 8px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--color-ink-soft);
+  list-style: disc;
+  padding-left: 20px;
+}
+.portalNote {
+  margin-top: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+.portalSection {
+  padding-block: 48px 72px;
+  background: var(--color-paper);
+}
+.portalTitle {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.portalGrid {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  list-style: none;
+  padding: 0;
+}
+.portalCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+}
+.portalCard h3 {
+  margin-top: 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.portalIcon {
+  color: var(--color-brand);
+}
+.portalProduct {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.portalText {
+  margin-top: 12px;
+  margin-bottom: 24px;
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+}
+.portalMore {
+  margin-top: 28px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+}
+.portalMore .textLink {
+  margin-top: 0;
+}
+@media (max-width: 900px) {
+  .portalGrid {
+    grid-template-columns: 1fr;
+  }
+  .portalCard {
+    padding: 22px;
+  }
+}
+@media (max-width: 760px) {
+  .portalHero {
+    padding-block: 40px 32px;
+  }
+  .portalSection {
+    padding-block: 32px 48px;
+  }
+}

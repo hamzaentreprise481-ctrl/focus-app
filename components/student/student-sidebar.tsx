@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Home,
   LogOut,
+  MessageCircleQuestion,
   TrendingUp,
   UserRound,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
     label: "Progression",
     icon: TrendingUp,
   },
+  { href: "/student/assistant", label: "Assistant", icon: MessageCircleQuestion },
   { href: "/student/profil", label: "Profil", icon: UserRound },
 ];
 
@@ -54,7 +56,7 @@ export function StudentSidebar({ studentName }: { studentName: string }) {
 
       <nav
         aria-label="Navigation élève"
-        className="grid grid-cols-4 gap-1 md:grid-cols-1 md:gap-1.5"
+        className="grid grid-cols-5 gap-1 md:grid-cols-1 md:gap-1.5"
       >
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
           <Link
@@ -62,7 +64,7 @@ export function StudentSidebar({ studentName }: { studentName: string }) {
             href={href}
             aria-current={isActive(href) ? "page" : undefined}
             className={cn(
-              "flex min-h-11 items-center justify-center gap-2 rounded-lg px-2 py-2 text-center text-[11px] text-ink-soft hover:bg-paper md:justify-start md:px-3 md:text-left md:text-sm",
+              "flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-center text-[11px] text-ink-soft hover:bg-paper sm:flex-row sm:gap-2 sm:px-2 md:justify-start md:px-3 md:text-left md:text-sm",
               isActive(href) && "bg-brand-soft font-semibold text-brand-ink",
             )}
           >

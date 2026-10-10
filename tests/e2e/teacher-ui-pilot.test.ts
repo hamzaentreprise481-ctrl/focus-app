@@ -640,7 +640,8 @@ test("sellability: honest demo contact, measurable pilot and unassigned teacher 
   const page = await context.newPage();
   for (const width of [1920, 1366, 1024, 820, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(origin);
+    // The detailed Teacher presentation moved from the portal home.
+    await page.goto(`${origin}/enseignants`);
     await noPageOverflow(page);
     await accessibilityCheck(page, "marketing");
     await page.getByText("Données fictives de démonstration").waitFor();

@@ -10,21 +10,23 @@ Public positioning: “FOCUS complète les outils de vie scolaire en donnant aux
 
 PRONOTE, ÉcoleDirecte and ENT tools keep timetable, attendance, discipline, administrative communication, official grades and school administration. Do not disparage them or claim FOCUS replaces them. No automatic integration with those products is implemented here.
 
-## Three distinct applications
+## Three spaces in this repository (owner decision, October 2026)
 
-1. **FOCUS Teacher** — THIS repository (`hamzaentreprise481-ctrl/focus-app`).
-2. **FOCUS Student** — future separate application/project.
-3. **FOCUS Parent** — future separate application/project.
+1. **FOCUS Teacher** — `/app`, role `teacher`.
+2. **FOCUS Student** — `/student`, role `student`.
+3. **FOCUS Direction** — `/director`, database role `admin` (the role every RLS policy already treats as the school's direction through `is_school_admin`; the `membership_role` enum is NOT changed for it).
 
-The public site can explain the ecosystem. This repository must only provide teacher access. Do not add a role picker, student login, parent login, or student/parent workspace. Domain types may evolve to allow secure interoperability later; do not invent that backend now.
+**FOCUS Parent** remains a future separate project: no parent login or workspace here. The public home presents FOCUS briefly, then lets each person choose their space; every space has its own login, its own server guard and its own navigation, and none grants another (a teacher membership never opens Direction, a student never reaches `/app` or `/director`). Accounts are created by the school's administrator; there is no self-registration.
 
 ## Public and authenticated architecture
 
 - Root layout: fonts, document metadata, global CSS only; never an application data provider.
-- `app/(marketing)/`: public `/`, institutional presentation, independent navigation. It imports ONLY the dedicated immutable `lib/demo/marketing-data.ts` fixture for its preview. That fixture has no imports. Public pages must not depend, even transitively, on application data loaders, `lib/analysis` or teacher components (tested).
-- `app/(auth)/`: `/connexion`, teacher login, server actions; no student data.
+- `app/(marketing)/`: public `/` (short presentation + one card per space: `/connexion`, `/connexion-eleve`, `/connexion-direction`), `/enseignants` (the detailed Teacher presentation), institutional pages, independent navigation. It imports ONLY the dedicated immutable `lib/demo/marketing-data.ts` fixture for its preview. That fixture has no imports. Public pages must not depend, even transitively, on application data loaders, `lib/analysis` or teacher components (tested).
+- `app/(auth)/`: `/connexion` (teacher), `/connexion-eleve`, `/connexion-direction`, server actions; no student data. A new password (invitation or reset) opens the space of the account's active membership.
+- `app/(student)/student/`: `/student`, `/student/evaluations[/id]`, `/student/progression`, `/student/assistant`, `/student/profil`; each page calls `requireStudent()`.
+- `app/(director)/director/`: `/director`, `/director/classes[/id]`, `/director/professeurs`, `/director/programme`, `/director/alertes`, `/director/parametres`; each page and the layout call `requireDirector()`.
 - `app/(teacher)/app/`: private `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres`. Dynamic rendering. Each page calls `requireTeacher()` before rendering its existing client view. The layout also checks the teacher and provides shell/context. Future data readers, route handlers and mutations must independently authorize the user and the requested resource.
-- `proxy.ts`: checks every `/app` request, refreshes Auth cookies, denies unauthenticated/non-teacher access and applies private/no-store responses. It is not the only authorization layer.
+- `proxy.ts`: checks every `/app`, `/student` and `/director` request against its own role, refreshes Auth cookies, denies unauthenticated/non-teacher access and applies private/no-store responses. It is not the only authorization layer.
 - Legacy `/classes/*`, `/eleves/*`, `/evaluations/*`, `/parametres/*` redirect to `/app/...`. `/decouvrir` is a dedicated public marketing page.
 - No pathname-based public/private shell exception. Sidebar pathname use is only for the active navigation item.
 
@@ -35,6 +37,18 @@ Supabase Auth is the authentication provider. Server actions perform password lo
 Session cookies are HttpOnly, SameSite=Lax and Secure on HTTPS/Vercel. Redirect destinations are restricted to `/app` paths. Missing configuration denies access; there is no public bypass, demo password or mock identity in application code. No service role key is used by the app. Provisioning is administrator-only (Supabase invitation via `scripts/admin-invite-teacher.ts`, active school membership and class/subject assignment); there is no self-registration. Forgotten-password and invitation links go through `/auth/confirm` (server-verified, single-use) to `/connexion/nouveau-mot-de-passe`; the reset request answers identically whether or not the address exists, and a non-teacher who sets a password still cannot enter. These flows are tested against the local Auth double, not yet with a real project's e-mail templates.
 
 See README.md and `.env.example` for external setup. Real Supabase credentials and teacher provisioning are still required. Protocol-level tests use a separate loopback Auth double; they do not certify an actual Supabase project's setup.
+
+## Student
+
+Read-only for the student's own data under RLS: results, recorded answers, teacher comments and annotations, explicit competency levels, progression. Students never read questions, corrections or any AI output of the teacher pipeline (RLS since `20261002120000`); nothing unvalidated is shown — an automatic reading of a scanned copy the teacher has not checked is neither shown nor sent to the assistant, only counted. No Student code writes to the database (tested statically).
+
+**Assistant FOCUS** (`/student/assistant`) is pedagogical help only: explain, question, train. Its context is built with the student's own session (own data, class programme notions) — never another student's data, teacher-only tables or the student's name. It never creates, changes or validates a grade, correction, competency or assessment; such requests get a deterministic refusal before any model call. Guided by default (no direct final answer); the full solution only on explicit request. The conversation history comes from the browser and is not authoritative: refused requests and the replies that followed them are dropped before the model call. Trust order: teacher-validated data, recorded results, official programme, then its own help; it quotes teacher comments verbatim and says when context is insufficient. Conversations are not stored. Model: `FOCUS_STUDENT_AI_MODEL` or the release model.
+
+## Direction
+
+Read-only aggregates of the director's own school (RLS `is_school_admin`, every query also filtered by school): no student list, no individual grade, and teachers get operational indicators only — never a ranking or a grade-based comparison. Programme progress keeps three dimensions apart and never presents them as mastery: **programme enseigné** (référentiel competencies linked to lessons declared by teachers), **programme évalué** (official programme notions present in past assessments, else référentiel competencies), **compétences documentées** (explicit levels entered). The delay risk is deterministic (`lib/director/metrics.ts`; on track / vigilance from 80 % of the needed pace / at risk; no pace before 3 weeks or without declarations — missing data is never shown as a delay). Teachers cannot declare lessons yet (writes on `lessons` are closed); the audited function is a proposal in `supabase/proposals/`, not applied. Figures cover the active school year only.
+
+The Direction app never writes. The database does not enforce that yet: the base schema still lets the `admin` role write its school's official data (assessments, results, competency levels, answers, questions) and add a teacher membership and assignment for its own account. `supabase/proposals/20261010100000_direction_read_only_official_data.sql` closes both with restrictive policies (tested on both heads, teachers unaffected); it is NOT applied. Until it is, do not describe Direction as read-only at the database level, and give a demo direction a login only on request (`--with-direction-login`).
 
 ## Teacher UX
 
@@ -92,7 +106,7 @@ The flow is: assessment → subject, questions, correction, rubric, assessed not
 
 ## Features and claims
 
-Implemented: teacher login, dashboard work queue, class overview (groups to examine/follow/improving/insufficient data, competency signals from explicit levels, entry completion), classes and students, evaluations with grades/competencies (competencies of the class's subject; deletion by their teacher until copies are analysed), subject/questions/correction/notions, copy entry, AI analysis of mathematics copies (one copy or the whole class, one request per copy) with teacher review on the assessment page and in the student file, longitudinal student follow-up (hypotheses, confirmed observations, notion timelines, history), PDF exports, import of scanned or photographed copies with teacher verification, curriculum importer and catalogue, forgotten password and invitation onboarding, per-request AI usage records. Not implemented: per-school AI budget enforcement, school-tool synchronization, measuring intervention outcomes, Student/Parent apps. The release model is `gpt-6-astra`. A real-model synthetic benchmark is part of the V1 release evidence; scripted stand-ins remain the evidence for deterministic local E2E wiring, not model quality.
+Implemented: teacher login, dashboard work queue, class overview (groups to examine/follow/improving/insufficient data, competency signals from explicit levels, entry completion), classes and students, evaluations with grades/competencies (competencies of the class's subject; deletion by their teacher until copies are analysed), subject/questions/correction/notions, copy entry, AI analysis of mathematics copies (one copy or the whole class, one request per copy) with teacher review on the assessment page and in the student file, longitudinal student follow-up (hypotheses, confirmed observations, notion timelines, history), PDF exports, import of scanned or photographed copies with teacher verification, curriculum importer and catalogue, forgotten password and invitation onboarding, per-request AI usage records. Also implemented: the public portal, FOCUS Student (read-only space and Assistant FOCUS) and FOCUS Direction (read-only app over aggregates, programme progress, deterministic alerts; the database-level write restriction of the `admin` role is a proposal only). Not implemented: per-school AI budget enforcement, school-tool synchronization, measuring intervention outcomes, lesson declaration by teachers (proposal only), Parent app. The Student assistant has not been exercised on the real model from this repository's environment. The release model is `gpt-6-astra`. A real-model synthetic benchmark is part of the V1 release evidence; scripted stand-ins remain the evidence for deterministic local E2E wiring, not model quality.
 
 The demonstration CTA uses an optional verified HTTPS `FOCUS_DEMO_REQUEST_URL`. Without it, explain that requests are not open and link to the public preview. Never invent an email address, collect leads without a configured recipient, or claim a request was sent when it was not.
 
@@ -104,7 +118,7 @@ The official curriculum graph is changed only through packages in `curriculum/` 
 
 Do not, without explicit approval:
 
-- Rebuild this application, create another repository, or introduce Student/Parent apps here.
+- Rebuild this application, create another repository, or introduce Parent here; give Student or Direction any write path to official data.
 - Replace the three-app architecture or complementary positioning.
 - Add public student-data access or weaken route protection.
 - Claim prediction, autonomous decisions, compliance, tenant isolation, live integrations or features unsupported by implementation/evidence.

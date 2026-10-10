@@ -1,6 +1,6 @@
-# FOCUS Teacher
+# FOCUS
 
-FOCUS complète les outils de vie scolaire avec un espace de suivi pédagogique pour les enseignants. Ce dépôt contient **FOCUS Teacher** et sa vitrine publique. FOCUS Student et FOCUS Parent sont prévus dans des projets distincts.
+FOCUS complète les outils de vie scolaire avec un suivi pédagogique. Ce dépôt contient trois espaces séparés — **FOCUS Teacher** (`/app`), **FOCUS Student** (`/student`) et **FOCUS Direction** (`/director`) — et leur vitrine publique, qui présente le produit et oriente chacun vers sa propre connexion. FOCUS Parent reste prévu dans un projet distinct.
 
 Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGENTS.md](./AGENTS.md). Claude Code charge ces deux références via [CLAUDE.md](./CLAUDE.md).
 
@@ -10,6 +10,8 @@ Lire [FOCUS_PRODUCT.md](./FOCUS_PRODUCT.md) avant toute modification, puis [AGEN
 - **Données** : classes, élèves, évaluations, résultats, sujets, copies et décisions sont lus et écrits dans Supabase, sous RLS, avec la session du professeur. L’application n’affiche aucun jeu fictif en secours et n’utilise pas le stockage du navigateur.
 - **Parcours** : tableau de bord « À traiter » → évaluation (créée avant toute note) → sujet, questions, corrigé, barème et notions visées → import facultatif d’une pile de copies scannées en un PDF (séparation/nom/note/transcription, confirmation des cas incertains) ou saisie manuelle → analyse de toutes les copies de la classe en une action, copie par copie (mathématiques) → hypothèses de l’évaluation que le professeur confirme ou écarte sur place, avec note → dossier élève longitudinal et export PDF.
 - **IA pédagogique** : l’analyse ne peut citer qu’un extrait littéral de la copie, une notion du programme de la classe liée aux notions de la question, et une erreur type du catalogue de cette notion. La confiance est calculée par la base à partir de l’historique ; rien n’entre dans le suivi sans décision du professeur. Hypothèses, notes et décisions ne sont lisibles que par les professeurs de la classe **et de la matière** et l’administrateur de l’établissement — jamais par l’élève ni par les professeurs d’autres matières. Voir [docs/PEDAGOGICAL_AI_VALIDATION.md](./docs/PEDAGOGICAL_AI_VALIDATION.md).
+- **Student** (`/student`) : lecture seule de ses propres évaluations, notes, réponses enregistrées, commentaires et annotations du professeur, niveaux de compétence saisis et progression ; aucune analyse IA Teacher non validée. **Assistant FOCUS** (`/student/assistant`) : aide pédagogique (explication, exercice, révision), guidée par défaut, à partir des seules données lisibles par l’élève sous RLS ; il n’écrit rien et refuse toute demande de modification de note. Non prouvé sur modèle réel (aucune clé dans l’environnement de développement).
+- **Direction** (`/director`) : rôle de base `admin` (aucune modification de l’enum) ; vue établissement de l’année scolaire active, l’application n’écrit rien (en base, le rôle `admin` garde des droits d’écriture tant que la proposition `supabase/proposals/20261010100000_direction_read_only_official_data.sql` n’est pas appliquée), agrégats uniquement (aucun nom d’élève, aucune note individuelle, aucun classement d’enseignants), avancement du programme en trois dimensions séparées (enseigné déclaré, évalué, compétences documentées) et risque de retard calculé de façon déterministe (`lib/director/metrics.ts`). Le programme enseigné reste « non disponible » tant que les professeurs ne peuvent pas déclarer de séances (écriture sur `lessons` fermée ; proposition `supabase/proposals/20261010090000_teacher_lesson_declarations.sql`, non appliquée).
 - **Base live** : les migrations sont appliquées jusqu’à `20261004090000`, y compris le durcissement des accès par classe + matière et la provenance signée des analyses. `supabase/staging/verify.sql` a été rejoué sur la base live le 7 octobre 2026 et retourne `FOCUS staging verification: OK`.
 - **Validation de release** : des comptes professeurs se sont connectés au projet live ; la Preview de release vérifie le schéma `20261004090000`, l’accès au modèle `gpt-6-astra` et la clé de signature. Le benchmark réel du modèle et la CI de release sont documentés dans `docs/PEDAGOGICAL_AI_VALIDATION.md` et `docs/RELEASE_V1.md`. Le cadre RGPD reste à contractualiser avec chaque établissement avant toute donnée réelle d’élève.
 
@@ -23,7 +25,7 @@ cp .env.example .env.local   # URL et clé publiable du projet Supabase FOCUS
 npm run dev
 ```
 
-Sans variables Auth, la vitrine fonctionne et toutes les routes professeur refusent l’accès.
+Sans variables Auth, la vitrine fonctionne et toutes les routes privées (professeur, élève, direction) refusent l’accès.
 
 ### Environnement local complet, sans réseau
 
@@ -32,18 +34,20 @@ npm run build
 node --import tsx scripts/local-stack.ts   # http://127.0.0.1:3300/connexion
 ```
 
-Le schéma réel (toutes les migrations) tourne dans PGlite avec une école fictive, derrière un double Supabase Auth/PostgREST et un modèle **scripté**. Les comptes fictifs s’affichent au démarrage. Les analyses produites ainsi sont simulées : elles vérifient le parcours et les garde-fous, jamais la qualité du modèle. `FOCUS_LOCAL_UP_TO=<migration>` arrête le schéma à une migration donnée, pour voir le comportement face à une base en retard.
+Le schéma réel (toutes les migrations) tourne dans PGlite avec une école fictive, derrière un double Supabase Auth/PostgREST et un modèle **scripté**. Les comptes fictifs (professeur, deux élèves, direction, et la direction d’un second établissement fictif) s’affichent au démarrage. Les analyses produites ainsi sont simulées : elles vérifient le parcours et les garde-fous, jamais la qualité du modèle. `FOCUS_LOCAL_UP_TO=<migration>` arrête le schéma à une migration donnée, pour voir le comportement face à une base en retard.
 
 ## Routes et limites entre espaces
 
 | Espace            | Routes                                                                       | Implémentation                                                                  |
 | ----------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Public            | `/`, `/decouvrir`, `/fonctionnement`, `/confiance`, `/abonnements`, `/questions` | `app/(marketing)` ; aperçu issu uniquement de `lib/demo/marketing-data.ts` (fictif) |
-| Connexion         | `/connexion`, `/connexion/mot-de-passe-oublie`, `/connexion/nouveau-mot-de-passe`, `/auth/confirm` | `app/(auth)`, `app/auth/confirm` ; connexion, déconnexion, réinitialisation et invitation côté serveur |
+| Public            | `/` (portail : présentation et trois espaces), `/enseignants`, `/decouvrir`, `/fonctionnement`, `/confiance`, `/abonnements`, `/questions` | `app/(marketing)` ; aperçu issu uniquement de `lib/demo/marketing-data.ts` (fictif) |
+| Connexion         | `/connexion` (professeur), `/connexion-eleve`, `/connexion-direction`, `/connexion/mot-de-passe-oublie`, `/connexion/nouveau-mot-de-passe`, `/auth/confirm` | `app/(auth)`, `app/auth/confirm` ; une connexion par espace, côté serveur ; un nouveau mot de passe ouvre l’espace du rôle actif du compte |
 | Professeur privé  | `/app`, `/app/classes`, `/app/eleves`, `/app/evaluations`, `/app/parametres` | `app/(teacher)/app` ; `requireTeacher()` sur chaque page, action et le layout   |
+| Élève privé       | `/student`, `/student/evaluations`, `/student/evaluations/[id]`, `/student/progression`, `/student/assistant`, `/student/profil` | `app/(student)/student` ; `requireStudent()` (appartenance `student` active) sur chaque page et action |
+| Direction privée  | `/director`, `/director/classes`, `/director/classes/[id]`, `/director/professeurs`, `/director/programme`, `/director/alertes`, `/director/parametres` | `app/(director)/director` ; `requireDirector()` (appartenance `admin` active) sur chaque page et le layout |
 | Liens historiques | `/classes/*`, `/eleves/*`, `/evaluations/*`, `/parametres/*`                 | Redirections permanentes définies dans `next.config.ts`                         |
 
-Le Proxy actualise les cookies et refuse les requêtes privées sans professeur. Chaque page et chaque Server Action revérifie l’utilisateur ; la base revérifie chaque ligne (RLS) et chaque écriture (fonctions `focus_*`).
+Le Proxy actualise les cookies et refuse chaque espace privé sans l’appartenance active correspondante (un professeur n’entre ni dans `/student` ni dans `/director`, un élève ni dans `/app` ni dans `/director`). Chaque page et chaque Server Action revérifie l’utilisateur ; la base revérifie chaque ligne (RLS) et chaque écriture (fonctions `focus_*`).
 
 ## Base de données
 
@@ -115,6 +119,19 @@ Une ligne PASS/FAIL par étape du parcours de l’application : connexion, sessi
 
 Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté serveur ; redirections de retour limitées à `/app`.
 
+### Comptes élève et direction de démonstration
+
+Aucun compte de démonstration n’existe sur le projet live : c’est le seul environnement Supabase (ni branche ni staging) et créer une connexion demande la clé `service_role`. Le script d’administration crée, dans un **établissement de démonstration séparé** et entièrement fictif, un compte élève et un compte direction (adresses `@demo.focus.invalid`, aucun e-mail envoyé, mots de passe générés et affichés une fois), avec classe, évaluations, notes, réponses, commentaires, niveaux de compétence et séances. Seul l’élève reçoit une connexion par défaut ; la connexion direction demande `--with-direction-login` (avertissement : tant que la proposition Direction n’est pas appliquée, ce compte peut écrire, par l’API, dans l’établissement de démonstration et s’y déclarer professeur) :
+
+```bash
+SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… \
+  node --import tsx scripts/admin-create-demo-portals.ts --project-ref <ref>            # lecture seule : plan
+# option : --with-direction-login
+# … puis la même commande avec --commit (de préférence sur un projet de staging)
+```
+
+Il n’écrit que des insertions dans l’établissement qu’il crée et refuse de s’exécuter deux fois ; la même séquence est rejouée en test sur le schéma live (`tests/demo-portals-seed.test.ts`). Pour l’essayer sans réseau, `scripts/local-stack.ts` fournit les mêmes espaces avec des comptes fictifs.
+
 ## Variables d’environnement
 
 | Variable | Portée | Rôle |
@@ -126,11 +143,12 @@ Sessions : cookies HttpOnly, SameSite=Lax, Secure en HTTPS ; `getUser()` côté 
 | `FOCUS_AI_HOURLY_LIMIT` | Serveur | Appels au modèle par professeur et par heure (défaut 150) |
 | `FOCUS_AI_REASONING_EFFORT` | Serveur | `low` (défaut), `medium` ou `high` |
 | `FOCUS_SCAN_MODEL` | Serveur | Modèle de lecture des copies scannées ou photographiées (défaut : `FOCUS_AI_MODEL`) |
+| `FOCUS_STUDENT_AI_MODEL` | Serveur | Modèle de l’Assistant FOCUS côté élève (défaut : le modèle de `FOCUS_AI_MODEL`, soit `gpt-6-astra`) ; utilise `OPENAI_API_KEY` |
 | `FOCUS_SCAN_REASONING_EFFORT` | Serveur | Effort de lecture des copies : `high` (défaut), `medium` ou `low` ; à ne baisser qu’après mesure (`npm run test:handwriting-live`) |
 | `FOCUS_SITE_URL` | Serveur, recommandé | Origine HTTPS utilisée dans les liens de réinitialisation ; sinon l’hôte de la requête |
 | `FOCUS_DEMO_REQUEST_URL` | Facultatif | Formulaire HTTPS vérifié ; sinon la vitrine indique que les demandes ne sont pas ouvertes |
 
-`SUPABASE_SERVICE_ROLE_KEY` ne sert qu’aux commandes d’administration (`npm run curriculum -- apply|export`, `scripts/admin-invite-teacher.ts`) dans un shell local ; jamais dans Vercel ni dans l’application (un test le vérifie). Redéployer après toute modification des variables `NEXT_PUBLIC_`.
+`SUPABASE_SERVICE_ROLE_KEY` ne sert qu’aux commandes d’administration (`npm run curriculum -- apply|export`, `scripts/admin-invite-teacher.ts`, `scripts/admin-create-demo-portals.ts`) dans un shell local ; jamais dans Vercel ni dans l’application (un test le vérifie). Redéployer après toute modification des variables `NEXT_PUBLIC_`.
 
 ## Programme officiel et catalogue
 
