@@ -79,6 +79,7 @@ for (const upTo of [undefined, LIVE_HEAD])
       await refused(ids.student, [ids.classA, ids.math, "2026-09-15", "Élève", [ids.comp1]], /not assigned/);
       await refused(ids.director, [ids.classA, ids.math, "2026-09-15", "Direction", [ids.comp1]], /not assigned/);
       await refused(ids.teacher, [ids.classA, ids.math, "2099-01-01", "Future", [ids.comp1]], /must have taken place/);
+      await refused(ids.teacher, [ids.classA, ids.math, "2026-08-20", "Avant la rentrée", [ids.comp1]], /within the class school year/);
       await refused(ids.teacher, [ids.classA, ids.math, "2026-09-15", "   ", [ids.comp1]], /summary/);
       await refused(ids.teacher, [ids.classA, ids.math, "2026-09-15", "Sans compétence", []], /one to twenty/);
       await refused(ids.teacher, [ids.classA, ids.math, "2026-09-15", "Autre matière", [ids.physicsComp]], /outside the subject/);
@@ -94,6 +95,22 @@ for (const upTo of [undefined, LIVE_HEAD])
       await db.query("update public.school_memberships set status = 'active' where user_id = $1", [ids.teacher]);
       const anon = await db.query<{ granted: boolean }>("select has_function_privilege('anon', 'public.focus_declare_lesson(uuid, uuid, date, text, uuid[])', 'execute') as granted");
       assert.equal(anon.rows[0].granted, false);
+    });
+
+    test("an assignment inconsistent with the class's school never opens a declaration", async () => {
+      // If such rows ever exist (written by service_role), the class's school
+      // decides: an outsider's assignment filed under another school, or a
+      // subject of another school, is refused.
+      const otherSubject = await one("select id from public.subjects where school_id = $1", [ids.other]);
+      for (const [school, teacher, subject] of [[ids.other, ids.outsider, ids.math], [ids.school, ids.teacher, otherSubject]]) {
+        let inserted = true;
+        await db.query("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [school, teacher, ids.classA, subject])
+          .catch(() => (inserted = false));
+        if (inserted)
+          await assert.rejects(as(teacher, CALL, [ids.classA, subject, "2026-09-15", "Incohérent", [ids.comp1]]), /not assigned/);
+      }
+      const leaked = await db.query<{ n: number }>("select count(*)::int as n from public.lessons where summary = 'Incohérent'");
+      assert.equal(leaked.rows[0].n, 0);
     });
 
     test("the rollback removes the function", async () => {

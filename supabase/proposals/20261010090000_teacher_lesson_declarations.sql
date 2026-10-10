@@ -7,8 +7,8 @@
 --
 -- Independent of the pending Teacher migrations (20261007090000,
 -- 20261007130000, 20261009120000): it only reads teacher_assignments,
--- school_memberships and competencies, which exist at the live head
--- 20261004090000. Tested on both heads by
+-- classes, academic_years, subjects, school_memberships and competencies,
+-- which exist at the live head 20261004090000. Tested on both heads by
 -- tests/lesson-declarations-proposal-db.test.ts. Rollback:
 -- supabase/proposals/20261010090000_teacher_lesson_declarations.down.sql.
 -- To adopt it, the owner moves it into supabase/migrations (staging first).
@@ -27,6 +27,8 @@ set search_path = public
 as $$
 declare
   v_school uuid;
+  v_year_start date;
+  v_year_end date;
   v_lesson uuid;
   v_count integer := coalesce(cardinality(p_competency_ids), 0);
 begin
@@ -34,11 +36,16 @@ begin
     raise exception 'authentication required' using errcode = '42501';
   end if;
   -- Only a teacher with an active membership, assigned to this class AND
-  -- subject, declares a lesson for it.
-  select ta.school_id into v_school
+  -- subject, declares a lesson for it. The school is the CLASS's school (the
+  -- assignment, the membership and the subject must all belong to it), and
+  -- the class's school year bounds the date.
+  select c.school_id, y.starts_at, y.ends_at into v_school, v_year_start, v_year_end
   from public.teacher_assignments ta
+  join public.classes c on c.id = ta.class_id and c.school_id = ta.school_id
+  join public.academic_years y on y.id = c.academic_year_id and y.school_id = c.school_id
+  join public.subjects s on s.id = ta.subject_id and (s.school_id = c.school_id or s.school_id is null)
   join public.school_memberships sm
-    on sm.user_id = ta.teacher_id and sm.school_id = ta.school_id
+    on sm.user_id = ta.teacher_id and sm.school_id = c.school_id
    and sm.role = 'teacher' and sm.status = 'active'
   where ta.teacher_id = auth.uid()
     and ta.class_id = p_class_id
@@ -47,9 +54,13 @@ begin
   if v_school is null then
     raise exception 'not assigned to this class and subject' using errcode = '42501';
   end if;
-  -- A declaration states what happened: never a future lesson.
-  if p_date is null or p_date > (now() at time zone 'Europe/Paris')::date or p_date < date '2000-01-01' then
+  -- A declaration states what happened: never a future lesson, and only
+  -- within the class's school year.
+  if p_date is null or p_date > (now() at time zone 'Europe/Paris')::date then
     raise exception 'a declared lesson must have taken place' using errcode = '22023';
+  end if;
+  if p_date < v_year_start or p_date > v_year_end then
+    raise exception 'a declared lesson must fall within the class school year' using errcode = '22023';
   end if;
   if p_summary is null or btrim(p_summary) = '' or char_length(p_summary) > 2000 then
     raise exception 'summary must hold 1 to 2000 characters' using errcode = '22023';
