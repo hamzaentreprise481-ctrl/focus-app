@@ -19,8 +19,11 @@ export function PageIntro({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="mb-8">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+    <header className="mb-8 rounded-2xl border border-border bg-white px-6 py-6 shadow-sm sm:px-7">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand">
+        FOCUS Direction
+      </p>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
         {title}
       </h1>
       {children && (
@@ -42,9 +45,10 @@ export function Stat({
   hint?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
-      <p className="text-sm text-ink-soft">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tabular-nums">{value}</p>
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-white p-5 shadow-sm">
+      <span className="absolute inset-x-0 top-0 h-0.5 bg-brand" aria-hidden="true" />
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">{label}</p>
+      <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight">{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
   );
@@ -146,7 +150,7 @@ export function PaceDetail({ pace }: { pace: PaceResult }) {
 
 export function EmptyNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-6 text-sm leading-6 text-ink-soft">
+    <div className="rounded-2xl border border-border bg-white p-6 text-sm leading-6 text-ink-soft shadow-sm">
       {children}
     </div>
   );
@@ -182,7 +186,7 @@ export function ProgrammeRowCard({
   showClass?: boolean;
 }) {
   return (
-    <article className="rounded-xl border border-border bg-white p-5">
+    <article className="rounded-2xl border border-border bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold">
