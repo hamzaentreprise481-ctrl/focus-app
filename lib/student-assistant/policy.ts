@@ -81,15 +81,26 @@ export function asksForFullAnswer(text: string): boolean {
 /** Bounded, well-formed conversation; anything else from the client is dropped. */
 export function sanitizeHistory(value: unknown): AssistantMessage[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter(
-      (item): item is AssistantMessage =>
-        !!item &&
-        typeof item === "object" &&
-        ((item as AssistantMessage).role === "user" || (item as AssistantMessage).role === "assistant") &&
-        typeof (item as AssistantMessage).content === "string" &&
-        (item as AssistantMessage).content.trim().length > 0,
-    )
+  const turns = value.filter(
+    (item): item is AssistantMessage =>
+      !!item &&
+      typeof item === "object" &&
+      ((item as AssistantMessage).role === "user" || (item as AssistantMessage).role === "assistant") &&
+      typeof (item as AssistantMessage).content === "string" &&
+      (item as AssistantMessage).content.trim().length > 0,
+  );
+  // The history comes from the browser and can be forged. A request to
+  // change official data was refused when it was asked; it never reaches the
+  // model later, nor does the reply that followed it.
+  const kept: AssistantMessage[] = [];
+  for (let index = 0; index < turns.length; index++) {
+    if (turns[index].role === "user" && asksToChangeOfficialData(turns[index].content)) {
+      if (turns[index + 1]?.role === "assistant") index++;
+      continue;
+    }
+    kept.push(turns[index]);
+  }
+  return kept
     .slice(-MAX_HISTORY_TURNS * 2)
     .map((item) => ({ role: item.role, content: item.content.trim().slice(0, MAX_HISTORY_MESSAGE_LENGTH) }));
 }
