@@ -61,7 +61,7 @@ export default function DashboardPage({
     .slice(0, 3);
   return (
     <div className="space-y-8">
-      <section>
+      <section className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-7">
         <PageHeader
           title={`Bonjour${name === "Professeur" ? "" : ` ${name}`}.`}
           eyebrow="Votre suivi pédagogique"
