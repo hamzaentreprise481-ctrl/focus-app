@@ -74,7 +74,7 @@ export function StudentAssistant({
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
       <aside className="space-y-5">
-        <div className="rounded-xl border border-border bg-white p-5">
+        <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
           <Label htmlFor="assistant-assessment">Relier à une évaluation</Label>
           <select
             id="assistant-assessment"
@@ -111,7 +111,7 @@ export function StudentAssistant({
             </span>
           </label>
         </div>
-        <div className="rounded-xl border border-border bg-white p-5">
+        <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
           <p className="text-sm font-medium">Exemples de questions</p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {SUGGESTIONS.map((suggestion) => (
@@ -135,7 +135,7 @@ export function StudentAssistant({
 
       <section aria-label="Conversation avec l’Assistant FOCUS" className="min-w-0 space-y-4">
         <div
-          className="min-h-[220px] space-y-4 rounded-xl border border-border bg-white p-5"
+          className="min-h-[320px] space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6"
           aria-live="polite"
         >
           {messages.length === 0 ? (
@@ -150,8 +150,8 @@ export function StudentAssistant({
                 key={index}
                 className={
                   message.role === "user"
-                    ? "ml-auto max-w-[85%] rounded-lg bg-brand-soft p-4 text-sm leading-6 text-brand-ink"
-                    : "max-w-[95%] rounded-lg border border-border p-4 text-sm leading-6"
+                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-brand p-4 text-sm leading-6 text-white shadow-sm"
+                    : "max-w-[95%] rounded-2xl rounded-bl-md border border-border bg-paper/70 p-4 text-sm leading-6"
                 }
               >
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">
@@ -185,7 +185,7 @@ export function StudentAssistant({
             rows={3}
             required
             disabled={!configured}
-            className="w-full rounded-[var(--radius-sm)] border border-border-strong bg-white p-3 text-sm"
+            className="w-full rounded-xl border border-border-strong bg-white p-4 text-sm shadow-sm"
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-ink-soft">
