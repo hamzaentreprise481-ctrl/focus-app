@@ -58,12 +58,15 @@ export type StudentCompetencyProgress = {
 export type StudentAssessmentDetail = StudentAssessment & {
   /** Levels the teacher entered for this assessment (explicit, never inferred). */
   competencies: Array<{ name: string; level: MasteryLevel }>;
+  /** Only answers the teacher entered or confirmed (see pendingReadings). */
   responses: Array<{
     id: string;
     responseText: string;
     awardedPoints: number | null;
     teacherAnnotation: string | null;
   }>;
+  /** Automatic readings of a scanned copy the teacher has not checked yet. */
+  pendingReadings: number;
 };
 
 export const loadStudentIdentity = cache(async (): Promise<StudentIdentity> => {
@@ -371,11 +374,11 @@ export async function loadStudentAssessmentDetail(
         .eq("assessment_id", assessment.id)
         .eq("student_id", student.id)
         .maybeSingle(),
+      // "*": the provenance columns (source, transcription_verified) exist
+      // only from migration 20261009120000; naming them would fail before.
       supabase
         .from("student_responses")
-        .select(
-          "id,response_text,awarded_points,teacher_annotation,created_at",
-        )
+        .select("*")
         .eq("assessment_id", assessment.id)
         .eq("student_id", student.id)
         .order("created_at", { ascending: true }),
@@ -397,12 +400,20 @@ export async function loadStudentAssessmentDetail(
     teacher_comment: string | null;
     updated_at: string | null;
   } | null;
-  const responses = (responseResponse.data ?? []) as Array<{
+  const allResponses = (responseResponse.data ?? []) as Array<{
     id: string;
     response_text: string;
     awarded_points: number | string | null;
     teacher_annotation: string | null;
+    source?: string | null;
+    transcription_verified?: boolean | null;
   }>;
+  // An automatic reading of a scanned copy stays unvalidated until the
+  // teacher confirms or corrects it: the student never sees it as their
+  // answer, and the assistant never receives it.
+  const unverified = (row: (typeof allResponses)[number]) =>
+    row.source === "scan" && row.transcription_verified !== true;
+  const responses = allResponses.filter((row) => !unverified(row));
   const subject = subjectResponse.data as { name: string } | null;
 
   const score = numberOrNull(result?.score);
@@ -445,6 +456,7 @@ export async function loadStudentAssessmentDetail(
     resultId: result?.id ?? null,
     updatedAt: result?.updated_at ?? null,
     competencies,
+    pendingReadings: allResponses.length - responses.length,
     responses: responses.map((row) => ({
       id: row.id,
       responseText: row.response_text,

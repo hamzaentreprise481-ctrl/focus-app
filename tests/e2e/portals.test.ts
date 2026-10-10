@@ -160,6 +160,9 @@ test("a student sees only their own results, answers and comments — including 
   await page.getByText(PORTAL_MARKERS.answerA).waitFor();
   await page.getByText(PORTAL_MARKERS.annotationA).waitFor();
   await page.getByRole("heading", { name: "Compétences évaluées" }).waitFor();
+  // An unchecked automatic reading of the scanned copy is not shown, only counted.
+  assert.ok(!(await page.content()).includes(PORTAL_MARKERS.unverifiedReadingA), "unverified reading shown to the student");
+  await page.getByText(/Une réponse lue automatiquement sur votre copie attend la vérification du professeur/).waitFor();
   // Another school's assessment and a malformed id answer "not found".
   const otherSchoolAssessment = (
     await stack.db.query<{ id: string }>("select id from public.assessments where title = $1", [PORTAL_MARKERS.assessmentB])
@@ -203,7 +206,7 @@ test("the assistant uses only the student's own data, refuses grade changes and 
   const sent = JSON.stringify(stack.model.calls.at(-1));
   for (const own of [PORTAL_MARKERS.answerA, PORTAL_MARKERS.commentA, PORTAL_MARKERS.annotationA, "Mode demandé : guidé"])
     assert.ok(sent.includes(JSON.stringify(own).slice(1, -1)), `context misses ${own}`);
-  for (const foreign of [PORTAL_MARKERS.answerB, PORTAL_MARKERS.commentB, PORTAL_MARKERS.commentC, PORTAL_MARKERS.schoolB, people().studentB.name, people().studentA.name, "Emma", "correction_text", "x² + 5x + 6"])
+  for (const foreign of [PORTAL_MARKERS.answerB, PORTAL_MARKERS.commentB, PORTAL_MARKERS.commentC, PORTAL_MARKERS.schoolB, PORTAL_MARKERS.unverifiedReadingA, people().studentB.name, people().studentA.name, "Emma", "correction_text", "x² + 5x + 6"])
     assert.ok(!sent.includes(foreign), `context leaks ${foreign}`);
 
   // A grade change is refused without any model call.

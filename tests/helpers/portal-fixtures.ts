@@ -40,6 +40,7 @@ export const PORTAL_MARKERS = {
   schoolB: "Collège Victor Hugo (fictif)",
   assessmentB: "Contrôle confidentiel du collège B",
   commentC: "Commentaire fictif réservé à Inès, collège B",
+  unverifiedReadingA: "Lecture automatique non vérifiée de la copie de Lucas (fictive)",
   pastClass: "2nde 4 (2025-2026, fictive)",
   pastAssessment: "Contrôle de l’an dernier (fictif)",
 };
@@ -88,6 +89,23 @@ export async function seedPortalFixtures(db: PGlite, uuid: Uuid, ids: Ids): Prom
     "insert into public.student_responses(assessment_id, question_id, student_id, response_text, awarded_points, teacher_annotation) values ($1, $2, $3, $4, 2, null)",
     [firstAssessment, question, people.studentB.id, PORTAL_MARKERS.answerB],
   );
+
+  // An automatic reading of student A's scanned copy that the teacher has not
+  // checked yet (provenance columns exist from 20261009120000): never shown
+  // to the student nor sent to the assistant.
+  const provenance = await db.query("select 1 from information_schema.columns where table_schema = 'public' and table_name = 'student_responses' and column_name = 'transcription_verified'");
+  if (provenance.rows.length) {
+    const scanned = (
+      await db.query<{ id: string }>(
+        "insert into public.assessment_questions(assessment_id, position, prompt, correction_text, rubric, max_points) values ($1, 98, 'Résoudre 3x + 5 = 11', 'x = 2', '{}'::jsonb, 2) returning id",
+        [firstAssessment],
+      )
+    ).rows[0].id;
+    await exec(
+      "insert into public.student_responses(assessment_id, question_id, student_id, response_text, source, legibility, transcription_verified) values ($1, $2, $3, $4, 'scan', 'lisible', false)",
+      [firstAssessment, scanned, people.studentA.id, PORTAL_MARKERS.unverifiedReadingA],
+    );
+  }
 
   // Declared lessons for the Direction's "programme enseigné".
   const competencies = [...ids.competencyIds.values()];

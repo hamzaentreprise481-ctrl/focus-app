@@ -97,6 +97,13 @@ export default async function StudentAssessmentPage({
           FOCUS affiche uniquement les éléments auxquels votre compte élève a
           déjà accès. Les contenus réservés au professeur restent masqués.
         </p>
+        {assessment.pendingReadings > 0 && (
+          <p role="note" className="mt-3 rounded-lg bg-paper p-4 text-sm text-ink-soft">
+            {assessment.pendingReadings === 1
+              ? "Une réponse lue automatiquement sur votre copie attend la vérification du professeur : elle s’affichera ici une fois vérifiée."
+              : `${assessment.pendingReadings} réponses lues automatiquement sur votre copie attendent la vérification du professeur : elles s’afficheront ici une fois vérifiées.`}
+          </p>
+        )}
         <div className="mt-5 space-y-4">
           {assessment.responses.length ? (
             assessment.responses.map((response, index) => (
