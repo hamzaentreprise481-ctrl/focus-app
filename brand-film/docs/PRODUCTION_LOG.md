@@ -63,7 +63,19 @@ Fichier : `out/FOCUS_BRAND_FILM_pass2.mp4` (non versionné).
   devient le carré FOCUS, souffle inversé (« inspiration ») dans le son juste avant.
 - **Encodage de livraison** : x264 High, preset slow, AAC 320 kb/s 48 kHz, `faststart`.
 
-## Contrôles techniques du livrable
+## Vérification finale du livrable `FOCUS_BRAND_FILM_2026.mp4`
 
-Voir la section « Vérification finale » ajoutée en fin de production (durée, flux, décodage complet,
-loudness EBU R128, true peak, intelligibilité des phrases).
+Mesures faites **sur le fichier livré** (pas sur les intermédiaires) :
+
+| Contrôle | Résultat |
+|---|---|
+| Conteneur / taille | MP4 (`faststart`), 47,8 Mo, 4,7 Mb/s |
+| Vidéo | H.264 High, 1920 × 1080, **60 i/s**, 4 860 images, `yuv420p`, BT.709 (primaires, transfert, matrice), plage TV |
+| Audio | AAC-LC, 48 kHz, stéréo, 320 kb/s |
+| Durée | 81,000 s (vidéo) / 81,000 s (audio) |
+| Décodage complet (`ffmpeg -f null`) | 0 erreur |
+| Loudness EBU R128 | **−15,0 LUFS** intégrés, LRA 6,3 LU, true peak **−1,4 dBTP** |
+| Synchronisation image/son | décalage **0 échantillon** entre l'audio du MP4 et le mix source à 2,0 / 29,1 / 59,2 / 71,6 s (le mix est placé par `timeline.json`, qui pilote aussi l'image) |
+| Intelligibilité (Whisper, audio extrait du MP4) | 6 phrases sur 6 reconnues ; similarité 1,00 pour 5 d'entre elles, 0,94 pour « … exploitables » (entendu « exploatables ») |
+| Noirs détectés (`blackdetect`) | uniquement ceux voulus : ouverture (0–1,5 s), silence avant le titre (12,7–13,0 s), respirations de l'acte II, fondu final (79,9–81 s) |
+| Revue visuelle | planches contact à 1 image/s du fichier livré, toutes les séquences conformes au storyboard |
