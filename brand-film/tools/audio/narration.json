@@ -1,0 +1,19 @@
+{
+  "_comment": "Narration du film FOCUS. 'tts' = texte envoyé au moteur vocal (orthographe phonétique si besoin) ; 'text' = texte officiel.",
+  "lines": [
+    {"id": "vo1a", "text": "Chaque jour, des millions de réponses sont corrigées.", "tts": "Chaque jour, des millions de réponses sont corrigées."},
+    {"id": "vo1b", "text": "Des notes sont attribuées.", "tts": "Des notes sont attribuées."},
+    {"id": "vo1c", "text": "Mais une note ne raconte jamais toute l'histoire.", "tts": "Mais une note ne raconte jamais toute l'histoire."},
+    {"id": "vo2",  "text": "Et si l'intelligence artificielle aidait les enseignants à comprendre ce qui se cache derrière chaque erreur ?", "tts": "Et si l'intelligence artificielle aidait les enseignants à comprendre ce qui se cache derrière chaque erreur ?"},
+    {"id": "vo3a", "text": "Voici FOCUS.", "tts": "Voici Focus."},
+    {"id": "vo3b", "text": "Une plateforme conçue pour transformer les réponses des élèves en informations pédagogiques exploitables.", "tts": "Une plateforme conçue pour transformer les réponses des élèves en informations pédagogiques explwatables."},
+    {"id": "vo3c", "text": "Identifier les difficultés.", "tts": "Identifier les difficultés."},
+    {"id": "vo3d", "text": "Comprendre les notions qui posent problème.", "tts": "Comprendre les notions qui posent problème."},
+    {"id": "vo3e", "text": "Et aider les enseignants à décider comment accompagner chaque élève.", "tts": "Et aider les enseignants à décider comment accompagner chaque élève."},
+    {"id": "vo4a", "text": "Parce que derrière chaque erreur, il y a quelque chose à comprendre.", "tts": "Parce que derrière chaque erreur, il y a quelque chose à comprendre."},
+    {"id": "vo4b", "text": "Et derrière chaque élève, un potentiel à développer.", "tts": "Et derrière chaque élève, un potentiel à développer."},
+    {"id": "vo5a", "text": "FOCUS.", "tts": "Focus."},
+    {"id": "vo5b", "text": "Comprendre les erreurs.", "tts": "Comprendre les erreurs."},
+    {"id": "vo5c", "text": "Accompagner les progrès.", "tts": "Accompagner les progrès."}
+  ]
+}
