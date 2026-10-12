@@ -1,0 +1,11 @@
+numpy>=2.0
+scipy>=1.13
+soundfile>=0.12
+pyloudnorm>=0.1.1
+mido>=1.3
+pillow>=10.0
+matplotlib>=3.8
+# voice-over generation + speech QA (optional if you keep public/audio/vo/)
+kokoro-onnx>=0.4
+onnxruntime>=1.18
+sherpa-onnx>=1.10

@@ -1,0 +1,100 @@
+{
+  "vo1a": {
+    "text": "Chaque jour, des millions de réponses sont corrigées.",
+    "speed": 0.9,
+    "duration": 2.772,
+    "whisper": "Chaque jour, des millions de réponses sont corrigées.",
+    "similarity": 1.001
+  },
+  "vo1b": {
+    "text": "Des notes sont attribuées.",
+    "speed": 0.9,
+    "duration": 1.453,
+    "whisper": "des notes sont attribuées.",
+    "similarity": 1.001
+  },
+  "vo1c": {
+    "text": "Mais une note ne raconte jamais toute l'histoire.",
+    "speed": 0.9,
+    "duration": 2.695,
+    "whisper": "Mais une note ne raconte jamais toute l'histoire.",
+    "similarity": 1.001
+  },
+  "vo2": {
+    "text": "Et si l'intelligence artificielle aidait les enseignants à comprendre ce qui se cache derrière chaque erreur ?",
+    "speed": 0.92,
+    "duration": 6.554,
+    "whisper": "et si l'intelligence artificielle aidaient les enseignants à comprendre ce qui se cache derrière chaque erreur.",
+    "similarity": 1.001
+  },
+  "vo3a": {
+    "text": "Voici FOCUS.",
+    "speed": 0.86,
+    "duration": 1.232,
+    "whisper": "Voici Focus.",
+    "similarity": 1.001
+  },
+  "vo3b": {
+    "text": "Une plateforme conçue pour transformer les réponses des élèves en informations pédagogiques exploitables.",
+    "speed": 0.86,
+    "duration": 6.735,
+    "whisper": "une plateforme conçue pour transformer les réponses des élèves en informations pédagogiques exploitable.",
+    "similarity": 1.001
+  },
+  "vo3c": {
+    "text": "Identifier les difficultés.",
+    "speed": 0.88,
+    "duration": 1.943,
+    "whisper": "Identifier les difficultés",
+    "similarity": 1.001
+  },
+  "vo3d": {
+    "text": "Comprendre les notions qui posent problème.",
+    "speed": 0.88,
+    "duration": 2.355,
+    "whisper": "comprendre les notions qui posent problème.",
+    "similarity": 1.001
+  },
+  "vo3e": {
+    "text": "Et aider les enseignants à décider comment accompagner chaque élève.",
+    "speed": 0.88,
+    "duration": 3.796,
+    "whisper": "et aider les enseignants à décider comment accompagner chaque élève.",
+    "similarity": 1.001
+  },
+  "vo4a": {
+    "text": "Parce que derrière chaque erreur, il y a quelque chose à comprendre.",
+    "speed": 0.9,
+    "duration": 3.691,
+    "whisper": "Parce que derrière chaque erreur, il y a quelque chose à comprendre.",
+    "similarity": 1.001
+  },
+  "vo4b": {
+    "text": "Et derrière chaque élève, un potentiel à développer.",
+    "speed": 0.9,
+    "duration": 3.03,
+    "whisper": "et derrière chaque élève, un potentiel a développé.",
+    "similarity": 1.001
+  },
+  "vo5a": {
+    "text": "FOCUS.",
+    "speed": 0.88,
+    "duration": 0.594,
+    "whisper": "Focus",
+    "similarity": 1.001
+  },
+  "vo5b": {
+    "text": "Comprendre les erreurs.",
+    "speed": 0.88,
+    "duration": 1.208,
+    "whisper": "comprendre les erreurs.",
+    "similarity": 1.001
+  },
+  "vo5c": {
+    "text": "Accompagner les progrès.",
+    "speed": 0.88,
+    "duration": 1.357,
+    "whisper": "accompagner les progrès.",
+    "similarity": 1.001
+  }
+}

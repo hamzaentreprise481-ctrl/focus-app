@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Independent brand-film project (Remotion), with its own lint/TS config.
+    "brand-film/**",
   ]),
 ]);
 
