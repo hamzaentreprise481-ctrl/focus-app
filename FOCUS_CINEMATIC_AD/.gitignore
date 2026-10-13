@@ -1,0 +1,10 @@
+renders/
+audio/_stems/
+audio/vo_candidates/
+audio/score*.wav
+audio/sfx.wav
+audio/_mix*
+*.blend1
+__pycache__/
+output/*.passlog*
+assets/ui/scroll_student/
