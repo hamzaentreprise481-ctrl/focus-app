@@ -166,7 +166,7 @@ def glyph_cluster(x0, x1, y0, y1, center, n):
 ecx, ecy = layout["error_center_mm"]
 e2x, e2y = layout["error2_center_mm"]
 A_C, B_C = V(-0.075, 0.0, 0.0), V(0.075, 0.03, -0.035)
-posA, redA = glyph_cluster(ecx - 14, ecx + 44, ecy - 5.2, ecy + 5.6, A_C + V(0.035, 0, 0), 26000)
+posA, redA = glyph_cluster(ecx - 14, ecx + 44, ecy - 4.2, ecy + 5.6, A_C + V(0.035, 0, 0), 26000)
 posB, redB = glyph_cluster(47, 86, e2y - 6.0, e2y + 6.5, B_C, 18000)
 for pos, isr in ((posA, redA), (posB, redB)):
     add_static(pos[~isr], 0.00042, INK_BLUE, drift=0.0006)
@@ -204,7 +204,10 @@ for i, nm in enumerate(SKILLS):
     skill_pos.append(p)
     hot = nm == "Expanding"
     node(f"Skill_{i}", p, 0.022 if hot else 0.016, shell=1600 if hot else 900, shell_r=0.10 if hot else 0.075, f0=40 + i * 4)
-    t = fl.text_obj(f"Label_Skill_{i}", nm, FONT_MED, 0.07, label_mat, tuple(p + V(0, -0.02, 0.17 if hot else -0.16)), face_to=tuple(S0 + V(1.5, -2.4, 0.9)))
+    # the highlighted skill's label sits to the left of its node (no overlap with its neighbour's label)
+    t = fl.text_obj(f"Label_Skill_{i}", nm, FONT_MED, 0.07, label_mat,
+                    tuple(p + (V(-0.13, -0.02, -0.02) if hot else V(0, -0.02, -0.16))),
+                    face_to=tuple(S0 + V(1.5, -2.4, 0.9)), align="RIGHT" if hot else "CENTER")
     appear(t, 125 + i * 3, 140 + i * 3, 1.0, 0.85)
 skill_pos = np.array(skill_pos)
 for i in range(len(SKILLS)):
