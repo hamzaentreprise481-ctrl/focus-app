@@ -436,7 +436,7 @@ def build_laptop_and_shot():
     spill = bpy.data.lights.new("Screen_Spill", "AREA")
     spill.shape = "RECTANGLE"
     spill.size, spill.size_y = sw, sh
-    spill.energy = 2.2
+    spill.energy = 0.55    # was 2.2: burnt the palm rest
     spill.color = (0.86, 0.9, 1.0)
     so = bpy.data.objects.new("Screen_Spill", spill)
     scn.collection.objects.link(so)

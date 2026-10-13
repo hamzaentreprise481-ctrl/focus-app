@@ -47,10 +47,11 @@ EDL = [
     (1212, 108, os.path.join(G, "logo"), 1, "f_"),           # 6  reveal
 ]
 DISSOLVES = [  # (film_frame_start, n, outgoing_dir, outgoing_first, incoming_dir, incoming_first)
+    (240, 6, os.path.join(G, "desk_teacher"), 90, os.path.join(G, "pilot"), 1),        # light change on a match cut (outgoing held)
     (772, 8, os.path.join(G, "seq3"), 353, os.path.join(G, "laptop"), 1),
     (1080, 6, os.path.join(R, "ui", "4D"), 78, os.path.join(G, "desk_teacher"), 91),   # outgoing held
 ]
-HOLD_OUT = {1080}
+HOLD_OUT = {240, 1080}
 UI_DIRS = {os.path.join(R, "ui", s) for s in ("4B", "4C", "4D")}
 
 VO = [("01_grade", 1.5), ("02_story", 4.6), ("03_signal", 11.25), ("04_connects", 18.4),
