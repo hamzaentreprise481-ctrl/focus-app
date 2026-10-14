@@ -8,3 +8,5 @@ audio/_mix*
 __pycache__/
 output/*.passlog*
 assets/ui/scroll_student/
+audio/FOCUS_*_mix.wav
+renders/
