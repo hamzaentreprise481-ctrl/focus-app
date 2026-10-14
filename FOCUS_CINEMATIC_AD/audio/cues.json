@@ -1,0 +1,15 @@
+{
+  "seq2": 10.0,
+  "impact1": 13.75,
+  "punch": 15.6,
+  "seq3": 17.5,
+  "w_evidence": 20.0,
+  "w_understanding": 22.5,
+  "w_next": 25.0,
+  "verify": 27.5,
+  "seq4": 32.5,
+  "seq5": 45.0,
+  "cut": 50.0,
+  "reveal": 50.5,
+  "end": 55.0
+}

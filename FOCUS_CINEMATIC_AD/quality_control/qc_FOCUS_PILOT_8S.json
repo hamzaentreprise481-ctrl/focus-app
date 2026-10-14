@@ -1,0 +1,39 @@
+{
+  "file": "output/FOCUS_PILOT_8S.mp4",
+  "size_MB": 16.11,
+  "duration_s": 8.0,
+  "video_codec": "h264",
+  "profile": "High",
+  "resolution": "1920x1080",
+  "fps": "24/1",
+  "frames": 192,
+  "pix_fmt": "yuv420p",
+  "color": [
+    "bt709",
+    "bt709",
+    "bt709"
+  ],
+  "video_kbps": 15790,
+  "audio_codec": "aac",
+  "audio_channels": 2,
+  "audio_rate": 48000,
+  "black_intervals": [],
+  "freeze_starts": [],
+  "loudness_LUFS": -14.1,
+  "LRA_LU": 3.2,
+  "true_peak_dBFS": -1.0,
+  "contact_sheet": "quality_control/contact_FOCUS_PILOT_8S.jpg",
+  "stills": [
+    "quality_control/frames/FOCUS_PILOT_8S_00.20s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_01.50s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_02.60s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_03.40s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_03.90s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_04.60s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_05.20s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_05.60s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_06.20s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_07.00s.jpg",
+    "quality_control/frames/FOCUS_PILOT_8S_07.90s.jpg"
+  ]
+}
