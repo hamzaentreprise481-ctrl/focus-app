@@ -9,7 +9,8 @@ sans tournage, sans service payant. Voir `AUDIT.md` (environnement), `LICENSES.m
 | Fichier | Contenu |
 |---|---|
 | `output/FOCUS_CINEMATIC_FINAL.mp4` | Film final 55 s, 1080p (≈12 Mb/s) |
-| `output/FOCUS_CINEMATIC_FINAL_720p_web.mp4` | Copie légère pour tablette / partage |
+| `output/FOCUS_CINEMATIC_FINAL_1080p_share.mp4` | Copie 1080p de partage (27 Mo, ~3,7 Mb/s) |
+| `output/FOCUS_CINEMATIC_FINAL_720p_web.mp4` | Copie légère 720p pour tablette / partage |
 | `output/FOCUS_PILOT_8S.mp4` | Pilote 8 s : la copie se transforme en univers numérique 3D |
 | `blender/*.blend` | Projets Blender (s'ouvrent dans Blender ≥ 5.2 ; les textures sont dans `assets/`) |
 | `blender/*.py`, `scripts/*` | Tous les scripts source (scènes, musique, voix, étalonnage, montage, QC) |
