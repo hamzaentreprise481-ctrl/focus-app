@@ -54,7 +54,7 @@ DISSOLVES = [  # (film_frame_start, n, outgoing_dir, outgoing_first, incoming_di
 HOLD_OUT = {240, 1080}
 UI_DIRS = {os.path.join(R, "ui", s) for s in ("4B", "4C", "4D")}
 
-VO = [("01_grade", 1.5), ("02_story", 4.6), ("03_signal", 11.25), ("04_connects", 18.4),
+VO = [("01_grade", 3.15), ("02_story", 5.05), ("03_signal", 11.25), ("04_connects", 18.4),
       ("05_teachers", 35.6), ("06_students", 45.45), ("07_focus", 51.0), ("08_tagline", 52.3)]
 
 # ------------------------------------------------------------------ typography
@@ -83,7 +83,7 @@ def ease(u):
     return u * u * u * (u * (6 * u - 15) + 10)
 
 
-def title_layer(text, t, t0, dur, y_frac=0.8, size=78, track0=0.62, track1=0.40, fname="InterDisplay-Light.otf", alpha_max=0.96):
+def title_layer(text, t, t0, dur, y_frac=0.885, size=66, track0=0.62, track1=0.40, fname="InterDisplay-Light.otf", alpha_max=0.96):
     """Cinematic title: blur-to-sharp, tracking tightens, fades out."""
     if t < t0 or t > t0 + dur:
         return None
@@ -124,11 +124,37 @@ def tag_layer(text, t, t0, dur, size=21):
     tile = tracked_text(text, font("Inter-Medium.otf", size), 1.6)
     al = tile.getchannel("A").point(lambda v: int(v * a))
     tile.putalpha(al)
-    return tile, (W - tile.width - 70, 56)
+    pill = Image.new("RGBA", (tile.width + 28, tile.height + 18), (8, 12, 22, int(150 * a / 0.75)))
+    pill.alpha_composite(tile, (14, 8))
+    return pill, (W - pill.width - 60, 48)
+
+
+_GRAD = None
+
+
+def bottom_gradient(t):
+    """Soft dark band under the sequence-3 titles (keeps them clear of 3D labels)."""
+    global _GRAD
+    a = 0.0
+    for t0, dur in ((20.0, 2.3), (22.5, 2.3), (25.0, 2.3)):
+        if t0 - 0.3 <= t <= t0 + dur + 0.2:
+            a = max(a, min(ease((t - t0 + 0.3) / 0.5), ease((t0 + dur + 0.2 - t) / 0.4)))
+    if a <= 0:
+        return None
+    if _GRAD is None:
+        g = np.zeros((H, W, 4), np.uint8)
+        y = np.arange(H, dtype=np.float32)
+        al = np.clip((y - H * 0.70) / (H * 0.30), 0, 1) ** 1.4 * 200
+        g[..., 3] = al[:, None].astype(np.uint8)
+        g[..., :3] = (2, 4, 10)
+        _GRAD = Image.fromarray(g, "RGBA")
+    gr = _GRAD.copy()
+    gr.putalpha(gr.getchannel("A").point(lambda v: int(v * a)))
+    return gr, (0, 0)
 
 
 def overlays_film(t):
-    L = []
+    L = [bottom_gradient(t)]
     for spec in (("EVIDENCE", 20.0, 2.3), ("UNDERSTANDING", 22.5, 2.3), ("NEXT STEP", 25.0, 2.3)):
         L.append(title_layer(spec[0], t, spec[1], spec[2]))
     L.append(tag_layer("CONCEPTUAL VISUALIZATION", t, 17.7, 14.6))
@@ -176,6 +202,26 @@ def src_frame(d, n, prefix, seed):
     return x
 
 
+SEQ3 = os.path.join(G, "seq3")
+ZOOM_SPAN = (740, 771)    # ease to the laptop screen framing (x 1/0.9) before the 772-779 dissolve
+
+
+def zoom(x, z):
+    if abs(z - 1) < 1e-4:
+        return x
+    im = Image.fromarray((np.clip(x, 0, 1) * 255 + 0.5).astype(np.uint8))
+    w2, h2 = int(round(W / z)), int(round(H / z))
+    box = ((W - w2) // 2, (H - h2) // 2, (W - w2) // 2 + w2, (H - h2) // 2 + h2)
+    return np.asarray(im.crop(box).resize((W, H), Image.LANCZOS), np.float32) / 255
+
+
+def seq3_zoom(i):
+    a, b = ZOOM_SPAN
+    if i < a:
+        return 1.0
+    return 1 + (1 / 0.9 - 1) * ease((i - a) / (b - a))
+
+
 def film_frame(i):
     for start, n, d, first, prefix in EDL:
         if start <= i < start + n:
@@ -183,6 +229,8 @@ def film_frame(i):
                 base = np.zeros((H, W, 3), np.float32)
             else:
                 base = src_frame(d, first + (i - start), prefix, i)
+                if d == SEQ3:
+                    base = zoom(base, seq3_zoom(i))
             break
     for start, n, d_out, f_out, d_in, f_in in DISSOLVES:
         if start <= i < start + n:
@@ -191,7 +239,10 @@ def film_frame(i):
             pa = "u_" if d_out in UI_DIRS else "f_"
             pb = "u_" if d_in in UI_DIRS else "f_"
             fo = f_out if start in HOLD_OUT else f_out + k
-            base = src_frame(d_out, fo, pa, i) * (1 - a) + src_frame(d_in, f_in + k, pb, i) * a
+            out_img = src_frame(d_out, fo, pa, i)
+            if d_out == SEQ3:
+                out_img = zoom(out_img, seq3_zoom(i))
+            base = out_img * (1 - a) + src_frame(d_in, f_in + k, pb, i) * a
     return base
 
 
