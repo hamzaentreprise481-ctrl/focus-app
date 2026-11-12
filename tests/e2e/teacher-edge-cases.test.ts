@@ -11,6 +11,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, type Browser, type Page } from "playwright-core";
 import {
+  fixtureUuid,
   ILLEGIBLE_MARKER,
   LOCAL_TEACHER,
   MODEL_FAILURE_MARKER,
@@ -198,8 +199,10 @@ test("a refresh during the class analysis keeps what is done and offers the rest
   await page.getByText(/^Analyse 2 \/ 3 : /).waitFor({ timeout: 30_000 });
   await page.reload();
   await page.getByRole("list", { name: "Élèves de la classe" }).waitFor();
-  // The first copy is analysed; whatever is left is offered again, nothing is lost.
-  const remaining = page.getByRole("button", { name: /^Analyser les [12] copies? non analysées?$/ });
+  // The first copy is analysed; whatever is left is offered again, nothing is
+  // lost. The copy in flight at the reload may already be recorded when the
+  // page renders (one copy left, singular label) or not (two copies left).
+  const remaining = page.getByRole("button", { name: /^Analyser (les 2 copies non analysées|la copie non analysée)$/ });
   await remaining.waitFor();
   await remaining.click();
   await page.getByText("Toutes les copies enregistrées ont une analyse à jour.").waitFor({ timeout: 30_000 });
@@ -234,6 +237,39 @@ test("a copy edited while the model reads it is not recorded with the old text",
   await page.getByText("1 copie analysée : 1 copie sans erreur observée — ce n’est pas une preuve de maîtrise.").waitFor({ timeout: 30_000 });
   assert.deepEqual(errors, []);
   await page.context().close();
+});
+
+test("a teacher of two subjects in the class chooses the subject of a grade-free assessment", async () => {
+  // Codex review on #8: without competencies the server could not tell which
+  // of the teacher's subjects the new assessment belongs to.
+  const physics = fixtureUuid("subject:physics-two-subjects");
+  const title = "Cas limites — deux matières";
+  await stack.db.query("insert into public.subjects(id, school_id, name, code) values ($1, $2, 'Physique-chimie', 'PC')", [physics, stack.ids.school]);
+  await stack.db.query("insert into public.teacher_assignments(school_id, teacher_id, class_id, subject_id) values ($1, $2, $3, $4)", [
+    stack.ids.school, LOCAL_TEACHER.id, stack.ids.classId, physics,
+  ]);
+  try {
+    const { page, errors } = await teacherPage();
+    await page.goto(`${origin}/app/evaluations/nouvelle`);
+    await page.getByLabel("Nom de l’évaluation").fill(title);
+    await page.getByLabel("Date").fill("2026-10-07");
+    const save = page.getByRole("button", { name: "Enregistrer l’évaluation" });
+    assert.equal(await save.isDisabled(), true, "nothing is saved before the subject is chosen");
+    await page.getByLabel("Matière", { exact: true }).selectOption({ label: "Physique-chimie" });
+    await save.click();
+    await page.getByRole("heading", { name: "Évaluation enregistrée" }).waitFor();
+    const { rows } = await stack.db.query<{ code: string }>(
+      "select s.code from public.assessments a join public.subjects s on s.id = a.subject_id where a.title = $1",
+      [title],
+    );
+    assert.deepEqual(rows, [{ code: "PC" }]);
+    assert.deepEqual(errors, []);
+    await page.context().close();
+  } finally {
+    await stack.db.query("delete from public.assessments where title = $1", [title]);
+    await stack.db.query("delete from public.teacher_assignments where teacher_id = $1 and subject_id = $2", [LOCAL_TEACHER.id, physics]);
+    await stack.db.query("delete from public.subjects where id = $1", [physics]);
+  }
 });
 
 test("direct URLs to missing or foreign records answer plainly", async () => {

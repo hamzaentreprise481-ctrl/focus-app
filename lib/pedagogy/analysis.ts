@@ -307,7 +307,10 @@ export function validateModelAnalysis(
     return insufficient("Le moteur n’a pas fourni une sortie d’analyse valide.");
 
   const status = rawStatus as ModelAnalysisStatus;
-  const reason = clean(value.insufficientReason, 500);
+  // The reason is model text shown to the teacher: same wording rules as a
+  // finding (an answer may try to make the model judge the student here).
+  const rawReason = clean(value.insufficientReason, 500);
+  const reason = OVERSTATED.test(rawReason) || NON_PEDAGOGICAL.test(rawReason) ? "" : rawReason;
   const { validated, rejected } = reviewModelErrors(raw, questions, nodesByCode, options);
 
   if (status === "insufficient_evidence")

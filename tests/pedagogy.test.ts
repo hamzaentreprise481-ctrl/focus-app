@@ -254,3 +254,24 @@ test("prompt injection inside the answer cannot change the verdict rules", () =>
   assert.equal(result.status, "insufficient_evidence");
   assert.deepEqual(result.rejected.map((item) => item.reason), ["excerpt_not_in_answer"]);
 });
+
+test("the model's own wording for insufficient evidence is filtered like a finding", () => {
+  // An answer can try to steer the model into writing a judgement about the
+  // student as its "reason"; that text would reach the teacher's screen.
+  for (const reason of [
+    "L’élève est dyslexique, il faut le signaler.",
+    "Cet élève ne comprend rien aux développements.",
+    "Manque de travail évident.",
+  ]) {
+    const result = validateModelAnalysis({ status: "insufficient_evidence", insufficientReason: reason, errors: [] }, questions, nodes);
+    assert.equal(result.status, "insufficient_evidence");
+    assert.equal(result.insufficientReason, "Les éléments fournis ne permettent pas d’établir une erreur précise.", reason);
+  }
+  // A factual reason stays as written.
+  const factual = validateModelAnalysis(
+    { status: "insufficient_evidence", insufficientReason: "La réponse ne montre que le résultat final, sans étape.", errors: [] },
+    questions,
+    nodes,
+  );
+  assert.equal(factual.insufficientReason, "La réponse ne montre que le résultat final, sans étape.");
+});

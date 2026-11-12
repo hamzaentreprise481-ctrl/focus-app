@@ -202,7 +202,7 @@ async function runAnalysis(
   );
   const responseByQuestion = new Map(responses.map((row) => [row.question_id, row]));
   const aiInput = {
-    assessment: { id: assessmentId, title, contextText: "Évaluation de seconde.", instructionsText: "Justifier les étapes." },
+    assessment: { id: assessmentId, contextText: "Évaluation de seconde.", instructionsText: "Justifier les étapes." },
     questions: questions.map((question, position) => ({
       assessmentId,
       questionId: questionIds[position],

@@ -72,13 +72,19 @@ export async function saveEvaluationAction(
       error: "Cette classe n’est pas affectée à votre compte professeur.",
     };
 
-  let subjectId = subjectIds[0];
-  if (subjectIds.length > 1) {
+  // A subject chosen explicitly (the class has several of the teacher's
+  // subjects, or the assessment already has one); otherwise the only one, or
+  // the competencies' subject. The database still checks the competencies.
+  const requested = typeof evaluation.subjectId === "string" && evaluation.subjectId ? evaluation.subjectId : null;
+  if (requested && !subjectIds.includes(requested))
+    return { ok: false, error: "Cette matière ne vous est pas affectée dans cette classe." };
+  let subjectId = requested ?? subjectIds[0];
+  if (!requested && subjectIds.length > 1) {
     if (!evaluation.skillIds.length)
       return {
         ok: false,
         error:
-          "Plusieurs matières sont affectées à cette classe. Ajoutez au moins une compétence pour identifier la matière.",
+          "Plusieurs matières vous sont affectées dans cette classe : choisissez la matière de l’évaluation.",
       };
     const competencyResponse = await supabase
       .from("competencies")

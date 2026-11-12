@@ -87,7 +87,6 @@ export interface PedagogyCampaignCase {
   input: {
     assessment: {
       id: string;
-      title: string;
       contextText: string;
       instructionsText: string;
     };
@@ -133,7 +132,6 @@ function baseCase(params: {
     input: {
       assessment: {
         id: assessmentId,
-        title: params.label,
         contextText: "Campagne de validation FOCUS — mathématiques seconde.",
         instructionsText: "Répondre et justifier lorsque la question le demande.",
       },
@@ -318,7 +316,6 @@ export const PEDAGOGY_CAMPAIGN_CASES: PedagogyCampaignCase[] = [
     input: {
       assessment: {
         id: "assessment-repeated-distributivity",
-        title: "Erreur répétée — distributivité",
         contextText: "Campagne de validation FOCUS — calcul littéral.",
         instructionsText: "Développer puis réduire.",
       },

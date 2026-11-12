@@ -130,6 +130,10 @@ test("a teacher creates an assessment, enters the subject and copies, analyses t
     "2 copies analysées : 1 copie avec erreur(s) observée(s) (1 hypothèse à examiner) ; 1 copie sans erreur observée — ce n’est pas une preuve de maîtrise.",
   );
   assert.equal(stack.model.calls.length, 2, "one model call per copy");
+  // The model sees only what the evidence version covers (Codex review on
+  // #8): the assessment's title is not sent.
+  for (const call of stack.model.calls as Array<{ input: Array<{ content: Array<{ text: string }> }> }>)
+    assert.deepEqual(Object.keys(JSON.parse(call.input[1].content[0].text).assessment).sort(), ["contextText", "id", "instructionsText"]);
   await page.getByText("Toutes les copies enregistrées ont une analyse à jour.").waitFor();
   await shot(page, "1-class-analysed");
 

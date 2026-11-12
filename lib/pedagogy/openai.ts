@@ -22,9 +22,12 @@ interface AnalyzeQuestionInput {
 }
 
 export interface PedagogicalAiInput {
+  /**
+   * Everything here is covered by the evidence version the database checks
+   * when it records the analysis (focus_private.evidence_version).
+   */
   assessment: {
     id: string;
-    title: string;
     contextText: string | null;
     instructionsText: string | null;
   };
