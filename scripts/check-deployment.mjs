@@ -32,11 +32,17 @@ async function check(label, route, verify) {
     failures++;
   }
 }
+// The portal's invariants, not its wording: each space is named and has its
+// own login link, labelled with that space, and nothing private is rendered.
 await check("public homepage with the three spaces", "/", async response => {
   if (response.status !== 200) return false;
   const html = await response.text();
-  return /href="\/connexion"/.test(html) && /href="\/connexion-eleve"/.test(html) &&
-    /href="\/connexion-direction"/.test(html) && /PRONOTE/.test(html) &&
+  const links = [...html.matchAll(/<a\b[^>]*\bhref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)]
+    .map(([, href, inner]) => ({ href, text: inner.replace(/<[^>]*>/g, " ") }));
+  const leadsTo = (href, space) => links.some(link => link.href === href && space.test(link.text));
+  return leadsTo("/connexion", /Teacher/) && leadsTo("/connexion-eleve", /Student/) &&
+    leadsTo("/connexion-direction", /Direct(?:ion|or)/) &&
+    /Teacher/.test(html) && /Student/.test(html) && /Direction/.test(html) &&
     !/Bonjour Mme Martin|Se déconnecter/.test(html);
 });
 await check("FOCUS login page", "/connexion", async response => {

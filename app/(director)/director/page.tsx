@@ -23,7 +23,7 @@ export default async function DirectorHomePage() {
   const dataAlerts = alerts.filter((alert) => alert.family === "data").length;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-9">
       <PageIntro title={workspace.school.name}>
         Vue d’ensemble de l’établissement à partir des données saisies dans
         FOCUS. Le programme déclaré traité, le programme évalué et les
@@ -62,7 +62,7 @@ export default async function DirectorHomePage() {
             <LessonsUnavailableNote />
           </div>
         )}
-        <div className="grid gap-5 rounded-xl border border-border bg-white p-5 sm:p-6 lg:grid-cols-3">
+        <div className="grid gap-5 rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6 lg:grid-cols-3">
           <h3 id="programme-global" className="sr-only">
             Avancement global
           </h3>
@@ -119,7 +119,7 @@ export default async function DirectorHomePage() {
       <section aria-labelledby="vigilance">
         <SectionTitle title="Points de vigilance" href="/director/alertes" linkLabel="Toutes les alertes" />
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-border bg-white p-5">
+          <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <p className="text-sm text-ink-soft">Risque de retard</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums">{risky.length}</p>
             <p className="mt-1 text-xs text-muted">
@@ -128,14 +128,14 @@ export default async function DirectorHomePage() {
                 : "Aucune classe × matière en risque de retard selon les séances déclarées."}
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-white p-5">
+          <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <p className="text-sm text-ink-soft">Vigilance</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums">{watch.length}</p>
             <p className="mt-1 text-xs text-muted">
               Rythme observé entre 80 % et 100 % du rythme nécessaire.
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-white p-5">
+          <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <p className="text-sm text-ink-soft">Données manquantes</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums">{dataAlerts}</p>
             <p className="mt-1 text-xs text-muted">
@@ -145,7 +145,7 @@ export default async function DirectorHomePage() {
           </div>
         </div>
         {alerts.length > 0 && (
-          <ul className="mt-4 divide-y divide-border rounded-xl border border-border bg-white">
+          <ul className="mt-4 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
             {alerts.slice(0, 4).map((alert, index) => (
               <li key={index}>
                 <Link href={alert.href} className="flex items-start gap-3 p-4 hover:bg-paper">
@@ -171,7 +171,7 @@ export default async function DirectorHomePage() {
           Évaluations récentes
         </h3>
         {workspace.recentAssessments.length ? (
-          <ul className="divide-y divide-border rounded-xl border border-border bg-white">
+          <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
             {workspace.recentAssessments.map((assessment) => (
               <li key={assessment.id}>
                 <Link

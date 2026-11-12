@@ -89,13 +89,17 @@ test("the public home presents FOCUS and offers three distinct spaces", async ()
   for (const width of [1366, 820, 390]) {
     const { page, errors } = await newPage(width);
     await page.goto(origin);
-    await page.getByRole("heading", { level: 1, name: "Transformer les données de classe en accompagnement personnalisé." }).waitFor();
-    for (const [name, href] of [
-      ["Accéder à Teacher", "/connexion"],
-      ["Accéder à Student", "/connexion-eleve"],
-      ["Accéder à Director", "/connexion-direction"],
-    ])
+    // Invariants, not wording: a presentation, then one card per space with
+    // its own login link.
+    await page.getByRole("heading", { level: 1 }).waitFor();
+    for (const [space, name, href] of [
+      ["Professeur", "Accéder à Teacher", "/connexion"],
+      ["Élève", "Accéder à Student", "/connexion-eleve"],
+      ["Direction", "Accéder à Director", "/connexion-direction"],
+    ]) {
+      await page.getByRole("heading", { name: space, exact: true }).waitFor();
       assert.equal(await page.getByRole("link", { name }).getAttribute("href"), href, name);
+    }
     await noPageOverflow(page);
     await shot(page, `home-${width}`);
     assert.deepEqual(errors, []);

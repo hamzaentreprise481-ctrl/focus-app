@@ -23,11 +23,11 @@ export default async function StudentAssistantPage({
 
   return (
     <div className="space-y-7">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-widest text-brand">
+      <header className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-7">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">
           Aide pédagogique
         </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Assistant FOCUS</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Assistant FOCUS</h1>
         <p className="mt-3 max-w-3xl text-ink-soft">
           Pour comprendre une notion, une erreur ou t’entraîner. L’assistant
           utilise uniquement tes propres résultats, tes réponses enregistrées,

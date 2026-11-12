@@ -864,3 +864,152 @@
     padding-block: 32px 48px;
   }
 }
+
+
+/* Visual polish v1 — richer hierarchy without turning FOCUS into a flashy SaaS. */
+.portalHero {
+  padding-block: 88px 74px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f9fd 100%);
+}
+.portalHeroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  align-items: center;
+  gap: clamp(44px, 7vw, 88px);
+}
+.portalHeroCopy { min-width: 0; }
+.portalEyebrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: var(--color-ink-soft); font-size: 12px; font-weight: 600;
+}
+.portalEyebrow span {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px;
+  border-radius: 999px; background: var(--color-brand); color: #fff;
+  font-size: 11px; letter-spacing: 0.12em;
+}
+.portalHero h1 {
+  margin-top: 24px; max-width: 760px; font-size: clamp(42px, 5.2vw, 68px);
+  line-height: 0.99; font-weight: 650; letter-spacing: -0.055em;
+}
+.portalHero h1 span { color: var(--color-brand); }
+.portalLead {
+  margin-top: 26px; max-width: 680px; color: var(--color-ink-soft);
+  font-size: clamp(16px, 1.5vw, 19px); line-height: 1.7;
+}
+.portalHeroActions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.portalTrustRow {
+  display: flex; flex-wrap: wrap; gap: 14px 24px; margin-top: 26px;
+  color: var(--color-muted); font-size: 12px;
+}
+.portalTrustRow span { display: inline-flex; align-items: center; gap: 7px; }
+.portalTrustRow svg { color: var(--color-brand); }
+.portalSignalPanel {
+  overflow: hidden; border: 1px solid #dce3ee; border-radius: 20px; background: #fff;
+  box-shadow: 0 28px 70px rgba(24,45,100,.12), 0 2px 8px rgba(18,23,34,.04);
+}
+.portalSignalTop {
+  display: flex; align-items: center; gap: 11px; padding: 18px 20px;
+  border-bottom: 1px solid var(--color-border); background: #fbfcff;
+}
+.portalSignalMark {
+  display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center;
+  border-radius: 10px; background: var(--color-brand-ink); color: #fff; font-weight: 700;
+}
+.portalSignalTop strong { display: block; font-size: 13px; }
+.portalSignalTop small { display: block; margin-top: 1px; color: var(--color-muted); font-size: 11px; }
+.portalLive {
+  margin-left: auto; border: 1px solid #cfd9ed; border-radius: 999px; padding: 4px 8px;
+  color: var(--color-brand); font-size: 10px; font-weight: 700; letter-spacing: .08em;
+}
+.portalSignalBody { padding: 22px; }
+.portalSignalLabel {
+  color: var(--color-muted); font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.portalSignalList { display: grid; gap: 10px; margin-top: 14px; }
+.portalSignalList > div {
+  display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center;
+  gap: 12px; padding: 14px; border: 1px solid var(--color-border);
+  border-radius: 12px; background: #fff;
+}
+.signalIcon {
+  display: grid; width: 36px; height: 36px; place-items: center;
+  border-radius: 10px; background: var(--color-brand-soft); color: var(--color-brand);
+}
+.portalSignalList strong, .portalSignalList small { display: block; }
+.portalSignalList strong { font-size: 13px; }
+.portalSignalList small { margin-top: 2px; color: var(--color-muted); font-size: 11px; }
+.signalStatus {
+  border-radius: 999px; background: var(--color-paper); padding: 5px 8px;
+  color: var(--color-ink-soft); font-size: 10px; font-weight: 600;
+}
+.portalSignalFooter {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 16px;
+  border-radius: 12px; background: var(--color-brand-soft); padding: 14px;
+  color: var(--color-brand-ink); font-size: 12px; line-height: 1.55;
+}
+.portalSignalFooter svg { flex: 0 0 auto; margin-top: 2px; }
+.portalSection { padding-block: 72px 88px; background: #f3f6fb; }
+.portalSectionHead {
+  display: flex; align-items: end; justify-content: space-between; gap: 32px;
+}
+.portalSectionHead > p {
+  max-width: 470px; color: var(--color-ink-soft); font-size: 14px; line-height: 1.65;
+}
+.portalTitle { margin-top: 8px; font-size: clamp(28px, 3vw, 38px); letter-spacing: -.035em; }
+.portalGrid { margin-top: 34px; gap: 18px; }
+.portalCard {
+  position: relative; overflow: hidden; min-height: 330px; padding: 26px;
+  border-color: #dce2eb; border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(18,23,34,.04);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.portalCard::before {
+  position: absolute; inset: 0 0 auto; height: 3px; background: var(--color-brand); content: "";
+}
+.portalCard:hover {
+  transform: translateY(-3px); border-color: #bdc9db;
+  box-shadow: 0 18px 42px rgba(18,23,34,.08);
+}
+.portalCard[data-space="student"]::before { background: #3c6fd1; }
+.portalCard[data-space="director"]::before { background: #183269; }
+.portalCardHead { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.portalIconWrap {
+  display: grid; width: 44px; height: 44px; place-items: center;
+  border-radius: 12px; background: var(--color-brand-soft);
+}
+.portalCardEyebrow {
+  color: var(--color-muted); font-size: 10px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+}
+.portalCard h3 { margin-top: 28px; font-size: 25px; letter-spacing: -.025em; }
+.portalProduct { margin-top: 5px; }
+.portalText { margin-top: 18px; font-size: 14px; line-height: 1.7; }
+.portalCardAction {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: auto;
+  border-top: 1px solid var(--color-border); padding-top: 18px;
+  color: var(--color-brand); font-size: 14px; font-weight: 600;
+}
+.portalCardAction svg { transition: transform 160ms ease; }
+.portalCard:hover .portalCardAction svg { transform: translateX(3px); }
+.portalBottomNote {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 28px;
+  color: var(--color-muted); font-size: 13px; line-height: 1.6;
+}
+.portalBottomNote svg { flex: 0 0 auto; margin-top: 2px; color: var(--color-brand); }
+@media (max-width: 980px) {
+  .portalHero { padding-block: 64px 54px; }
+  .portalHeroGrid { grid-template-columns: 1fr; gap: 42px; }
+  .portalSignalPanel { max-width: 680px; }
+  .portalSectionHead { align-items: flex-start; flex-direction: column; gap: 12px; }
+}
+@media (max-width: 640px) {
+  .portalHero { padding-block: 44px 38px; }
+  .portalHero h1 { font-size: clamp(38px, 12vw, 52px); }
+  .portalHeroActions { align-items: stretch; flex-direction: column; }
+  .portalSignalBody { padding: 16px; }
+  .portalSignalList > div { grid-template-columns: 34px 1fr; }
+  .signalStatus { grid-column: 2; justify-self: start; }
+  .portalSection { padding-block: 46px 62px; }
+  .portalCard { min-height: 0; }
+}

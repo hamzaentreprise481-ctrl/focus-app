@@ -61,7 +61,7 @@ export default function DashboardPage({
     .slice(0, 3);
   return (
     <div className="space-y-8">
-      <section>
+      <section className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-7">
         <PageHeader
           title={`Bonjour${name === "Professeur" ? "" : ` ${name}`}.`}
           eyebrow="Votre suivi pédagogique"
@@ -93,7 +93,7 @@ export default function DashboardPage({
               id="dashboard-class"
               value={activeClass.id}
               onChange={(event) => setSelectedClass(event.target.value)}
-              className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm"
+              className="rounded-xl border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm"
             >
               {dataset.classes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -129,7 +129,7 @@ export default function DashboardPage({
             Toutes les évaluations →
           </Link>
         </div>
-        <div className="mt-5 divide-y divide-border rounded-xl border border-border bg-white">
+        <div className="mt-5 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
           {recent.length ? (
             recent.map((e) => (
               <Link
@@ -162,7 +162,7 @@ export default function DashboardPage({
           )}
         </div>
       </section>
-      <section id="suivis" className="border-t border-border pt-8">
+      <section id="suivis" className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
         <details className="insights-disclosure">
           <summary className="flex cursor-pointer items-center justify-between gap-4 rounded-lg py-3">
             <div>
@@ -197,7 +197,7 @@ export default function DashboardPage({
               <h3 className="mb-3 text-sm font-semibold">
                 Compétences à explorer ensemble
               </h3>
-              <div className="space-y-5 rounded-xl border border-border bg-white p-5">
+              <div className="space-y-5 rounded-xl border border-border bg-paper/60 p-5">
                 {signals.map((signal) => (
                   <div key={signal.skillId} className="text-sm">
                     <div className="flex flex-wrap justify-between gap-2">
