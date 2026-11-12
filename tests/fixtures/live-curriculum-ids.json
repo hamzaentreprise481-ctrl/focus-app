@@ -1,0 +1,188 @@
+{
+  "_comment": "Read-only snapshot of the live Supabase curriculum identifiers (project wznqeofsvbutbvbyxfab, 2026-09-26). Used to rebuild an exact local replica for import dry runs. No student data.",
+  "capturedOn": "2026-09-26",
+  "fingerprint": "ce217d6976dbfcbf2f714e3143cea930",
+  "edgesFingerprint": "90a96047d50c77ce6cfe9801baa03fed",
+  "source": {
+    "id": "b2e511d3-6ebb-4b65-8a6b-531e3a3f763d",
+    "sourceUrl": "https://www.education.gouv.fr/bo/2026/Hebdo14/MENE2602914A"
+  },
+  "nodes": [
+    {
+      "id": "09ced102-5a95-43d6-863d-a261e4df64f5",
+      "code": "MATH.ALG.CALCUL_LITTERAL_ELEMENTAIRE"
+    },
+    {
+      "id": "d2f77844-1249-495a-bc0f-727aa86be55a",
+      "code": "MATH.ALG.DISTRIBUTIVITE"
+    },
+    {
+      "id": "0266fe2c-c40f-40bc-8e23-47ef6fb483e1",
+      "code": "MATH.ALG.EQUATIONS"
+    },
+    {
+      "id": "c3c8b3b7-b085-4791-933d-7aa931f1ab7b",
+      "code": "MATH.ALG.EQUATION_PREMIER_DEGRE"
+    },
+    {
+      "id": "c55b9818-1129-4e3a-b345-3128f89c6c86",
+      "code": "MATH.ALG.EXPRESSIONS"
+    },
+    {
+      "id": "faa8bf12-0eb5-4284-bcd1-9e92eec8d067",
+      "code": "MATH.ALG.EXPRESSIONS_FRACTIONNAIRES"
+    },
+    {
+      "id": "1a400fa6-8187-4a3c-9c76-cbd4c337b524",
+      "code": "MATH.ALG.FACTORISATION_SIMPLE"
+    },
+    {
+      "id": "458df1b6-427a-4ff0-bc15-2d13e5f1d143",
+      "code": "MATH.ALG.FORME_ADAPTEE"
+    },
+    {
+      "id": "2dfc6464-b001-4c24-af2b-b23e7d1a5248",
+      "code": "MATH.ALG.IDENTITES"
+    },
+    {
+      "id": "edc4a08e-b9d8-426c-8a08-9f63296b3f8a",
+      "code": "MATH.ALG.INEQUATION_PREMIER_DEGRE"
+    },
+    {
+      "id": "74e2c3d7-85b4-469b-b190-f48c4c5e0107",
+      "code": "MATH.ALG.ISOLER_VARIABLE"
+    },
+    {
+      "id": "a3ebde33-6f65-48ef-8493-7f03ea1d78cf",
+      "code": "MATH.ALG.MODELISER_EQUATION"
+    },
+    {
+      "id": "3525caaa-ae90-459c-932e-7a683db41200",
+      "code": "MATH.COMP.CALCULER"
+    },
+    {
+      "id": "d1e255ae-5483-4d2f-be66-e7382baf20cc",
+      "code": "MATH.COMP.CHERCHER"
+    },
+    {
+      "id": "e06d565b-e0cc-40b7-bf72-dce736483051",
+      "code": "MATH.COMP.COMMUNIQUER"
+    },
+    {
+      "id": "9bc9a417-7c1a-4391-95dd-3a62a2d2f6b5",
+      "code": "MATH.COMP.MODELISER"
+    },
+    {
+      "id": "37f209e8-c887-4f3a-848d-09cc4a4a4572",
+      "code": "MATH.COMP.RAISONNER"
+    },
+    {
+      "id": "f7e4fb9a-ffd9-4b18-b43b-9fa4f72e19b6",
+      "code": "MATH.COMP.REPRESENTER"
+    },
+    {
+      "id": "96a77618-3c94-4904-b119-ac3ae6064ba6",
+      "code": "MATH.FONC.AFFINE"
+    },
+    {
+      "id": "0f2ee854-8680-4d13-b22c-064b8010bc57",
+      "code": "MATH.FONC.DOMAINE"
+    },
+    {
+      "id": "49fb9a2f-2df2-43f4-b8ab-95096e6b4044",
+      "code": "MATH.FONC.EQUATIONS_GRAPHIQUES"
+    },
+    {
+      "id": "d8711fd6-4b28-4304-8003-a7dff544f072",
+      "code": "MATH.FONC.IMAGE_ANTECEDENT"
+    },
+    {
+      "id": "9cbd5885-7a1e-44ca-9468-1532f2f4d79e",
+      "code": "MATH.FONC.NOTION"
+    },
+    {
+      "id": "c053fd32-377e-4e43-aa08-e08db5efc606",
+      "code": "MATH.FONC.REPRESENTATIONS"
+    },
+    {
+      "id": "dda9b677-6c1e-4ca6-8795-c2f59c41161d",
+      "code": "MATH.FONC.SIGNES"
+    },
+    {
+      "id": "33ef2220-7e22-49c1-a2e3-56b1a1d0a82f",
+      "code": "MATH.FONC.TABLEAU_SIGNES"
+    },
+    {
+      "id": "8d319a1e-5663-4ba9-b2d2-f17bc4e0ceb5",
+      "code": "MATH.FONC.VARIATIONS"
+    },
+    {
+      "id": "75ef973d-c1ba-4a65-8aff-fa5748d602d0",
+      "code": "MATH.FONC.VARIATIONS_AFFINE"
+    },
+    {
+      "id": "146fe6b1-e51d-4116-82e3-e84d326ac8ac",
+      "code": "MATH.GEO.DROITES"
+    },
+    {
+      "id": "523a8a21-f88c-4536-a04b-049a2e25fef0",
+      "code": "MATH.GEO.VECTEURS"
+    },
+    {
+      "id": "a86155a0-32fa-4b57-990c-4a1727a49030",
+      "code": "MATH.NUM.ARITHMETIQUE"
+    },
+    {
+      "id": "67f75118-74af-44ce-b1e1-9cc1c7df7c1e",
+      "code": "MATH.NUM.FRACTIONS.IRREDUCTIBLE"
+    },
+    {
+      "id": "59671f6c-4d13-4fad-b1a0-97ac6a28ec08",
+      "code": "MATH.NUM.FRACTIONS.OPERATIONS"
+    },
+    {
+      "id": "9990b242-87d9-4f8c-9ccc-db5b6785e5f6",
+      "code": "MATH.NUM.INTERVALLES"
+    },
+    {
+      "id": "5a9181ba-1283-4ce8-9470-09319ffb8fc3",
+      "code": "MATH.NUM.VALEUR_ABSOLUE"
+    },
+    {
+      "id": "3a8ad841-f22f-4a99-a1a8-38232be7101b",
+      "code": "MATH.PREREQ.CYCLE4.DISTRIBUTIVITE"
+    },
+    {
+      "id": "be8add9f-fbf8-44db-9e5b-350e30c67dc5",
+      "code": "MATH.PREREQ.CYCLE4.EQUATIONS"
+    },
+    {
+      "id": "b4125a6e-09ea-4ac5-bd82-b7af872815ac",
+      "code": "MATH.PREREQ.CYCLE4.FONCTIONS"
+    },
+    {
+      "id": "bf5b676f-36d4-4c14-8a9d-131756d34333",
+      "code": "MATH.PREREQ.CYCLE4.FRACTIONS"
+    },
+    {
+      "id": "9d6ab485-31a8-440d-a8ae-5ea747c73868",
+      "code": "MATH.PROBA.ARBRES"
+    },
+    {
+      "id": "70ab592b-6693-404c-8d86-ed968dd56f1e",
+      "code": "MATH.PROBA.CONDITIONNELLE"
+    },
+    {
+      "id": "fda270af-1f9d-4e65-bcc6-f87c95eb2e7a",
+      "code": "MATH.STAT.DESCRIPTIVE"
+    },
+    {
+      "id": "07ca8a72-d863-4da7-9e4c-5540db298f65",
+      "code": "MATH.STAT.FREQUENCE_CONDITIONNELLE"
+    },
+    {
+      "id": "7135dcad-d283-4b4c-b7d9-47679ae6128c",
+      "code": "MATH.STAT.PROPORTIONS"
+    }
+  ]
+}

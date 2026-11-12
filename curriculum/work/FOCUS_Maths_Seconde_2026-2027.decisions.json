@@ -1,0 +1,495 @@
+{
+  "workFile": "FOCUS_Maths_Seconde_2026-2027.json",
+  "workFileSha256": "7a7a49ac2a380a0dbcc0e397148da6a8df1f34e63c3bd5e98c617a5abbd37fe3",
+  "status": "pending_author_decisions",
+  "note": "Pour chaque litige, recopier dans « keep » le tableau « keep » de l’option choisie et renseigner « decidedBy » (et si utile « rationale »). Un litige laissé à null reste bloquant. FOCUS n’applique aucune option par défaut.",
+  "decisions": [
+    {
+      "id": "PAIR:MATH.NUM.ARITHMETIQUE|MATH.NUM.FRACTIONS.IRREDUCTIBLE",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 20,
+          "from": "MATH.NUM.ARITHMETIQUE",
+          "to": "MATH.NUM.FRACTIONS.IRREDUCTIBLE",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 81,
+          "from": "MATH.NUM.ARITHMETIQUE",
+          "to": "MATH.NUM.FRACTIONS.IRREDUCTIBLE",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            81
+          ],
+          "meaning": "Garder MATH.NUM.ARITHMETIQUE —prerequisite_of→ MATH.NUM.FRACTIONS.IRREDUCTIBLE : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            20
+          ],
+          "meaning": "Garder MATH.NUM.ARITHMETIQUE —supports→ MATH.NUM.FRACTIONS.IRREDUCTIBLE : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.ALG.DISTRIBUTIVITE|MATH.ALG.FACTORISATION_SIMPLE",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 26,
+          "from": "MATH.ALG.DISTRIBUTIVITE",
+          "to": "MATH.ALG.FACTORISATION_SIMPLE",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 93,
+          "from": "MATH.ALG.DISTRIBUTIVITE",
+          "to": "MATH.ALG.FACTORISATION_SIMPLE",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            93
+          ],
+          "meaning": "Garder MATH.ALG.DISTRIBUTIVITE —prerequisite_of→ MATH.ALG.FACTORISATION_SIMPLE : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            26
+          ],
+          "meaning": "Garder MATH.ALG.DISTRIBUTIVITE —supports→ MATH.ALG.FACTORISATION_SIMPLE : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.ALG.EQUATION_PREMIER_DEGRE|MATH.ALG.MODELISER_EQUATION",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 30,
+          "from": "MATH.ALG.EQUATION_PREMIER_DEGRE",
+          "to": "MATH.ALG.MODELISER_EQUATION",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 106,
+          "from": "MATH.ALG.EQUATION_PREMIER_DEGRE",
+          "to": "MATH.ALG.MODELISER_EQUATION",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            106
+          ],
+          "meaning": "Garder MATH.ALG.EQUATION_PREMIER_DEGRE —prerequisite_of→ MATH.ALG.MODELISER_EQUATION : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            30
+          ],
+          "meaning": "Garder MATH.ALG.EQUATION_PREMIER_DEGRE —supports→ MATH.ALG.MODELISER_EQUATION : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.ALG.INEQUATION_PREMIER_DEGRE|MATH.ALG.MODELISER_EQUATION",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 31,
+          "from": "MATH.ALG.INEQUATION_PREMIER_DEGRE",
+          "to": "MATH.ALG.MODELISER_EQUATION",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 107,
+          "from": "MATH.ALG.INEQUATION_PREMIER_DEGRE",
+          "to": "MATH.ALG.MODELISER_EQUATION",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            107
+          ],
+          "meaning": "Garder MATH.ALG.INEQUATION_PREMIER_DEGRE —prerequisite_of→ MATH.ALG.MODELISER_EQUATION : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            31
+          ],
+          "meaning": "Garder MATH.ALG.INEQUATION_PREMIER_DEGRE —supports→ MATH.ALG.MODELISER_EQUATION : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.ALG.DISTRIBUTIVITE|MATH.ALG.FORME_ADAPTEE",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 32,
+          "from": "MATH.ALG.DISTRIBUTIVITE",
+          "to": "MATH.ALG.FORME_ADAPTEE",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 97,
+          "from": "MATH.ALG.DISTRIBUTIVITE",
+          "to": "MATH.ALG.FORME_ADAPTEE",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            97
+          ],
+          "meaning": "Garder MATH.ALG.DISTRIBUTIVITE —prerequisite_of→ MATH.ALG.FORME_ADAPTEE : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            32
+          ],
+          "meaning": "Garder MATH.ALG.DISTRIBUTIVITE —supports→ MATH.ALG.FORME_ADAPTEE : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.ALG.FACTORISATION_SIMPLE|MATH.ALG.FORME_ADAPTEE",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 33,
+          "from": "MATH.ALG.FACTORISATION_SIMPLE",
+          "to": "MATH.ALG.FORME_ADAPTEE",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 96,
+          "from": "MATH.ALG.FACTORISATION_SIMPLE",
+          "to": "MATH.ALG.FORME_ADAPTEE",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            96
+          ],
+          "meaning": "Garder MATH.ALG.FACTORISATION_SIMPLE —prerequisite_of→ MATH.ALG.FORME_ADAPTEE : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            33
+          ],
+          "meaning": "Garder MATH.ALG.FACTORISATION_SIMPLE —supports→ MATH.ALG.FORME_ADAPTEE : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.FONC.EQUATIONS_GRAPHIQUES|MATH.FONC.IMAGE_ANTECEDENT",
+      "kind": "support_and_prerequisite",
+      "edges": [
+        {
+          "index": 37,
+          "from": "MATH.FONC.IMAGE_ANTECEDENT",
+          "to": "MATH.FONC.EQUATIONS_GRAPHIQUES",
+          "relation": "supports",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 124,
+          "from": "MATH.FONC.IMAGE_ANTECEDENT",
+          "to": "MATH.FONC.EQUATIONS_GRAPHIQUES",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            124
+          ],
+          "meaning": "Garder MATH.FONC.IMAGE_ANTECEDENT —prerequisite_of→ MATH.FONC.EQUATIONS_GRAPHIQUES : dépendance forte (le prérequis doit être acquis avant), le lien « supports » est retiré."
+        },
+        {
+          "keep": [
+            37
+          ],
+          "meaning": "Garder MATH.FONC.IMAGE_ANTECEDENT —supports→ MATH.FONC.EQUATIONS_GRAPHIQUES : simple appui, pas de prérequis."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.FONC.SIGNES|MATH.FONC.TABLEAU_SIGNES",
+      "kind": "part_of_and_prerequisite",
+      "edges": [
+        {
+          "index": 66,
+          "from": "MATH.FONC.TABLEAU_SIGNES",
+          "to": "MATH.FONC.SIGNES",
+          "relation": "part_of",
+          "provenance": "relation_existante_conservee_a_revoir"
+        },
+        {
+          "index": 121,
+          "from": "MATH.FONC.SIGNES",
+          "to": "MATH.FONC.TABLEAU_SIGNES",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            66
+          ],
+          "meaning": "Garder MATH.FONC.TABLEAU_SIGNES —part_of→ MATH.FONC.SIGNES : MATH.FONC.TABLEAU_SIGNES est une sous-notion de MATH.FONC.SIGNES."
+        },
+        {
+          "keep": [
+            121
+          ],
+          "meaning": "Garder MATH.FONC.SIGNES —prerequisite_of→ MATH.FONC.TABLEAU_SIGNES : MATH.FONC.SIGNES doit être acquis avant MATH.FONC.TABLEAU_SIGNES, sans relation de hiérarchie."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "TYPES:MATH.COMP.CHERCHER>MATH.COMP.RAISONNER:supports",
+      "kind": "competency_support",
+      "edges": [
+        {
+          "index": 68,
+          "from": "MATH.COMP.CHERCHER",
+          "to": "MATH.COMP.RAISONNER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [],
+          "meaning": "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "TYPES:MATH.COMP.MODELISER>MATH.COMP.RAISONNER:supports",
+      "kind": "competency_support",
+      "edges": [
+        {
+          "index": 69,
+          "from": "MATH.COMP.MODELISER",
+          "to": "MATH.COMP.RAISONNER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [],
+          "meaning": "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "TYPES:MATH.COMP.REPRESENTER>MATH.COMP.COMMUNIQUER:supports",
+      "kind": "competency_support",
+      "edges": [
+        {
+          "index": 70,
+          "from": "MATH.COMP.REPRESENTER",
+          "to": "MATH.COMP.COMMUNIQUER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [],
+          "meaning": "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.COMP.COMMUNIQUER|MATH.COMP.RAISONNER",
+      "kind": "competency_support",
+      "edges": [
+        {
+          "index": 71,
+          "from": "MATH.COMP.RAISONNER",
+          "to": "MATH.COMP.COMMUNIQUER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
+        },
+        {
+          "index": 73,
+          "from": "MATH.COMP.COMMUNIQUER",
+          "to": "MATH.COMP.RAISONNER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [],
+          "meaning": "Retirer ces liens : les règles actuelles n’autorisent pas « supports » entre deux compétences (dans un sens ou dans l’autre). Les garder exigerait de changer ces règles (décision produit, non proposée ici)."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "TYPES:MATH.COMP.CALCULER>MATH.COMP.RAISONNER:supports",
+      "kind": "competency_support",
+      "edges": [
+        {
+          "index": 72,
+          "from": "MATH.COMP.CALCULER",
+          "to": "MATH.COMP.RAISONNER",
+          "relation": "supports",
+          "provenance": "affectation_pedagogique_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [],
+          "meaning": "Retirer ce lien : les règles actuelles n’autorisent « supports » que vers une compétence depuis une notion ou un prérequis. Garder des liens entre compétences exigerait de changer ces règles (décision produit, non proposée ici)."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.STAT.POURCENTAGE_POURCENTAGE|MATH.STAT.PROPORTIONS",
+      "kind": "part_of_and_prerequisite",
+      "edges": [
+        {
+          "index": 275,
+          "from": "MATH.STAT.PROPORTIONS",
+          "to": "MATH.STAT.POURCENTAGE_POURCENTAGE",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        },
+        {
+          "index": 329,
+          "from": "MATH.STAT.POURCENTAGE_POURCENTAGE",
+          "to": "MATH.STAT.PROPORTIONS",
+          "relation": "part_of",
+          "provenance": "decomposition_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            329
+          ],
+          "meaning": "Garder MATH.STAT.POURCENTAGE_POURCENTAGE —part_of→ MATH.STAT.PROPORTIONS : MATH.STAT.POURCENTAGE_POURCENTAGE est une sous-notion de MATH.STAT.PROPORTIONS."
+        },
+        {
+          "keep": [
+            275
+          ],
+          "meaning": "Garder MATH.STAT.PROPORTIONS —prerequisite_of→ MATH.STAT.POURCENTAGE_POURCENTAGE : MATH.STAT.PROPORTIONS doit être acquis avant MATH.STAT.POURCENTAGE_POURCENTAGE, sans relation de hiérarchie."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    },
+    {
+      "id": "PAIR:MATH.STAT.EVOLUTIONS|MATH.STAT.PROPORTIONS",
+      "kind": "part_of_and_prerequisite",
+      "edges": [
+        {
+          "index": 278,
+          "from": "MATH.STAT.PROPORTIONS",
+          "to": "MATH.STAT.EVOLUTIONS",
+          "relation": "prerequisite_of",
+          "provenance": "dependance_didactique_proposee_FOCUS"
+        },
+        {
+          "index": 330,
+          "from": "MATH.STAT.EVOLUTIONS",
+          "to": "MATH.STAT.PROPORTIONS",
+          "relation": "part_of",
+          "provenance": "decomposition_FOCUS"
+        }
+      ],
+      "options": [
+        {
+          "keep": [
+            330
+          ],
+          "meaning": "Garder MATH.STAT.EVOLUTIONS —part_of→ MATH.STAT.PROPORTIONS : MATH.STAT.EVOLUTIONS est une sous-notion de MATH.STAT.PROPORTIONS."
+        },
+        {
+          "keep": [
+            278
+          ],
+          "meaning": "Garder MATH.STAT.PROPORTIONS —prerequisite_of→ MATH.STAT.EVOLUTIONS : MATH.STAT.PROPORTIONS doit être acquis avant MATH.STAT.EVOLUTIONS, sans relation de hiérarchie."
+        }
+      ],
+      "keep": null,
+      "decidedBy": null,
+      "rationale": null
+    }
+  ]
+}

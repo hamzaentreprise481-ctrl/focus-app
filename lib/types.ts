@@ -1,19 +1,16 @@
-// Types du domaine FOCUS — V0 (données mockées, mathématiques uniquement)
+// Types du domaine FOCUS, indépendants de la source de données.
 
 export type StatusLevel = "normal" | "a_surveiller" | "attention";
 
 export type SkillLevel = "maitrise" | "en_cours" | "fragile" | "non_maitrise";
 
-/**
- * Niveau de preuve disponible pour une compétence donnée d'un élève.
- * Sert à ne jamais présenter une conclusion comme certaine quand elle
- * repose sur une seule observation.
- */
 export type ConfidenceLevel = "aucune" | "limitee" | "moderee" | "forte";
 
 export interface Skill {
   id: string;
   name: string;
+  /** The competency's subject, to offer only the class's competencies. */
+  subjectId?: string;
 }
 
 export interface ClassInfo {
@@ -21,6 +18,12 @@ export interface ClassInfo {
   name: string;
   level: string;
   subject: string;
+  subjectId?: string;
+  /** Every subject the teacher teaches in this class. */
+  subjectIds?: string[];
+  /** The same subjects with their names, to choose one for an assessment. */
+  subjects?: { id: string; name: string }[];
+  schoolId?: string;
   teacher: string;
   studentIds: string[];
 }
@@ -34,34 +37,30 @@ export interface Student {
 export interface Evaluation {
   id: string;
   name: string;
-  date: string; // ISO
+  date: string;
   classId: string;
+  /**
+   * The assessment's subject. Read from the database; chosen explicitly when
+   * the teacher teaches several subjects in the class.
+   */
+  subjectId?: string;
   skillIds: string[];
-  /** Séquence jugée charnière dans la progression (utilisée pour détecter les absences à fort impact). */
+  /** Séquence jugée charnière dans la progression. */
   important: boolean;
 }
 
-/**
- * Une note brute d'élève pour une évaluation, avant analyse.
- *
- * IMPORTANT : `skillLevels` est la SEULE source de vérité pour la maîtrise
- * par compétence. Une compétence testée par l'évaluation (`evaluation.skillIds`)
- * mais absente de `skillLevels` signifie "non renseignée" — elle ne doit
- * JAMAIS être déduite de `score`. Deux compétences testées le même jour
- * peuvent avoir des niveaux de maîtrise différents, même si la note globale
- * est unique : le score et la maîtrise par compétence sont deux données
- * distinctes, saisies séparément par l'enseignant.
- */
 export interface RawGrade {
   studentId: string;
   evaluationId: string;
-  score: number | null; // null si absent
+  score: number | null;
   absent: boolean;
   skillLevels?: Partial<Record<string, SkillLevel>>;
 }
 
-/** L'ensemble des données (évaluations + notes) sur lesquelles portent les analyses. */
 export interface EvaluationDataset {
+  classes: ClassInfo[];
+  students: Student[];
+  skills: Skill[];
   evaluations: Evaluation[];
   rawGrades: RawGrade[];
 }

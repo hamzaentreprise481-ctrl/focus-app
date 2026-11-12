@@ -6,7 +6,7 @@ export function DistributionChart({ distribution }: { distribution: { label: str
   return (
     <div className="h-52 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={distribution} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
+        <BarChart data={distribution} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
           <XAxis
             dataKey="label"
@@ -19,7 +19,7 @@ export function DistributionChart({ distribution }: { distribution: { label: str
             tick={{ fontSize: 12, fill: "var(--color-muted)" }}
             axisLine={false}
             tickLine={false}
-            width={28}
+            width={32}
           />
           <Tooltip
             cursor={{ fill: "var(--color-paper)" }}
