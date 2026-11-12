@@ -4,7 +4,11 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { clearAuthCookies, createAuthClient } from "@/lib/auth/server";
 import { newPasswordError, passwordUpdateError, resetRequestError } from "@/lib/auth/password";
-import { isTeacher } from "@/lib/auth/policy";
+import {
+  hasActiveDirectorMembership,
+  hasActiveStudentMembership,
+  hasActiveTeacherMembership,
+} from "@/lib/auth/policy";
 
 type State = { error?: string; sent?: boolean } | null;
 
@@ -49,14 +53,18 @@ export async function setNewPassword(_previous: State, form: FormData): Promise<
   if (invalid) return { error: invalid };
   const supabase = await createAuthClient();
   if (!supabase) return { error: "L’espace professeur n’est pas encore disponible." };
-  let teacher = false;
+  // Each account lands in its own space, decided by its active school
+  // membership (never by metadata); without one, nothing opens.
+  let destination: string | null = null;
   try {
     const { data: current, error: sessionError } = await supabase.auth.getUser();
     if (sessionError || !current.user) return { error: "Le lien a expiré. Demandez un nouveau lien de réinitialisation." };
     const { data, error } = await supabase.auth.updateUser({ password });
     if (error) return { error: passwordUpdateError(error) };
-    teacher = isTeacher(data.user);
-    if (!teacher) {
+    if (await hasActiveTeacherMembership(supabase, data.user)) destination = "/app?mot-de-passe=1";
+    else if (await hasActiveStudentMembership(supabase, data.user)) destination = "/student?mot-de-passe=1";
+    else if (await hasActiveDirectorMembership(supabase, data.user)) destination = "/director?mot-de-passe=1";
+    if (!destination) {
       // The password is set, but access still depends on the administrator.
       try {
         await supabase.auth.signOut({ scope: "local" });
@@ -65,11 +73,11 @@ export async function setNewPassword(_previous: State, form: FormData): Promise<
       }
       return {
         error:
-          "Votre mot de passe est enregistré, mais ce compte n’a pas encore accès à l’espace professeur. Contactez la personne qui vous a invité.",
+          "Votre mot de passe est enregistré, mais ce compte n’a pas encore accès à un espace FOCUS. Contactez la personne qui vous a invité.",
       };
     }
   } catch {
     return { error: "Le mot de passe n’a pas pu être enregistré. Réessayez dans quelques instants." };
   }
-  redirect("/app?mot-de-passe=1");
+  redirect(destination);
 }

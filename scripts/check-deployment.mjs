@@ -32,10 +32,17 @@ async function check(label, route, verify) {
     failures++;
   }
 }
-await check("public homepage and teacher login CTA", "/", async response => {
+// The portal's invariants, not its wording: each space is named and has its
+// own login link, labelled with that space, and nothing private is rendered.
+await check("public homepage with the three spaces", "/", async response => {
   if (response.status !== 200) return false;
   const html = await response.text();
-  return /href="\/connexion"/.test(html) && /PRONOTE/.test(html) &&
+  const links = [...html.matchAll(/<a\b[^>]*\bhref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)]
+    .map(([, href, inner]) => ({ href, text: inner.replace(/<[^>]*>/g, " ") }));
+  const leadsTo = (href, space) => links.some(link => link.href === href && space.test(link.text));
+  return leadsTo("/connexion", /Teacher/) && leadsTo("/connexion-eleve", /Student/) &&
+    leadsTo("/connexion-direction", /Direct(?:ion|or)/) &&
+    /Teacher/.test(html) && /Student/.test(html) && /Direction/.test(html) &&
     !/Bonjour Mme Martin|Se déconnecter/.test(html);
 });
 await check("FOCUS login page", "/connexion", async response => {
@@ -49,6 +56,22 @@ await check("login configuration is enabled", "/connexion", async response => {
   const email = html.match(/<input\b[^>]*name="email"[^>]*>/)?.[0];
   return !!email && !/\bdisabled(?:[\s=>])/.test(email);
 });
+for (const [label, route] of [["student login page", "/connexion-eleve"], ["direction login page", "/connexion-direction"]]) {
+  await check(label, route, async response => {
+    if (response.status !== 200) return false;
+    const html = await response.text();
+    return /name="email"/.test(html) && /name="password"/.test(html);
+  });
+}
+for (const [route, login] of [["/student", "/connexion-eleve"], ["/director", "/connexion-direction"]]) {
+  await check(`anonymous access denied: ${route}`, route, response => {
+    const location = response.headers.get("location");
+    if (response.status !== 307 || !location) return false;
+    const target = new URL(location, origin);
+    return target.origin === origin && target.pathname === login &&
+      /no-store/.test(response.headers.get("cache-control") ?? "");
+  });
+}
 for (const route of ["/app", "/app/classes", "/app/eleves", "/app/evaluations/nouvelle", "/app/parametres"]) {
   await check(`anonymous access denied: ${route}`, route, response => {
     const location = response.headers.get("location");
@@ -58,5 +81,5 @@ for (const route of ["/app", "/app/classes", "/app/eleves", "/app/evaluations/no
       /no-store/.test(response.headers.get("cache-control") ?? "");
   });
 }
-console.log("Real password login, refresh/logout, teacher workflows and database policies require separate QA.");
+console.log("Real password login, refresh/logout, teacher/student/direction workflows and database policies require separate QA.");
 process.exitCode = failures ? 1 : 0;

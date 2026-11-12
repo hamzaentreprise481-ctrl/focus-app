@@ -1,3 +1,4 @@
+import { requireStudent } from "@/lib/auth/server";
 import { loadStudentProgress, type MasteryLevel } from "@/lib/student-data";
 
 const LABELS: Record<MasteryLevel, string> = {
@@ -23,6 +24,7 @@ function formatDate(value: string) {
 }
 
 export default async function StudentProgressPage() {
+  await requireStudent();
   const progress = await loadStudentProgress();
   const mastered = progress.filter((item) => item.level === "mastered").length;
   const toWork = progress.filter(

@@ -1,7 +1,15 @@
+import { requireStudent } from "@/lib/auth/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MessageCircleQuestion } from "lucide-react";
 import { loadStudentAssessmentDetail } from "@/lib/student-data";
+
+const LEVEL_LABEL = {
+  mastered: "Maîtrisé",
+  developing: "En cours d’acquisition",
+  fragile: "Fragile",
+  not_mastered: "Non maîtrisé",
+} as const;
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("fr-FR", {
@@ -16,6 +24,7 @@ export default async function StudentAssessmentPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireStudent();
   const { id } = await params;
   const assessment = await loadStudentAssessmentDetail(id);
   if (!assessment) notFound();
@@ -63,12 +72,38 @@ export default async function StudentAssessmentPage({
         )}
       </section>
 
+      <section className="rounded-xl border border-border bg-white p-6">
+        <h2 className="text-lg font-semibold">Compétences évaluées</h2>
+        {assessment.competencies.length ? (
+          <ul className="mt-3 divide-y divide-border">
+            {assessment.competencies.map((competency) => (
+              <li key={competency.name} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
+                <span>{competency.name}</span>
+                <span className="font-medium">{LEVEL_LABEL[competency.level]}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-ink-soft">
+            Aucun niveau de compétence n’a été saisi par le professeur pour
+            cette évaluation.
+          </p>
+        )}
+      </section>
+
       <section>
         <h2 className="text-lg font-semibold">Mes réponses enregistrées</h2>
         <p className="mt-1 text-sm text-ink-soft">
           FOCUS affiche uniquement les éléments auxquels votre compte élève a
           déjà accès. Les contenus réservés au professeur restent masqués.
         </p>
+        {assessment.pendingReadings > 0 && (
+          <p role="note" className="mt-3 rounded-lg bg-paper p-4 text-sm text-ink-soft">
+            {assessment.pendingReadings === 1
+              ? "Une réponse lue automatiquement sur votre copie attend la vérification du professeur : elle s’affichera ici une fois vérifiée."
+              : `${assessment.pendingReadings} réponses lues automatiquement sur votre copie attendent la vérification du professeur : elles s’afficheront ici une fois vérifiées.`}
+          </p>
+        )}
         <div className="mt-5 space-y-4">
           {assessment.responses.length ? (
             assessment.responses.map((response, index) => (
@@ -108,6 +143,20 @@ export default async function StudentAssessmentPage({
           )}
         </div>
       </section>
+
+      <Link
+        href={`/student/assistant?evaluation=${assessment.id}`}
+        className="flex items-center gap-3 rounded-xl border border-border bg-white p-5 hover:border-border-strong"
+      >
+        <MessageCircleQuestion size={20} aria-hidden="true" className="shrink-0 text-brand" />
+        <span>
+          <span className="block font-medium">Comprendre cette évaluation avec l’Assistant FOCUS</span>
+          <span className="block text-sm text-ink-soft">
+            Une aide pour revoir la notion ou t’entraîner. Elle ne modifie ni la
+            note ni la correction.
+          </span>
+        </span>
+      </Link>
 
       <section className="rounded-xl border border-border bg-brand-soft p-5">
         <h2 className="font-semibold text-brand-ink">

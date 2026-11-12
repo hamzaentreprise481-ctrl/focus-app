@@ -137,7 +137,7 @@ test("an invitation lets the invited teacher choose a password and enter", async
   assert.equal((await request("/app")).status, 200);
 });
 
-test("a non-teacher account can set a password but still cannot enter", async () => {
+test("an account without an active space can set a password but still cannot enter", async () => {
   jar = "";
   const token = stack.supabase.emailToken(NON_TEACHER.email, "invite")!;
   await request(`/auth/confirm?token_hash=${token}&type=invite`);
@@ -146,7 +146,7 @@ test("a non-teacher account can set a password but still cannot enter", async ()
     confirmation: "mot de passe du parent fictif",
   });
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /n’a pas encore accès à l’espace professeur/);
+  assert.match(await response.text(), /n’a pas encore accès à un espace FOCUS/);
   assert.equal((await request("/app")).status, 307);
 });
 

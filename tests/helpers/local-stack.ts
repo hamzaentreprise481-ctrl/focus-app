@@ -20,6 +20,7 @@ import { students } from "../fixtures/demo-dataset/data/students";
 import { installEngineKey, TEST_ENGINE_KEY } from "./engine";
 import { createMigratedDatabase } from "./pg";
 import { startLocalSupabase, type LocalAccount, type LocalSupabase } from "./local-supabase";
+import { seedPortalFixtures, type PortalPeople } from "./portal-fixtures";
 import { analysisInputFromRequest } from "../../lib/pedagogy/openai-client";
 
 /** Deterministic UUID (v4 layout) for a fixture identifier. */
@@ -296,6 +297,20 @@ export async function startModelStandIn(
       }
       return res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(output) }] }], usage: { total_tokens: 2000 } }));
     }
+    if (typeof body.instructions === "string" && body.instructions.includes("Assistant FOCUS")) {
+      // A scripted reply of the Student assistant (NOT a language model): it
+      // only proves the wiring — what was sent, what the page shows.
+      const last = (body.input as Array<{ content: string }>).at(-1)?.content ?? "";
+      const question = last.slice(last.lastIndexOf("Question de l’élève :") + "Question de l’élève :".length).trim();
+      const full = /Mode demandé : réponse complète/.test(last);
+      const text = /exercice/i.test(question)
+        ? "[Réponse simulée] Exercice d’entraînement : développe 3(x + 4), puis vérifie avec x = 1."
+        : full
+          ? "[Réponse simulée] Résolution complète : on soustrait 5 des deux côtés, puis on divise par 3."
+          : "[Réponse simulée] Avançons pas à pas : quelle opération permet de retirer le +5 ?";
+      if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      return res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text }] }], usage: { total_tokens: 400 } }));
+    }
     if (typeof body.input === "string")
       // The health probe's minimal generation (it only needs an answer).
       return res.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }], usage: { total_tokens: 3 } }));
@@ -334,6 +349,8 @@ export interface LocalStack {
   supabase: LocalSupabase;
   model: ModelStandIn;
   ids: LocalIds;
+  /** Student, Direction and second-school fixtures (with `portals: true`). */
+  portal: PortalPeople | null;
   /** Environment for `next start` so the app talks only to this stack. */
   env: Record<string, string>;
   close(): Promise<void>;
@@ -353,6 +370,8 @@ export async function startLocalStack(options: {
   analysis?: (input: AiInput) => unknown;
   /** PostgREST max-rows of the stand-in (default 1000, as on Supabase). */
   maxRows?: number;
+  /** Seed the Student / Direction fixtures and their logins. */
+  portals?: boolean;
 }): Promise<LocalStack> {
   const db = await createMigratedDatabase({ upTo: options.upTo, recordVersions: true });
   const ids = await seedLocalSchool(db);
@@ -363,6 +382,8 @@ export async function startLocalStack(options: {
     { email: OTHER_TEACHER.email, password: OTHER_TEACHER.password, userId: OTHER_TEACHER.id },
     { email: NON_TEACHER.email, password: NON_TEACHER.password, userId: NON_TEACHER.id },
   ];
+  const portal = options.portals ? await seedPortalFixtures(db, fixtureUuid, ids) : null;
+  if (portal) accounts.push(...portal.accounts);
   const supabase = await startLocalSupabase(db, { port: options.supabasePort, accounts, maxRows: options.maxRows });
   const model = await startModelStandIn(options.modelPort, options.script, { delayMs: options.modelDelayMs, scan: options.scan, analysis: options.analysis });
   return {
@@ -370,6 +391,7 @@ export async function startLocalStack(options: {
     supabase,
     model,
     ids,
+    portal: portal?.people ?? null,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: supabase.url,
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.publishableKey,

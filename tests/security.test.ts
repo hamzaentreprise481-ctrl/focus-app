@@ -114,6 +114,33 @@ test("every teacher page checks authentication before rendering", () => {
     assert.match(readFileSync(file, "utf8"), /await requireTeacher\(\)/);
 });
 
+test("every Student and Direction page checks its own role before rendering", () => {
+  const student = walk("app/(student)").filter((f) => path.basename(f) === "page.tsx");
+  const director = walk("app/(director)").filter((f) => path.basename(f) === "page.tsx");
+  assert.ok(student.length >= 6 && director.length >= 7);
+  for (const file of student) assert.match(readFileSync(file, "utf8"), /await requireStudent\(\)/, file);
+  for (const file of director) assert.match(readFileSync(file, "utf8"), /await requireDirector\(\)/, file);
+  assert.match(readFileSync("app/(director)/director/layout.tsx", "utf8"), /await requireDirector\(\)/);
+});
+
+test("Student, its assistant and Direction never write to the database", () => {
+  const files = [
+    ...walk("app/(student)"),
+    ...walk("app/(director)"),
+    ...walk("lib/student-assistant"),
+    ...walk("lib/director"),
+    "lib/student-data.ts",
+    "components/student/student-assistant.tsx",
+  ].filter((file) => /\.(ts|tsx)$/.test(file));
+  for (const file of files)
+    assert.doesNotMatch(
+      readFileSync(file, "utf8"),
+      // A Supabase write is .from("table") then insert/update/upsert/delete, or an RPC.
+      /\.from\(\s*["'`][a-z_]+["'`]\s*\)\s*\.(?:insert|update|upsert|delete)\(|\.rpc\(/,
+      `${file} writes to the database`,
+    );
+});
+
 test("the Supabase service role key is only read by administrator CLIs", () => {
   const root = path.join(__dirname, "..");
   const sources = (dir: string): string[] =>
@@ -129,6 +156,7 @@ test("the Supabase service role key is only read by administrator CLIs", () => {
     .map((file) => path.relative(root, file));
   assert.deepEqual(offenders.sort(), [
     path.join("lib", "auth", "invite-plan.ts"),
+    path.join("scripts", "admin-create-demo-portals.ts"),
     path.join("scripts", "admin-invite-teacher.ts"),
     path.join("scripts", "curriculum.ts"),
     path.join("scripts", "setup-scan-storage.ts"),
@@ -137,7 +165,7 @@ test("the Supabase service role key is only read by administrator CLIs", () => {
   // File-system loading, CSV parsing and SQL rendering never reach the app bundle.
   const appImports = [...sources(path.join(root, "app")), ...sources(path.join(root, "components"))]
     .filter((file) =>
-      /@\/lib\/curriculum\/(fs|sql|package|csv)["']|invite-plan|admin-invite/.test(readFileSync(file, "utf8")),
+      /@\/lib\/curriculum\/(fs|sql|package|csv)["']|invite-plan|admin-invite|demo-portals/.test(readFileSync(file, "utf8")),
     )
     .map((file) => path.relative(root, file));
   assert.deepEqual(appImports, []);

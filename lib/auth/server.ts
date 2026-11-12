@@ -5,6 +5,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { authConfig } from "./config";
 import {
+  hasActiveDirectorMembership,
   hasActiveStudentMembership,
   hasActiveTeacherMembership,
 } from "./policy";
@@ -66,6 +67,21 @@ export const getStudent = cache(async () => {
   }
 });
 
+export const getDirector = cache(async () => {
+  const supabase = await createAuthClient();
+  if (!supabase) return null;
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    return (await hasActiveDirectorMembership(supabase, user)) ? user : null;
+  } catch {
+    return null;
+  }
+});
+
 /** Call again in every future server data reader and mutation, not only layouts. */
 export async function requireTeacher() {
   const teacher = await getTeacher();
@@ -78,6 +94,13 @@ export async function requireStudent() {
   const student = await getStudent();
   if (!student) redirect("/connexion-eleve");
   return student;
+}
+
+/** Direction readers check the admin membership themselves, like the layout. */
+export async function requireDirector() {
+  const director = await getDirector();
+  if (!director) redirect("/connexion-direction");
+  return director;
 }
 
 /** Only called by server actions; also clears chunked cookies after provider errors. */

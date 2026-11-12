@@ -17,14 +17,15 @@ export default function MarketingLayout({
             <span className={styles.mark}>F</span>FOCUS
           </Link>
           <nav aria-label="Navigation du site">
+            <Link href="/enseignants">FOCUS Teacher</Link>
             <Link href="/decouvrir">Découvrir</Link>
             <Link href="/fonctionnement">Fonctionnement</Link>
             <Link href="/confiance">Confiance</Link>
             <Link href="/abonnements">Abonnements</Link>
             <Link href="/questions">Questions</Link>
           </nav>
-          <Link href="/connexion" className={styles.smallButton}>
-            Espace professeur
+          <Link href="/#espaces" className={styles.smallButton}>
+            Choisir mon espace
           </Link>
         </div>
       </header>

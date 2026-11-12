@@ -10,6 +10,9 @@
 // FOCUS_LOCAL_MAX_ROWS=<n> lowers the stand-in's response cap (PostgREST
 // max-rows, 1000 by default) to check that nothing is silently truncated.
 // FOCUS_LOCAL_MODEL_DELAY_MS=<ms> slows every scripted model response.
+// The Student and Direction spaces are seeded too (fictitious accounts
+// printed below; tests/helpers/portal-fixtures.ts), with a second school
+// to check that nothing crosses schools.
 
 import { spawn } from "node:child_process";
 import { LOCAL_TEACHER, startLocalStack } from "../tests/helpers/local-stack";
@@ -22,13 +25,20 @@ async function main() {
     upTo: process.env.FOCUS_LOCAL_UP_TO || undefined,
     maxRows: process.env.FOCUS_LOCAL_MAX_ROWS ? Number(process.env.FOCUS_LOCAL_MAX_ROWS) : undefined,
     modelDelayMs: process.env.FOCUS_LOCAL_MODEL_DELAY_MS ? Number(process.env.FOCUS_LOCAL_MODEL_DELAY_MS) : undefined,
+    portals: true,
   });
   const app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port), "-H", "127.0.0.1"], {
     env: { ...process.env, ...stack.env },
     stdio: "inherit",
   });
-  console.log(`FOCUS local stack: http://127.0.0.1:${port}/connexion`);
-  console.log(`Teacher (fictitious): ${LOCAL_TEACHER.email} / ${LOCAL_TEACHER.password}`);
+  const portal = stack.portal!;
+  console.log(`FOCUS local stack: http://127.0.0.1:${port}/`);
+  console.log(`Teacher (fictitious), /connexion: ${LOCAL_TEACHER.email} / ${LOCAL_TEACHER.password}`);
+  console.log(`Student A (fictitious), /connexion-eleve: ${portal.studentA.email} / ${portal.studentA.password}`);
+  console.log(`Student B (fictitious), /connexion-eleve: ${portal.studentB.email} / ${portal.studentB.password}`);
+  console.log(`Direction (fictitious), /connexion-direction: ${portal.directorA.email} / ${portal.directorA.password}`);
+  console.log(`Direction of the second school (fictitious): ${portal.directorB.email} / ${portal.directorB.password}`);
+  console.log("The assistant answers with a SCRIPTED stand-in: its replies are simulated, not a model's.");
   const stop = async () => {
     app.kill("SIGTERM");
     await stack.close();

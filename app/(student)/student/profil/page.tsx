@@ -1,6 +1,8 @@
+import { requireStudent } from "@/lib/auth/server";
 import { loadStudentIdentity } from "@/lib/student-data";
 
 export default async function StudentProfilePage() {
+  await requireStudent();
   const identity = await loadStudentIdentity();
 
   return (

@@ -2,8 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth/config";
 import {
+  hasActiveDirectorMembership,
   hasActiveStudentMembership,
   hasActiveTeacherMembership,
+  safeDirectorNext,
   safeNext,
   safeStudentNext,
 } from "@/lib/auth/policy";
@@ -17,16 +19,23 @@ export async function proxy(request: NextRequest) {
   const studentProtected =
     request.nextUrl.pathname === "/student" ||
     request.nextUrl.pathname.startsWith("/student/");
+  const directorProtected =
+    request.nextUrl.pathname === "/director" ||
+    request.nextUrl.pathname.startsWith("/director/");
 
-  const deny = (kind: "teacher" | "student") => {
+  // Each space has its own login and its own redirect allowlist.
+  const portals = {
+    teacher: { login: "/connexion", next: safeNext },
+    student: { login: "/connexion-eleve", next: safeStudentNext },
+    director: { login: "/connexion-direction", next: safeDirectorNext },
+  } as const;
+  const deny = (kind: keyof typeof portals) => {
     const url = request.nextUrl.clone();
-    url.pathname = kind === "teacher" ? "/connexion" : "/connexion-eleve";
+    url.pathname = portals[kind].login;
     url.search = "";
     url.searchParams.set(
       "next",
-      kind === "teacher"
-        ? safeNext(request.nextUrl.pathname + request.nextUrl.search)
-        : safeStudentNext(request.nextUrl.pathname + request.nextUrl.search),
+      portals[kind].next(request.nextUrl.pathname + request.nextUrl.search),
     );
     const redirected = NextResponse.redirect(url);
     response.cookies
@@ -39,6 +48,7 @@ export async function proxy(request: NextRequest) {
   if (!config) {
     if (teacherProtected) return deny("teacher");
     if (studentProtected) return deny("student");
+    if (directorProtected) return deny("director");
     return response;
   }
 
@@ -76,9 +86,14 @@ export async function proxy(request: NextRequest) {
       if (error || !(await hasActiveStudentMembership(supabase, user)))
         return deny("student");
     }
+    if (directorProtected) {
+      if (error || !(await hasActiveDirectorMembership(supabase, user)))
+        return deny("director");
+    }
   } catch {
     if (teacherProtected) return deny("teacher");
     if (studentProtected) return deny("student");
+    if (directorProtected) return deny("director");
   }
 
   response.headers.set("Cache-Control", "private, no-store");
@@ -89,10 +104,13 @@ export const config = {
   matcher: [
     "/app/:path*",
     "/student/:path*",
+    "/director/:path*",
     "/connexion",
     "/connexion/:path*",
     "/connexion-eleve",
     "/connexion-eleve/:path*",
+    "/connexion-direction",
+    "/connexion-direction/:path*",
     "/auth/:path*",
   ],
 };
