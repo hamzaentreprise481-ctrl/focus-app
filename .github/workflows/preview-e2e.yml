@@ -27,7 +27,8 @@ jobs:
     if: >-
       github.event.deployment_status.state == 'success' &&
       !contains(github.event.deployment.environment, 'Production')
-    runs-on: ubuntu-latest
+    # Keep the real-browser job on an OS supported by Playwright 1.56.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
