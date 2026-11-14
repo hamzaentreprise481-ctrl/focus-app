@@ -1,6 +1,6 @@
 name: FOCUS Preview E2E (real)
 
-# The real teacher path on a deployed Preview of the PR #15 branch: real
+# The real teacher path on an explicitly allowed FOCUS Preview branch: real
 # sign-in, real Supabase, real copy reader and model
 # (scripts/preview-e2e.mjs). It runs only when the Preview itself reports
 # ready (schema up to date, model answering) and a FICTITIOUS test teacher
@@ -27,7 +27,8 @@ jobs:
     if: >-
       github.event.deployment_status.state == 'success' &&
       !contains(github.event.deployment.environment, 'Production')
-    runs-on: ubuntu-latest
+    # Keep the real-browser job on an OS supported by Playwright 1.56.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
@@ -52,19 +53,21 @@ jobs:
           }
           health="$(curl -sS -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" "$URL/api/health" || true)"
           # Vercel sends the commit SHA as the deployment ref: the branch comes
-          # from the deployment itself. Only this PR's branch writes test data.
-          if [ "$(echo "$health" | jq -r '.gitRef // ""' 2>/dev/null)" != "work/fiabiliser-analyse-ia" ]; then
-            echo "Not the PR #15 branch: nothing to do."
-            echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
-          fi
+          # from the deployment itself. Keep an allowlist because this test writes data.
+          case "$(echo "$health" | jq -r '.gitRef // ""' 2>/dev/null)" in
+            work/fiabiliser-analyse-ia|work/student-director-portals|work/verify-v1-20261113) ;;
+            *)
+              status error "Not run: Preview unreachable or branch not allowed for real E2E."
+              echo "run=0" >> "$GITHUB_OUTPUT"; exit 1 ;;
+          esac
           if [ -z "$FOCUS_E2E_EMAIL" ] || [ -z "$FOCUS_E2E_PASSWORD" ]; then
             status error "Not run: no fictitious test teacher in secrets FOCUS_E2E_EMAIL / FOCUS_E2E_PASSWORD."
-            echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
+            echo "run=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           if [ "$(echo "$health" | jq -r '.ready // false' 2>/dev/null)" != "true" ]; then
             reason="$(echo "$health" | jq -r '[if .supabase.schemaUpToDate != true then "schema" else empty end, (.ai.error // empty)] | join(", ")' 2>/dev/null)"
             status error "Not run: Preview not ready (${reason:-unreachable})."
-            echo "run=0" >> "$GITHUB_OUTPUT"; exit 0
+            echo "run=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "run=1" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7

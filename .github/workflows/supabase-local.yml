@@ -1,0 +1,42 @@
+name: FOCUS isolated Supabase
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  supabase:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.81.3
+      - name: Start an unlinked disposable Supabase stack
+        shell: bash
+        run: |
+          supabase --help
+          supabase start --help
+          supabase status --help
+          mkdir -p "$RUNNER_TEMP/focus-staging"
+          cd "$RUNNER_TEMP/focus-staging"
+          supabase init
+          cp -R "$GITHUB_WORKSPACE/supabase/migrations" supabase/migrations
+          supabase start
+          supabase status -o json > "$RUNNER_TEMP/focus-local-status.json"
+      - name: Real Auth, database isolation and scan Storage
+        run: node scripts/test-local-supabase.mjs
+        env:
+          FOCUS_LOCAL_STATUS: ${{ runner.temp }}/focus-local-status.json
+      - name: Stop disposable stack
+        if: always()
+        working-directory: ${{ runner.temp }}/focus-staging
+        run: supabase stop --no-backup
