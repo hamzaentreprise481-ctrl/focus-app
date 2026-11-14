@@ -160,6 +160,8 @@ test("the Supabase service role key is only read by administrator CLIs", () => {
     path.join("scripts", "admin-invite-teacher.ts"),
     path.join("scripts", "curriculum.ts"),
     path.join("scripts", "setup-scan-storage.ts"),
+    // Disposable loopback-only Supabase integration test, never app code.
+    path.join("scripts", "test-local-supabase.mjs"),
   ]);
 
   // File-system loading, CSV parsing and SQL rendering never reach the app bundle.
