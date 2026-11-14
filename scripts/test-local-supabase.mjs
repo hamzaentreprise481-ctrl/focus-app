@@ -53,7 +53,7 @@ execFileSync(process.execPath, ["--import", "tsx", "scripts/staging-rls-check.ts
 
 execFileSync(process.execPath, ["--import", "tsx", "scripts/setup-scan-storage.ts", "--commit"], {
   stdio: "inherit",
-  env: { ...process.env, SUPABASE_URL: url.href, SUPABASE_SERVICE_ROLE_KEY: config.SERVICE_ROLE_KEY },
+  env: { ...process.env, NEXT_PUBLIC_SUPABASE_URL: url.href, SUPABASE_URL: url.href, SUPABASE_SERVICE_ROLE_KEY: config.SERVICE_ROLE_KEY },
 });
 const bucket = "focus-scan-imports";
 const [a, b] = teachers;
