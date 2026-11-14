@@ -26,6 +26,7 @@ fi
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", gate], {
       encoding: "utf8",
       env: {
+        NODE_ENV: "test",
         PATH: `${dir}:${process.env.PATH}`,
         URL: "https://fixture.invalid", SHA: "fixture",
         GITHUB_SERVER_URL: "https://github.invalid", GITHUB_REPOSITORY: "fixture/focus",
