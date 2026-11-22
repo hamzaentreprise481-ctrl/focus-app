@@ -9,6 +9,7 @@ import {
   UserRound,
 } from "lucide-react";
 import styles from "./page.module.css";
+import { ProofJourney } from "../../components/marketing/proof-journey";
 
 export const metadata = {
   title: "FOCUS · Suivi pédagogique",
@@ -121,6 +122,8 @@ export default function PortalPage() {
           </aside>
         </div>
       </section>
+
+      <ProofJourney />
 
       <section
         id="espaces"
